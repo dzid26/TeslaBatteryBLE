@@ -142,7 +142,11 @@ fun ScannerScreen(
                     "Looking for your paired car..."
 
                 state.devices.isNotEmpty() ->
-                    "Scan stopped: ${state.devices.size} Tesla(s), $connectedCount connected"
+                    if (state.explicitScan) {
+                        "Scan stopped: ${state.devices.size} Tesla(s), $connectedCount connected"
+                    } else {
+                        "Your paired car"
+                    }
 
                 else -> "No scan yet"
             }
@@ -211,7 +215,13 @@ fun ScannerScreen(
                         isSelected = device.address == state.selectedAddress,
                         showPair = state.explicitScan && connection != null && !paired,
                         onClick = { onConnect(device.address) },
-                        onPair = { onPairKey(device.address) },
+                        onPair = {
+                            if (connection?.phase == ConnectionPhase.READY) {
+                                onPairKey(device.address)
+                            } else {
+                                onConnect(device.address)
+                            }
+                        },
                     )
                 }
                 item { BatteryHistoryCard(history) }
@@ -324,10 +334,7 @@ private fun DeviceRow(
             }
             if (showPair) {
                 Spacer(Modifier.height(8.dp))
-                Button(
-                    onClick = onPair,
-                    enabled = connection?.phase == ConnectionPhase.READY,
-                ) {
+                Button(onClick = onPair) {
                     Text("Pair key")
                 }
             }

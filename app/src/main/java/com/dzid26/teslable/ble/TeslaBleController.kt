@@ -207,33 +207,14 @@ class TeslaBleController(context: Context) {
 
     fun startScan() {
         if (!_state.value.trackingEnabled) return
-        clients.values.forEach { it.close() }
-        clients.clear()
+        // Additive scan: keep the current connection and just look for more cars.
         failedAddresses.clear()
-        handler.removeCallbacks(whitelistPoll)
-        handler.removeCallbacks(sessionRetry)
-        handler.removeCallbacks(reconnect)
-        handler.removeCallbacks(wakeRefresh)
-        handler.removeCallbacks(poll)
-        keySlotQueue = emptyList()
-        sessions.clear()
-        pendingSessions.clear()
-        pendingCommands.clear()
-        chargeAfterSession = false
-        readChargeAfterWake = false
-        decryptFailures.clear()
-        sessionRetryAttempts = 0
         reconnectAttempts = 0
         _state.update {
             it.copy(
                 scanning = true,
                 discovering = false,
                 explicitScan = true,
-                devices = emptyList(),
-                connections = emptyMap(),
-                selectedAddress = null,
-                pairingPhase = PairingPhase.IDLE,
-                log = emptyList(),
             )
         }
         scanner.start()
@@ -278,8 +259,12 @@ class TeslaBleController(context: Context) {
         val known = knownCars.values.firstOrNull { it.address == state.selectedAddress }
             ?: knownCars.values.firstOrNull()
             ?: return
-        if (state.selectedAddress != known.address) {
-            _state.update { it.copy(selectedAddress = known.address) }
+        // Show the paired car's row even though this reconnect does not scan.
+        _state.update {
+            it.copy(
+                selectedAddress = known.address,
+                devices = listOf(TeslaAdvert(name = known.name, address = known.address)),
+            )
         }
         log("${known.gattName ?: known.name}: reconnecting to paired car")
         connect(known.address)
@@ -401,7 +386,7 @@ class TeslaBleController(context: Context) {
         val selection = _state.value.selectedAddress
         var movedSelection: String? = null
         val strongestByName = devices.groupBy { it.name }
-            .mapValues { (_, found) -> found.maxBy { it.rssi } }
+            .mapValues { (_, found) -> found.maxBy { it.rssi ?: Int.MIN_VALUE } }
         for ((name, device) in strongestByName) {
             val known = knownCars[name] ?: continue
             if (known.address == device.address) continue
@@ -429,7 +414,7 @@ class TeslaBleController(context: Context) {
                 }
             }
             state.copy(
-                devices = visibleDevices(devices, connections),
+                devices = visibleDevices(devices, connections, state.explicitScan),
                 connections = connections,
                 selectedAddress = movedSelection ?: state.selectedAddress,
             )
@@ -438,27 +423,47 @@ class TeslaBleController(context: Context) {
     }
 
     /**
-     * Shows a single row: the connected car if there is one, otherwise the
-     * remembered car, otherwise the strongest advertisement.
+     * Connected cars stay listed; an explicit scan adds every discovered car
+     * (strongest per name), while silent discovery only surfaces one.
      */
     private fun visibleDevices(
-        devices: List<TeslaAdvert>,
+        found: List<TeslaAdvert>,
         connections: Map<String, TeslaConnection>,
+        explicitScan: Boolean,
     ): List<TeslaAdvert> {
-        if (devices.isEmpty()) return emptyList()
-        val active = devices.filter { connections[it.address]?.phase in ACTIVE_PHASES }
-        if (active.isNotEmpty()) return listOf(active.maxBy { it.rssi })
-        val known = devices.filter { knownCars.containsKey(it.name) }
-        return listOf((known.ifEmpty { devices }).maxBy { it.rssi })
+        val visible = mutableListOf<TeslaAdvert>()
+        connections.values
+            .filter { it.phase in ACTIVE_PHASES || it.phase == ConnectionPhase.DISCONNECTED }
+            .forEach { connection ->
+                visible += found.firstOrNull { it.address == connection.address }
+                    ?: TeslaAdvert(
+                        name = connection.name,
+                        address = connection.address,
+                        rssi = connection.rssi,
+                    )
+            }
+        val candidates = if (explicitScan) {
+            found
+        } else {
+            val known = found.filter { knownCars.containsKey(it.name) }
+            listOfNotNull((known.ifEmpty { found }).maxByOrNull { it.rssi ?: Int.MIN_VALUE })
+        }
+        candidates
+            .groupBy { it.name }
+            .mapValues { (_, devices) -> devices.maxBy { it.rssi ?: Int.MIN_VALUE } }
+            .values
+            .forEach { device ->
+                if (visible.none { it.address == device.address }) visible += device
+            }
+        return visible
     }
 
     private fun autoConnect() {
         if (!_state.value.trackingEnabled) return
         val state = _state.value
-        val target = state.devices.firstOrNull() ?: return
-        if (!knownCars.containsKey(target.name)) return
-        if (state.selectedAddress != null && state.selectedAddress != target.address) return
+        val target = state.devices.firstOrNull { knownCars.containsKey(it.name) } ?: return
         if (target.address in clients || target.address in failedAddresses) return
+        if (state.selectedAddress != null && state.selectedAddress != target.address) return
         if (state.selectedAddress == null) {
             _state.update { it.copy(selectedAddress = target.address) }
         }
@@ -498,6 +503,7 @@ class TeslaBleController(context: Context) {
             if (phase == ConnectionPhase.READY) {
                 reconnectAttempts = 0
                 if (_state.value.selectedAddress == address) {
+                    clients[address]?.readRssi()
                     requestVcsecStatus(address)
                     requestKeySlot(address)
                     startSession(address)
@@ -688,10 +694,10 @@ class TeslaBleController(context: Context) {
             it.publicKeySHA1.toByteArray().copyOf(stored.keyId.size).contentEquals(stored.keyId)
         }
         if (stored != null && enrolled && keyId != null) {
-            val wasEnrolled = _state.value.pairingPhase == PairingPhase.OK
             handler.removeCallbacks(whitelistPoll)
-            _state.update { it.copy(pairingPhase = PairingPhase.OK, pairingKeyId = keyId) }
-            if (!wasEnrolled) {
+            val pairing = _state.value.pairingPhase
+            if (pairing == PairingPhase.SENDING || pairing == PairingPhase.WAITING_FOR_CARD) {
+                _state.update { it.copy(pairingPhase = PairingPhase.OK, pairingKeyId = keyId) }
                 log("${nameFor(address)}: key enrolled (${whitelist.numberOfEntries} keys)")
             }
             rememberCar(address)

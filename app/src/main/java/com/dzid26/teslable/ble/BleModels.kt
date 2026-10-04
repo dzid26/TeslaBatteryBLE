@@ -7,7 +7,7 @@ import java.util.UUID
 data class TeslaAdvert(
     val name: String,
     val address: String,
-    val rssi: Int,
+    val rssi: Int? = null,
 )
 
 data class TeslaConnection(
