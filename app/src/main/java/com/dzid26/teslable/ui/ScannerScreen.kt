@@ -213,11 +213,16 @@ private fun DeviceRow(
             )
             if (connection != null) {
                 Text(
-                    text = connectionSummary(connection),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = when (connection.phase) {
-                        ConnectionPhase.FAILED -> MaterialTheme.colorScheme.error
-                        ConnectionPhase.READY -> MaterialTheme.colorScheme.primary
+                    text = connectionStateText(connection),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = when {
+                        connection.phase == ConnectionPhase.FAILED ->
+                            MaterialTheme.colorScheme.error
+
+                        connection.phase == ConnectionPhase.READY &&
+                            connection.status?.asleep == false ->
+                            MaterialTheme.colorScheme.primary
+
                         else -> MaterialTheme.colorScheme.onSurfaceVariant
                     },
                 )
@@ -243,33 +248,35 @@ private fun DeviceRow(
                 )
             }
             connection?.charge?.let { charge ->
-                Text(
-                    text = "SOC: ${charge.batteryLevel ?: "?"}%  limit: ${charge.chargeLimit ?: "?"}%  " +
-                        (charge.chargingState ?: ""),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary,
-                )
+                val details = buildList {
+                    charge.chargeLimit?.let { add("limit $it%") }
+                    charge.chargingState?.let { add("charger: $it") }
+                }
+                if (details.isNotEmpty()) {
+                    Text(
+                        text = details.joinToString(" · "),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
             }
         }
     }
 }
 
-private fun connectionSummary(connection: TeslaConnection): String = when (connection.phase) {
-    ConnectionPhase.IDLE -> "not connected"
+private fun connectionStateText(connection: TeslaConnection): String = when {
+    connection.phase == ConnectionPhase.READY && connection.status?.asleep == true ->
+        "Connected \uD83D\uDCA4"
 
-    ConnectionPhase.CONNECTING -> "connecting..."
+    connection.phase == ConnectionPhase.READY && connection.status?.asleep == false ->
+        connection.charge?.batteryLevel?.let { "Connected · $it%" } ?: "Connected (reading)"
 
-    ConnectionPhase.CONNECTED -> "connected, discovering services..."
+    connection.phase == ConnectionPhase.READY -> "Connected (reading)"
 
-    ConnectionPhase.DISCOVERING -> "discovering services..."
+    connection.phase == ConnectionPhase.FAILED -> "Disconnected · tap to retry"
 
-    ConnectionPhase.READY -> buildString {
-        append("connected")
-        connection.mtu?.let { append(" | MTU $it") }
-        append(" | ${connection.services.size} services")
-    }
+    connection.phase == ConnectionPhase.DISCONNECTED -> "Disconnected · tap to reconnect"
 
-    ConnectionPhase.FAILED -> "connection failed - tap to retry"
+    connection.phase == ConnectionPhase.IDLE -> "Disconnected"
 
-    ConnectionPhase.DISCONNECTED -> "disconnected - showing last data, tap to reconnect"
+    else -> "Connecting..."
 }
