@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.bluetooth.BluetoothManager
 import android.content.Context
 import com.dzid26.teslable.core.TeslaNames
+import com.dzid26.teslable.core.protocol.TeslaPairing
 import com.dzid26.teslable.core.protocol.TeslaVcsec
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -16,6 +17,7 @@ class TeslaBleController(context: Context) {
     private val _state = MutableStateFlow(BleUiState())
     val state: StateFlow<BleUiState> = _state.asStateFlow()
 
+    private val keyStore = PairingKeyStore(appContext)
     private val clients = mutableMapOf<String, TeslaGattClient>()
     private val failedAddresses = mutableSetOf<String>()
     private val statusRequested = mutableSetOf<String>()
@@ -23,7 +25,6 @@ class TeslaBleController(context: Context) {
     private val scanner = TeslaScanner(
         context = appContext,
         onDevices = ::onDevicesFound,
-        onAdvertisementSeen = { count -> _state.update { it.copy(advertisementsSeen = count) } },
         onLog = ::log,
     )
 
@@ -44,9 +45,9 @@ class TeslaBleController(context: Context) {
         _state.update {
             it.copy(
                 scanning = true,
-                advertisementsSeen = 0,
                 devices = emptyList(),
                 connections = emptyMap(),
+                pairingPhase = PairingPhase.IDLE,
                 log = emptyList(),
             )
         }
@@ -84,6 +85,25 @@ class TeslaBleController(context: Context) {
         val client = TeslaGattClient(appContext, listenerFor(address))
         clients[address] = client
         client.connect(device)
+    }
+
+    fun pairKey() {
+        val address = _state.value.connections.values
+            .firstOrNull { it.phase == ConnectionPhase.READY }
+            ?.address
+        if (address == null) {
+            log("No connected car to pair with")
+            return
+        }
+        val keyPair = keyStore.loadOrCreate()
+        val keyId = keyPair.keyId.toHex()
+        _state.update { it.copy(pairingPhase = PairingPhase.SENDING, pairingKeyId = keyId) }
+        log("${nameFor(address)}: pairing key $keyId")
+        val request = TeslaPairing.buildAddKeyRequest(keyPair.publicKeyRaw)
+        if (clients[address]?.send(request) != true) {
+            _state.update { it.copy(pairingPhase = PairingPhase.ERROR) }
+            log("${nameFor(address)}: failed to send pairing request")
+        }
     }
 
     fun close() {
@@ -142,6 +162,18 @@ class TeslaBleController(context: Context) {
         }
 
         override fun onMessage(message: ByteArray) {
+            val pairing = runCatching { TeslaPairing.parseAddKeyResponse(message) }.getOrNull()
+            if (pairing != null) {
+                val phase = when (pairing) {
+                    TeslaPairing.Result.OK -> PairingPhase.OK
+                    TeslaPairing.Result.WAITING_FOR_CARD -> PairingPhase.WAITING_FOR_CARD
+                    TeslaPairing.Result.ERROR -> PairingPhase.ERROR
+                }
+                _state.update { it.copy(pairingPhase = phase) }
+                log("${nameFor(address)}: pairing ${pairing.name.lowercase()}")
+                return
+            }
+
             val status = runCatching { TeslaVcsec.parseStatusResponse(message) }.getOrNull()
             if (status != null) {
                 updateConnection(address) { it.copy(status = status) }

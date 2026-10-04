@@ -24,6 +24,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import com.dzid26.teslable.ble.BleUiState
 import com.dzid26.teslable.ble.ConnectionPhase
+import com.dzid26.teslable.ble.PairingPhase
 import com.dzid26.teslable.ble.TeslaAdvert
 import com.dzid26.teslable.ble.TeslaConnection
 
@@ -37,6 +38,7 @@ fun ScannerScreen(
     onToggleScan: () -> Unit,
     onVinChange: (String) -> Unit,
     onConnect: (String) -> Unit,
+    onPairKey: () -> Unit,
 ) {
     Scaffold(
         topBar = { TopAppBar(title = { Text("TeslaBatteryBLE") }) },
@@ -85,16 +87,39 @@ fun ScannerScreen(
             val connectedCount = state.connections.values.count { it.phase == ConnectionPhase.READY }
             val statusText = when {
                 state.scanning ->
-                    "Scanning: ${state.advertisementsSeen} advertisements, " +
-                        "${state.devices.size} Tesla(s), $connectedCount connected"
+                    "Scanning: ${state.devices.size} Tesla(s), $connectedCount connected"
 
-                state.advertisementsSeen > 0 ->
-                    "Scan stopped: ${state.advertisementsSeen} advertisements, " +
-                        "${state.devices.size} Tesla(s), $connectedCount connected"
+                state.devices.isNotEmpty() ->
+                    "Scan stopped: ${state.devices.size} Tesla(s), $connectedCount connected"
 
                 else -> "No scan yet"
             }
             Text(text = statusText, style = MaterialTheme.typography.bodyMedium)
+            Spacer(Modifier.height(8.dp))
+
+            val canPair = connectedCount > 0 && state.pairingPhase != PairingPhase.SENDING
+            Button(onClick = onPairKey, enabled = canPair) {
+                Text("Pair charging key")
+            }
+            if (state.pairingPhase != PairingPhase.IDLE) {
+                Text(
+                    text = when (state.pairingPhase) {
+                        PairingPhase.SENDING -> "Sending pairing request..."
+                        PairingPhase.WAITING_FOR_CARD ->
+                            "Tap your NFC card on the center console, then confirm on the car screen."
+
+                        PairingPhase.OK -> "Key paired: ${state.pairingKeyId}"
+                        PairingPhase.ERROR -> "Pairing failed"
+                        PairingPhase.IDLE -> ""
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = when (state.pairingPhase) {
+                        PairingPhase.OK -> MaterialTheme.colorScheme.primary
+                        PairingPhase.ERROR -> MaterialTheme.colorScheme.error
+                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                )
+            }
             Spacer(Modifier.height(8.dp))
 
             LazyColumn(

@@ -95,6 +95,7 @@ class MainActivity : ComponentActivity() {
                     },
                     onVinChange = controller::setVinInput,
                     onConnect = controller::connect,
+                    onPairKey = controller::pairKey,
                 )
             }
         }

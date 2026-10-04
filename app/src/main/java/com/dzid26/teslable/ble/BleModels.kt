@@ -35,12 +35,21 @@ enum class ConnectionPhase {
     DISCONNECTED,
 }
 
+enum class PairingPhase {
+    IDLE,
+    SENDING,
+    WAITING_FOR_CARD,
+    OK,
+    ERROR,
+}
+
 data class BleUiState(
     val scanning: Boolean = false,
-    val advertisementsSeen: Int = 0,
     val devices: List<TeslaAdvert> = emptyList(),
     val connections: Map<String, TeslaConnection> = emptyMap(),
     val vinInput: String = "",
     val expectedBleName: String? = null,
+    val pairingPhase: PairingPhase = PairingPhase.IDLE,
+    val pairingKeyId: String? = null,
     val log: List<String> = emptyList(),
 )

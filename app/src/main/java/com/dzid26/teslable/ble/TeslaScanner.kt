@@ -11,19 +11,15 @@ import com.dzid26.teslable.core.TeslaNames
 class TeslaScanner(
     context: Context,
     private val onDevices: (List<TeslaAdvert>) -> Unit,
-    private val onAdvertisementSeen: (Int) -> Unit,
     private val onLog: (String) -> Unit,
 ) {
     private val adapter = context.getSystemService(BluetoothManager::class.java)?.adapter
     private val found = LinkedHashMap<String, TeslaAdvert>()
-    private var advertisementsSeen = 0
 
     private val callback = object : ScanCallback() {
 
         @SuppressLint("MissingPermission")
         override fun onScanResult(callbackType: Int, result: ScanResult) {
-            advertisementsSeen++
-            onAdvertisementSeen(advertisementsSeen)
             val name = result.scanRecord?.deviceName ?: result.device.name
             if (name == null || !TeslaNames.isTeslaBleName(name)) {
                 return
@@ -55,8 +51,6 @@ class TeslaScanner(
             return
         }
         found.clear()
-        advertisementsSeen = 0
-        onAdvertisementSeen(0)
         onDevices(emptyList())
         val settings = ScanSettings.Builder()
             .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
