@@ -1,0 +1,3 @@
+- Initial preview: scan and pair over BLE, read battery SOC and charge state
+- Background SOC tracking with on-device history graph
+- Local-first: no internet permission, no account, nothing leaves the phone

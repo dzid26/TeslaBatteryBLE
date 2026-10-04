@@ -1,0 +1,49 @@
+# Release checklist
+
+## Versioning policy
+
+- Semantic versioning (`MAJOR.MINOR.PATCH`).
+- `versionCode` (integer, always increments) and `versionName` (semver string) live in `app/build.gradle.kts` (`defaultConfig`).
+- Git tags are `vX.Y.Z` and must match `versionName` (e.g. tag `v0.2.0` = `versionName "0.2.0"` with a bumped `versionCode`).
+
+## Pre-release
+
+- [ ] Bump `versionCode` (+1) and set `versionName` in `app/build.gradle.kts`.
+- [ ] Run `./gradlew :core:test` — must pass.
+- [ ] Run `./gradlew :app:testDebugUnitTest` — must pass.
+- [ ] Run `./gradlew :app:lintDebug` — must be clean.
+- [ ] Update `CHANGELOG.md` with the curated changelog for this version.
+- [ ] Confirm the relevant `docs/master-plan.md` checkboxes are updated.
+- [ ] Real-car validation (see `docs/master-plan.md` section 4): pair key, wake car, SOC read, background tracking survives screen off, notification updates, key survives app restart.
+
+## Release
+
+- [ ] Create and push tag `vX.Y.Z` (e.g. `git tag v0.2.0 && git push origin v0.2.0`).
+- [ ] CI builds the APK and attaches it to the GitHub release.
+- [ ] Verify the release page: correct tag, version name, changelog, and installable APK artifact.
+
+## Current status
+
+- Stable signing keystore is pending (owner action). Until it exists there are no production-signed releases.
+- The preview channel ships debug APKs on the rolling `preview` tag, rebuilt from `main` on every push.
+- Do not call debug APKs production. Preview builds install side by side with a future stable release but carry no release signature.
+
+## Store distribution (when signed)
+
+- [ ] F-Droid: metadata lives in `fastlane/` (this repo). Follow the F-Droid submission process for a new app pointing at this metadata, then keep changelogs (`fastlane/metadata/android/en-US/changelogs/<versionCode>.txt`) current per release.
+- [ ] IzzyOnDroid: submit once a signed stable release exists.
+- [ ] Obtainium: already documented in `README.md` (tracks GitHub releases, include prereleases for the preview channel).
+- [ ] Signature-change caveat: switching signing keys (e.g. debug/preview to stable, or GitHub to F-Droid) requires users to uninstall and reinstall — Android treats different signatures as different apps, and data does not migrate.
+
+## Post-release
+
+- [ ] Update `CHANGELOG.md` if anything changed during release.
+- [ ] Verify the rolling preview still rebuilds green.
+- [ ] Close the release milestone.
+- [ ] Announce (release notes link; channels per master plan).
+
+## Rollback
+
+- [ ] Delete the release or mark it as pre-release/draft on GitHub if it is broken.
+- [ ] If the `preview` tag was moved, re-point it at the last good commit and re-run CI.
+- [ ] File a follow-up issue and note it in `CHANGELOG.md`.
