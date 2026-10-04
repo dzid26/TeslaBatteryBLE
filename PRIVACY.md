@@ -13,6 +13,9 @@ anywhere.**
 
 Uninstalling the app removes this data. Nothing is synchronized, uploaded, or shared.
 
+Android Auto Backup is disabled (`android:allowBackup="false"`), so app data is not
+uploaded to Google Drive or transferred by the OS to another device.
+
 ## Permissions and why they exist
 
 | Permission | Why |

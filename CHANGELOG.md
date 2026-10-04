@@ -16,6 +16,8 @@ All notable changes to this project are documented here. The format is based on
 
 ### Changed
 
+- Android Auto Backup disabled (`allowBackup=false`) so app data (VIN, history) cannot
+  leave the device through OS backup or device transfer
 - CI: concurrency cancellation, least-privilege permissions, Android lint and app
   unit tests in the pipeline
 
