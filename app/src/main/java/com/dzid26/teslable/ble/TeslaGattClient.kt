@@ -6,6 +6,7 @@ import android.bluetooth.BluetoothGatt
 import android.bluetooth.BluetoothGattCallback
 import android.bluetooth.BluetoothGattCharacteristic
 import android.bluetooth.BluetoothGattDescriptor
+import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
 import android.bluetooth.BluetoothStatusCodes
 import android.content.Context
@@ -18,7 +19,7 @@ import com.dzid26.teslable.core.framing.BleFramer
 class TeslaGattClient(
     private val context: Context,
     private val listener: Listener,
-) {
+) : TeslaTransport {
 
     interface Listener {
         fun onPhase(phase: ConnectionPhase)
@@ -47,14 +48,23 @@ class TeslaGattClient(
     }
 
     @SuppressLint("MissingPermission")
-    fun connect(device: BluetoothDevice) {
+    override fun connect(address: String) {
         close()
+        val device = context
+            .getSystemService(BluetoothManager::class.java)
+            ?.adapter
+            ?.getRemoteDevice(address)
+        if (device == null) {
+            listener.onLog("Could not resolve $address")
+            listener.onPhase(ConnectionPhase.FAILED)
+            return
+        }
         listener.onPhase(ConnectionPhase.CONNECTING)
         gatt = device.connectGatt(context, false, callback, BluetoothDevice.TRANSPORT_LE)
     }
 
     @SuppressLint("MissingPermission")
-    fun close() {
+    override fun close() {
         gatt?.disconnect()
         gatt?.close()
         gatt = null
@@ -69,7 +79,7 @@ class TeslaGattClient(
         handler.removeCallbacks(writeTimeout)
     }
 
-    fun send(payload: ByteArray): Boolean {
+    override fun send(payload: ByteArray): Boolean {
         if (gatt == null) return false
         if (txCharacteristic == null) {
             listener.onLog("TX characteristic not ready")
@@ -82,7 +92,7 @@ class TeslaGattClient(
     }
 
     @SuppressLint("MissingPermission")
-    fun readRssi() {
+    override fun readRssi() {
         gatt?.readRemoteRssi()
     }
 

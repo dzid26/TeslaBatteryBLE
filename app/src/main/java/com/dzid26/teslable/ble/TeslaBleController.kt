@@ -1,7 +1,5 @@
 package com.dzid26.teslable.ble
 
-import android.annotation.SuppressLint
-import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
@@ -39,7 +37,7 @@ class TeslaBleController(context: Context) {
     /** Battery readings recorded from every charge response, oldest first. */
     val batteryHistory: StateFlow<List<BatterySample>> = historyStore.samples
 
-    private val clients = mutableMapOf<String, TeslaGattClient>()
+    private val clients = mutableMapOf<String, TeslaTransport>()
     private val failedAddresses = mutableSetOf<String>()
     private val handler = Handler(Looper.getMainLooper())
     private var keySlotQueue: List<Int> = emptyList()
@@ -362,16 +360,7 @@ class TeslaBleController(context: Context) {
         log("Background tracking disabled")
     }
 
-    @SuppressLint("MissingPermission")
     private fun connect(address: String) {
-        val device = appContext
-            .getSystemService(BluetoothManager::class.java)
-            ?.adapter
-            ?.getRemoteDevice(address)
-        if (device == null) {
-            log("Could not resolve $address")
-            return
-        }
         clients.remove(address)?.close()
         failedAddresses.remove(address)
         val existing = _state.value.connections[address]
@@ -396,7 +385,7 @@ class TeslaBleController(context: Context) {
         }
         val client = TeslaGattClient(appContext, listenerFor(address))
         clients[address] = client
-        client.connect(device)
+        client.connect(address)
     }
 
     private fun onDevicesFound(devices: List<TeslaAdvert>) {
