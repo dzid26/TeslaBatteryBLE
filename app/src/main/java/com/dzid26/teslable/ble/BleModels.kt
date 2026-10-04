@@ -55,19 +55,14 @@ data class BleUiState(
     val trackingEnabled: Boolean = true,
     val devices: List<TeslaAdvert> = emptyList(),
     val connections: Map<String, TeslaConnection> = emptyMap(),
+    /** Known cars, most recently seen first. */
+    val vehicles: List<Vehicle> = emptyList(),
     val selectedAddress: String? = null,
     val vinInput: String = "",
     val expectedBleName: String? = null,
     val pairingPhase: PairingPhase = PairingPhase.IDLE,
     val pairingKeyId: String? = null,
     val log: List<String> = emptyList(),
-)
-
-/** A car that was paired and connected at least once, remembered for reconnects. */
-data class KnownCar(
-    val address: String,
-    val name: String,
-    val gattName: String? = null,
 )
 
 /** The title and status line both the app list and the notification show for a car. */
@@ -87,8 +82,14 @@ fun connectionDisplay(
     connection: TeslaConnection?,
     advert: TeslaAdvert?,
     showHints: Boolean = false,
+    vehicle: Vehicle? = null,
 ): ConnectionDisplay {
-    val title = connection?.gattDeviceName ?: connection?.name ?: advert?.name ?: "Tesla"
+    val title = vehicle?.displayName?.takeIf { it.isNotBlank() }
+        ?: connection?.gattDeviceName
+        ?: vehicle?.gattName
+        ?: connection?.name
+        ?: advert?.name
+        ?: "Tesla"
     return ConnectionDisplay(
         title = title,
         stateText = connectionStateText(connection, showHints),

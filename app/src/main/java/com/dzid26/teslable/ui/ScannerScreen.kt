@@ -289,6 +289,13 @@ private fun CarTab(
             ?: TeslaAdvert(connection.name, connection.address, connection.rssi)
     }
     val selectedSessions = selectedConnection?.sessions ?: emptyList()
+    // History is per vehicle: only the selected car's samples belong in the graph.
+    val selectedVehicle = state.vehicles.firstOrNull { it.bleName == selectedConnection?.name }
+    val vehicleHistory = if (selectedVehicle == null) {
+        emptyList()
+    } else {
+        history.filter { it.vehicleId == selectedVehicle.bleName }
+    }
     var editingVin by rememberSaveable { mutableStateOf(state.vinInput.isEmpty()) }
 
     Column(
@@ -353,7 +360,7 @@ private fun CarTab(
         }
         Spacer(Modifier.height(16.dp))
 
-        BatteryHistoryCard(history)
+        BatteryHistoryCard(vehicleHistory)
     }
 }
 

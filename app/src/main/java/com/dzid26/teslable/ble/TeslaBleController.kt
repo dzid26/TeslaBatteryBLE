@@ -31,12 +31,12 @@ class TeslaBleController(context: Context) {
     val state: StateFlow<BleUiState> = _state.asStateFlow()
 
     private val keyStore = PairingKeyStore(appContext)
-    private val knownCarStore = KnownCarStore(appContext)
-    private val historyStore = BatteryHistoryStore(appContext)
-    private val knownCars = mutableMapOf<String, KnownCar>()
+    private val vehicleStore = VehicleStore(appContext)
+    private val vehicles = mutableMapOf<String, Vehicle>()
+    private val historyStore: BatteryHistoryStore
 
     /** Battery readings recorded from every charge response, oldest first. */
-    val batteryHistory: StateFlow<List<BatterySample>> = historyStore.samples
+    val batteryHistory: StateFlow<List<BatterySample>> get() = historyStore.samples
 
     private val clients = mutableMapOf<String, TeslaTransport>()
     private val failedAddresses = mutableSetOf<String>()
@@ -229,27 +229,72 @@ class TeslaBleController(context: Context) {
     }
 
     init {
-        knownCarStore.load().forEach { knownCars[it.name] = it }
+        vehicleStore.load().forEach { vehicles[it.bleName] = it }
+        migrateLegacyVin()
+        historyStore = BatteryHistoryStore(appContext, legacyHistoryVehicleId())
         if (!prefs.getBoolean(KEY_TRACKING_ENABLED, true)) {
             _state.update { it.copy(trackingEnabled = false) }
         }
-        val savedVin = prefs.getString(KEY_VIN, "").orEmpty()
-        if (savedVin.isNotEmpty()) {
-            setVinInput(savedVin)
+        if (DemoMode.isEnabled(appContext)) {
+            // The simulated car carries a fixed demo VIN; give it a home once.
+            val demoName = runCatching { TeslaNames.bleName(DemoMode.DEMO_VIN) }.getOrNull()
+            if (demoName != null && vehicles[demoName]?.vin == null) {
+                updateVehicle(demoName) { it.copy(vin = DemoMode.DEMO_VIN) }
+            }
         }
-        if (DemoMode.isEnabled(appContext) && _state.value.vinInput.isEmpty()) {
-            setVinInput(DemoMode.DEMO_VIN)
-        }
+        publishVehicles()
+    }
+
+    /**
+     * Moves the pre-multi-vehicle global VIN onto the car whose advertised name
+     * matches it. The old preference is kept: another release may still read it.
+     */
+    private fun migrateLegacyVin() {
+        val legacyVin = Vehicle.normalizeVin(prefs.getString(KEY_VIN, "").orEmpty())
+        if (legacyVin.length != VIN_LENGTH) return
+        val match = vehicles.values.firstOrNull { it.vin == null && it.acceptsVin(legacyVin) } ?: return
+        vehicles[match.bleName] = match.copy(vin = legacyVin)
+        vehicleStore.save(vehicles.values)
+    }
+
+    /**
+     * Which car the history rows written before per-vehicle storage belong to:
+     * the one matching the legacy VIN, or the only car there is.
+     */
+    private fun legacyHistoryVehicleId(): String? {
+        val legacyVin = Vehicle.normalizeVin(prefs.getString(KEY_VIN, "").orEmpty())
+        val match = vehicles.values.firstOrNull { it.vin != null && it.vin == legacyVin }
+        return match?.bleName ?: vehicles.values.singleOrNull()?.bleName
     }
 
     fun setVinInput(input: String) {
-        val expected = if (input.length == VIN_LENGTH) {
-            runCatching { TeslaNames.bleName(input) }.getOrNull()
+        val normalized = Vehicle.normalizeVin(input)
+        val expected = if (normalized.length == VIN_LENGTH) {
+            runCatching { TeslaNames.bleName(normalized) }.getOrNull()
         } else {
             null
         }
-        if (expected != null) {
-            prefs.edit().putString(KEY_VIN, input).apply()
+        val vehicle = selectedVehicle()
+        if (vehicle != null && expected != null) {
+            if (vehicle.acceptsVin(normalized)) {
+                updateVehicle(vehicle.bleName) { it.copy(vin = normalized) }
+                log("${vehicle.title}: VIN saved")
+                // A VIN unlocks the sessions; retry the handshake now.
+                _state.value.selectedAddress?.let { startSession(it) }
+            } else {
+                log("${vehicle.title}: VIN does not match this car's advertised name")
+            }
+        } else if (vehicle == null && expected != null) {
+            // The selected car is not remembered yet; remember it so the VIN
+            // has somewhere to live, then save it if it checks out.
+            _state.value.selectedAddress?.let { address ->
+                val connection = _state.value.connections[address] ?: return@let
+                rememberVehicle(connection.name, address, connection.gattDeviceName)
+                val remembered = vehicles[connection.name]
+                if (remembered != null && remembered.acceptsVin(normalized)) {
+                    updateVehicle(remembered.bleName) { it.copy(vin = normalized) }
+                }
+            }
         }
         _state.update { it.copy(vinInput = input, expectedBleName = expected) }
     }
@@ -276,7 +321,7 @@ class TeslaBleController(context: Context) {
 
     fun onTeslaClicked(address: String) {
         reconnectAttempts = 0
-        _state.update { it.copy(selectedAddress = address) }
+        selectAddress(address)
         when (_state.value.connections[address]?.phase) {
             ConnectionPhase.READY -> {
                 requestVcsecStatus(address)
@@ -306,17 +351,15 @@ class TeslaBleController(context: Context) {
         val state = _state.value
         if (state.scanning) return
         if (state.connections.values.any { it.phase in ACTIVE_PHASES }) return
-        val known = knownCars.values.firstOrNull { it.address == state.selectedAddress }
-            ?: knownCars.values.firstOrNull()
+        val known = vehicles.values.firstOrNull { it.address == state.selectedAddress }
+            ?: vehicles.values.firstOrNull()
             ?: return
         // Show the paired car's row even though this reconnect does not scan.
         _state.update {
-            it.copy(
-                selectedAddress = known.address,
-                devices = listOf(TeslaAdvert(name = known.name, address = known.address)),
-            )
+            it.copy(devices = listOf(TeslaAdvert(name = known.bleName, address = known.address)))
         }
-        log("${known.gattName ?: known.name}: reconnecting to paired car")
+        selectAddress(known.address)
+        log("${known.title}: reconnecting to paired car")
         connect(known.address)
     }
 
@@ -426,13 +469,15 @@ class TeslaBleController(context: Context) {
     private fun onDevicesFound(devices: List<TeslaAdvert>) {
         val selection = _state.value.selectedAddress
         var movedSelection: String? = null
+        val now = System.currentTimeMillis()
         val strongestByName = devices.groupBy { it.name }
             .mapValues { (_, found) -> found.maxBy { it.rssi ?: Int.MIN_VALUE } }
         for ((name, device) in strongestByName) {
-            val known = knownCars[name] ?: continue
+            val known = vehicles[name] ?: continue
+            vehicles[name] = known.copy(lastSeenMillis = now)
             if (known.address == device.address) continue
             // The car is advertising from a new address; follow it.
-            rememberCar(name, device.address, known.gattName)
+            updateVehicle(name) { it.copy(address = device.address) }
             if (selection == known.address) {
                 movedSelection = device.address
             }
@@ -457,9 +502,9 @@ class TeslaBleController(context: Context) {
             state.copy(
                 devices = visibleDevices(devices, connections, state.explicitScan),
                 connections = connections,
-                selectedAddress = movedSelection ?: state.selectedAddress,
             )
         }
+        movedSelection?.let(::selectAddress)
         autoConnect()
     }
 
@@ -486,7 +531,7 @@ class TeslaBleController(context: Context) {
         val candidates = if (explicitScan) {
             found
         } else {
-            val known = found.filter { knownCars.containsKey(it.name) }
+            val known = found.filter { vehicles.containsKey(it.name) }
             listOfNotNull((known.ifEmpty { found }).maxByOrNull { it.rssi ?: Int.MIN_VALUE })
         }
         candidates
@@ -502,28 +547,87 @@ class TeslaBleController(context: Context) {
     private fun autoConnect() {
         if (!_state.value.trackingEnabled) return
         val state = _state.value
-        val target = state.devices.firstOrNull { knownCars.containsKey(it.name) } ?: return
+        val target = state.devices.firstOrNull { vehicles.containsKey(it.name) } ?: return
         if (target.address in clients || target.address in failedAddresses) return
         if (state.selectedAddress != null && state.selectedAddress != target.address) return
         if (state.selectedAddress == null) {
-            _state.update { it.copy(selectedAddress = target.address) }
+            selectAddress(target.address)
         }
         log("${nameFor(target.address)}: reconnecting to paired car")
         connect(target.address)
     }
 
-    private fun rememberCar(address: String) {
+    private fun rememberVehicle(address: String) {
         val connection = _state.value.connections[address] ?: return
-        rememberCar(connection.name, address, connection.gattDeviceName)
+        rememberVehicle(connection.name, address, connection.gattDeviceName)
     }
 
-    private fun rememberCar(name: String, address: String, gattName: String?) {
+    private fun rememberVehicle(name: String, address: String, gattName: String?) {
         if (!TeslaNames.isTeslaBleName(name)) return
-        val car = KnownCar(address = address, name = name, gattName = gattName)
-        if (knownCars[name] == car) return
-        knownCars[name] = car
-        knownCarStore.save(knownCars.values.toList())
-        log("${nameFor(address)}: remembered for reconnect")
+        val existing = vehicles[name]
+        val demoVin = if (DemoMode.isEnabled(appContext) &&
+            name == runCatching { TeslaNames.bleName(DemoMode.DEMO_VIN) }.getOrNull()
+        ) {
+            DemoMode.DEMO_VIN
+        } else {
+            null
+        }
+        val updated = (existing ?: Vehicle(bleName = name, address = address)).copy(
+            address = address,
+            gattName = gattName ?: existing?.gattName,
+            vin = existing?.vin ?: demoVin,
+            lastSeenMillis = System.currentTimeMillis(),
+        )
+        val changed = existing == null ||
+            existing.address != updated.address ||
+            (gattName != null && existing.gattName != gattName) ||
+            (updated.vin != null && existing.vin == null)
+        vehicles[name] = updated
+        vehicleStore.save(vehicles.values)
+        publishVehicles()
+        if (changed) log("${nameFor(address)}: remembered for reconnect")
+    }
+
+    /** The vehicle a live connection or advert belongs to, by advertised name. */
+    private fun vehicleFor(address: String): Vehicle? {
+        val name = _state.value.connections[address]?.name
+            ?: _state.value.devices.firstOrNull { it.address == address }?.name
+        return name?.let(vehicles::get)
+    }
+
+    private fun selectedVehicle(): Vehicle? =
+        _state.value.selectedAddress?.let(::vehicleFor)
+
+    private fun vehicleIdFor(address: String): String =
+        _state.value.connections[address]?.name
+            ?: _state.value.devices.firstOrNull { it.address == address }?.name
+            ?: address
+
+    private fun selectAddress(address: String) {
+        val vehicle = vehicleFor(address)
+        _state.update {
+            it.copy(
+                selectedAddress = address,
+                vinInput = vehicle?.vin ?: "",
+                expectedBleName = vehicle?.vin?.let(::bleNameOf),
+            )
+        }
+    }
+
+    private fun bleNameOf(vin: String): String? =
+        runCatching { TeslaNames.bleName(vin) }.getOrNull()
+
+    private fun updateVehicle(bleName: String, transform: (Vehicle) -> Vehicle) {
+        val vehicle = vehicles[bleName] ?: return
+        vehicles[bleName] = transform(vehicle)
+        vehicleStore.save(vehicles.values)
+        publishVehicles()
+    }
+
+    private fun publishVehicles() {
+        _state.update {
+            it.copy(vehicles = vehicles.values.sortedByDescending { vehicle -> vehicle.lastSeenMillis })
+        }
     }
 
     private fun listenerFor(address: String) = object : TeslaTransport.Listener {
@@ -646,7 +750,7 @@ class TeslaBleController(context: Context) {
             log("${nameFor(address)}: no pairing key yet")
             return
         }
-        val vin = _state.value.vinInput
+        val vin = vehicles[vehicleIdFor(address)]?.vin.orEmpty()
         if (vin.length != VIN_LENGTH) {
             log("${nameFor(address)}: enter your VIN to establish a session")
             return
@@ -703,7 +807,7 @@ class TeslaBleController(context: Context) {
             return true
         }
         val keyPair = keyStore.load()
-        val vin = _state.value.vinInput
+        val vin = vehicles[vehicleIdFor(address)]?.vin.orEmpty()
         val session = if (keyPair != null && vin.length == VIN_LENGTH) {
             TeslaSession.import(
                 privateKeyPkcs8 = keyPair.privateKeyPkcs8,
@@ -728,7 +832,7 @@ class TeslaBleController(context: Context) {
             )
         }
         log("${nameFor(address)}: session established (${pending.domain.name})")
-        rememberCar(address)
+        rememberVehicle(address)
         if (SESSION_DOMAINS.all { sessions[address]?.containsKey(it) == true }) {
             handler.removeCallbacks(sessionRetry)
         }
@@ -752,7 +856,7 @@ class TeslaBleController(context: Context) {
                 _state.update { it.copy(pairingPhase = PairingPhase.OK, pairingKeyId = keyId) }
                 log("${nameFor(address)}: key enrolled (${whitelist.numberOfEntries} keys)")
             }
-            rememberCar(address)
+            rememberVehicle(address)
             // A freshly enrolled key can open sessions now.
             startSession(address)
             val index = whitelist.whitelistEntries.indexOfFirst {
@@ -781,6 +885,10 @@ class TeslaBleController(context: Context) {
         if (matches) {
             keySlotQueue = emptyList()
             updateConnection(address) { it.copy(keySlot = entry.slot) }
+            val vehicleName = vehicleIdFor(address)
+            if (vehicles.containsKey(vehicleName)) {
+                updateVehicle(vehicleName) { it.copy(keySlot = entry.slot) }
+            }
             log("${nameFor(address)}: key slot ${entry.slot}")
         } else {
             requestNextKeySlot(address)
@@ -910,7 +1018,7 @@ class TeslaBleController(context: Context) {
                 if (charge != null) {
                     val previous = _state.value.connections[pending.address]?.charge
                     updateConnection(pending.address) { it.copy(charge = charge) }
-                    historyStore.record(charge)
+                    historyStore.record(vehicleIdFor(pending.address), charge)
                     if (previous?.batteryLevel != charge.batteryLevel ||
                         previous?.chargingState != charge.chargingState
                     ) {

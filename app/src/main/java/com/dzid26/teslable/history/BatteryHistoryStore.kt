@@ -3,6 +3,7 @@
 package com.dzid26.teslable.history
 
 import android.content.Context
+import com.dzid26.teslable.core.history.BatteryHistoryCsv
 import com.dzid26.teslable.core.history.BatterySample
 import com.dzid26.teslable.core.protocol.TeslaCommands
 import java.io.File
@@ -18,11 +19,17 @@ import kotlinx.coroutines.sync.withLock
 
 /**
  * Battery history as an append-only CSV in app storage, cached in memory and
- * exposed as a [StateFlow]. One line per SOC read; repeated identical readings
- * within a minute are skipped so polling does not flood the file. First cut per
- * the ADR: Room/SQLite when queries outgrow this.
+ * exposed as a [StateFlow]. One line per SOC read, tagged with the vehicle it
+ * came from; repeated identical readings within a minute are skipped so polling
+ * does not flood the file. Rows written before per-vehicle history existed are
+ * attributed to [legacyVehicleId] while they are read, and persisted with the
+ * vehicle id on the next rewrite. First cut per ADR-0002: Room/SQLite when
+ * queries outgrow this.
  */
-class BatteryHistoryStore(context: Context) {
+class BatteryHistoryStore(
+    context: Context,
+    private val legacyVehicleId: String? = null,
+) {
 
     private val file = File(context.filesDir, FILE_NAME)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -36,18 +43,23 @@ class BatteryHistoryStore(context: Context) {
         }
     }
 
-    fun record(charge: TeslaCommands.Charge, nowMillis: Long = System.currentTimeMillis()) {
+    fun record(
+        vehicleId: String,
+        charge: TeslaCommands.Charge,
+        nowMillis: Long = System.currentTimeMillis(),
+    ) {
         val percent = charge.batteryLevel ?: return
         val sample = BatterySample(
             timestampMillis = nowMillis,
             percent = percent,
             chargingState = charge.chargingState,
             chargeLimit = charge.chargeLimit,
+            vehicleId = vehicleId,
         )
         scope.launch {
             mutex.withLock {
                 val current = _samples.value
-                val last = current.lastOrNull()
+                val last = current.lastOrNull { it.vehicleId == sample.vehicleId }
                 if (last != null &&
                     last.percent == sample.percent &&
                     last.chargingState == sample.chargingState &&
@@ -57,9 +69,13 @@ class BatteryHistoryStore(context: Context) {
                 }
                 val updated = (current + sample).takeLast(MAX_SAMPLES)
                 if (updated.size > current.size) {
-                    file.appendText(sample.toLine() + "\n")
+                    file.appendText(BatteryHistoryCsv.encode(sample) + "\n")
                 } else {
-                    file.writeText(updated.joinToString("\n") { it.toLine() } + "\n")
+                    file.writeText(
+                        updated.joinToString(separator = "\n", postfix = "\n") {
+                            BatteryHistoryCsv.encode(it)
+                        }
+                    )
                 }
                 _samples.value = updated
             }
@@ -69,29 +85,12 @@ class BatteryHistoryStore(context: Context) {
     private fun readFile(): List<BatterySample> {
         if (!file.exists()) return emptyList()
         return runCatching {
-            file.readLines().mapNotNull(::parseLine).takeLast(MAX_SAMPLES)
+            file.readLines()
+                .mapNotNull(BatteryHistoryCsv::parse)
+                .map { BatteryHistoryCsv.attribute(it, legacyVehicleId) }
+                .takeLast(MAX_SAMPLES)
         }.getOrDefault(emptyList())
     }
-
-    private fun parseLine(line: String): BatterySample? {
-        val parts = line.split(',')
-        if (parts.size < 2) return null
-        val timestamp = parts[0].toLongOrNull() ?: return null
-        val percent = parts[1].toIntOrNull() ?: return null
-        return BatterySample(
-            timestampMillis = timestamp,
-            percent = percent,
-            chargingState = parts.getOrNull(3)?.takeIf { it.isNotEmpty() },
-            chargeLimit = parts.getOrNull(2)?.toIntOrNull(),
-        )
-    }
-
-    private fun BatterySample.toLine(): String = listOf(
-        timestampMillis.toString(),
-        percent.toString(),
-        chargeLimit?.toString() ?: "",
-        chargingState?.replace(',', ' ') ?: "",
-    ).joinToString(",")
 
     private companion object {
         const val FILE_NAME = "battery-history.csv"

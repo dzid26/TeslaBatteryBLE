@@ -2,12 +2,18 @@
 
 package com.dzid26.teslable.core.history
 
-/** One battery reading, recorded whenever the car reports charge state. */
+/** One battery reading, recorded whenever a car reports charge state. */
 data class BatterySample(
     val timestampMillis: Long,
     val percent: Int,
     val chargingState: String?,
     val chargeLimit: Int?,
+    /**
+     * Which vehicle the reading came from: the advertised BLE name
+     * (`S<sha1(VIN)[:8]>C`), which is stable before a VIN is known. Empty on
+     * rows written before per-vehicle history existed.
+     */
+    val vehicleId: String = "",
 ) {
     val isCharging: Boolean get() = chargingState == "Charging"
 }
