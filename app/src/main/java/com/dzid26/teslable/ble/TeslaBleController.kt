@@ -256,10 +256,10 @@ class TeslaBleController(context: Context) {
         startScan()
     }
 
-    fun pairKey() {
-        val address = _state.value.selectedAddress
-        val connection = address?.let { _state.value.connections[it] }
-        if (address == null || connection?.phase != ConnectionPhase.READY) {
+    fun pairKey(address: String) {
+        _state.update { it.copy(selectedAddress = address) }
+        val connection = _state.value.connections[address]
+        if (connection?.phase != ConnectionPhase.READY) {
             log("No selected car ready for pairing")
             return
         }

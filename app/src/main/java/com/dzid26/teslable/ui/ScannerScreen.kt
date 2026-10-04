@@ -64,7 +64,7 @@ fun ScannerScreen(
     onVinChange: (String) -> Unit,
     onToggleTracking: (Boolean) -> Unit,
     onConnect: (String) -> Unit,
-    onPairKey: () -> Unit,
+    onPairKey: (String) -> Unit,
     onWake: () -> Unit,
     onReadSoc: () -> Unit,
 ) {
@@ -142,22 +142,15 @@ fun ScannerScreen(
             Text(text = statusText, style = MaterialTheme.typography.bodyMedium)
             Spacer(Modifier.height(8.dp))
 
-            val selectedConnection = state.selectedAddress?.let { state.connections[it] }
-            val canPair = selectedConnection?.phase == ConnectionPhase.READY &&
-                state.pairingPhase != PairingPhase.SENDING
-            Button(onClick = onPairKey, enabled = canPair) {
-                Text("Pair charging key")
-            }
             if (state.pairingPhase != PairingPhase.IDLE) {
                 Text(
                     text = when (state.pairingPhase) {
                         PairingPhase.SENDING -> "Sending pairing request..."
                         PairingPhase.WAITING_FOR_CARD ->
-                            "Tap your NFC card on the center console and confirm on the car screen. " +
-                                "Then rename the new Phone Key in Controls > Locks."
+                            "Tap your NFC card on the center console and confirm on the car screen."
 
                         PairingPhase.OK ->
-                            "Key paired: ${state.pairingKeyId} (rename the Phone Key in Controls > Locks)"
+                            "Key paired: ${state.pairingKeyId} — rename the Phone Key in Controls > Locks."
 
                         PairingPhase.ERROR -> "Pairing failed"
                         PairingPhase.IDLE -> ""
@@ -169,9 +162,10 @@ fun ScannerScreen(
                         else -> MaterialTheme.colorScheme.onSurfaceVariant
                     },
                 )
+                Spacer(Modifier.height(8.dp))
             }
-            Spacer(Modifier.height(8.dp))
 
+            val selectedConnection = state.selectedAddress?.let { state.connections[it] }
             val selectedSessions = selectedConnection?.sessions ?: emptyList()
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(
@@ -198,12 +192,19 @@ fun ScannerScreen(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 items(state.devices, key = { it.address }) { device ->
+                    val connection = state.connections[device.address]
+                    val paired = connection?.keySlot != null ||
+                        connection?.sessions?.isNotEmpty() == true ||
+                        (device.address == state.selectedAddress &&
+                            state.pairingPhase == PairingPhase.OK)
                     DeviceRow(
                         device = device,
-                        connection = state.connections[device.address],
+                        connection = connection,
                         expectedName = state.expectedBleName,
                         isSelected = device.address == state.selectedAddress,
+                        showPair = state.explicitScan && connection != null && !paired,
                         onClick = { onConnect(device.address) },
+                        onPair = { onPairKey(device.address) },
                     )
                 }
                 item { BatteryHistoryCard(history) }
@@ -234,7 +235,9 @@ private fun DeviceRow(
     connection: TeslaConnection?,
     expectedName: String?,
     isSelected: Boolean,
+    showPair: Boolean,
     onClick: () -> Unit,
+    onPair: () -> Unit,
 ) {
     Card(
         modifier = Modifier
@@ -303,6 +306,15 @@ private fun DeviceRow(
                         text = details.joinToString(" · "),
                         style = MaterialTheme.typography.bodySmall,
                     )
+                }
+            }
+            if (showPair) {
+                Spacer(Modifier.height(8.dp))
+                Button(
+                    onClick = onPair,
+                    enabled = connection?.phase == ConnectionPhase.READY,
+                ) {
+                    Text("Pair key")
                 }
             }
         }
