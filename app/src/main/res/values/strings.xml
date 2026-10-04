@@ -3,5 +3,5 @@
 
     <string name="tracking_channel_name">Background tracking</string>
     <string name="tracking_channel_description">Car connection and battery status while the app tracks in the background.</string>
-    <string name="tracking_stop">Stop</string>
+    <string name="tracking_wake">Wake</string>
 </resources>

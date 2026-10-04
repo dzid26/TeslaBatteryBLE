@@ -18,9 +18,11 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
@@ -29,7 +31,7 @@ import com.dzid26.teslable.ble.ConnectionPhase
 import com.dzid26.teslable.ble.PairingPhase
 import com.dzid26.teslable.ble.TeslaAdvert
 import com.dzid26.teslable.ble.TeslaConnection
-import com.dzid26.teslable.ble.connectionStateText
+import com.dzid26.teslable.ble.connectionDisplay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -40,6 +42,7 @@ fun ScannerScreen(
     onRequestPermissions: () -> Unit,
     onToggleScan: () -> Unit,
     onVinChange: (String) -> Unit,
+    onToggleTracking: (Boolean) -> Unit,
     onConnect: (String) -> Unit,
     onPairKey: () -> Unit,
     onWake: () -> Unit,
@@ -84,7 +87,23 @@ fun ScannerScreen(
             }
             Spacer(Modifier.height(12.dp))
 
-            Button(onClick = onToggleScan) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "Background tracking",
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.weight(1f),
+                )
+                Switch(
+                    checked = state.trackingEnabled,
+                    onCheckedChange = onToggleTracking,
+                )
+            }
+            Spacer(Modifier.height(12.dp))
+
+            Button(onClick = onToggleScan, enabled = state.trackingEnabled) {
                 Text(if (state.scanning) "Stop scan" else "Scan for Teslas")
             }
             Spacer(Modifier.height(12.dp))
@@ -202,20 +221,19 @@ private fun DeviceRow(
         },
     ) {
         Column(Modifier.padding(12.dp)) {
-            val advertisedName = connection?.name ?: device.name
-            val displayName = connection?.gattDeviceName ?: advertisedName
-            val isMatch = expectedName != null && expectedName.equals(advertisedName, ignoreCase = true)
+            val display = connectionDisplay(connection, device, showHints = true)
+            val isMatch = expectedName != null && expectedName.equals(device.name, ignoreCase = true)
             Text(
-                text = if (isMatch) "$displayName  (VIN match)" else displayName,
+                text = if (isMatch) "${display.title}  (VIN match)" else display.title,
                 style = MaterialTheme.typography.titleMedium,
             )
             Text(
-                text = "${device.address}   RSSI ${device.rssi} dBm",
+                text = device.address,
                 style = MaterialTheme.typography.bodySmall,
             )
             if (connection != null) {
                 Text(
-                    text = connectionStateText(connection, showHints = true),
+                    text = display.status,
                     style = MaterialTheme.typography.titleSmall,
                     color = when {
                         connection.phase == ConnectionPhase.FAILED ->

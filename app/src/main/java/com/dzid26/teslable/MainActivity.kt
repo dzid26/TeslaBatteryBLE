@@ -96,7 +96,8 @@ class MainActivity : ComponentActivity() {
                 // Once a car with an enrolled key is connected, hand off to the
                 // foreground service so BLE keeps running with the app backgrounded.
                 val selectedConnection = state.selectedAddress?.let { state.connections[it] }
-                val trackingNeeded = selectedConnection != null &&
+                val trackingNeeded = state.trackingEnabled &&
+                    selectedConnection != null &&
                     selectedConnection.phase == ConnectionPhase.READY &&
                     (
                         state.pairingPhase == PairingPhase.OK ||
@@ -131,6 +132,7 @@ class MainActivity : ComponentActivity() {
                         }
                     },
                     onVinChange = controller::setVinInput,
+                    onToggleTracking = controller::setTrackingEnabled,
                     onConnect = controller::onTeslaClicked,
                     onPairKey = controller::pairKey,
                     onWake = controller::wakeVehicle,

@@ -53,11 +53,10 @@ class BleTrackingService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == ACTION_STOP) {
-            stopSelf()
-            return START_NOT_STICKY
-        }
         val controller = BleControllerHolder.get(this)
+        if (intent?.action == ACTION_WAKE) {
+            controller.wakeVehicle()
+        }
         val model = modelFor(controller.state.value)
         lastModel = model
         ServiceCompat.startForeground(
@@ -95,29 +94,35 @@ class BleTrackingService : Service() {
         val connection = state.selectedAddress?.let { state.connections[it] }
             ?: state.connections.values.firstOrNull { it.phase == ConnectionPhase.READY }
             ?: state.connections.values.firstOrNull()
+        val advert = state.devices.firstOrNull { it.address == connection?.address }
+        val display = connectionDisplay(connection, advert)
         return NotificationModel(
-            carName = connection?.gattDeviceName ?: connection?.name,
-            stateText = connectionStateText(connection),
+            title = display.title,
+            status = display.status,
+            showWake = connection?.status?.asleep == true &&
+                connection.sessions.contains("DOMAIN_VEHICLE_SECURITY"),
         )
     }
 
     private fun buildNotification(model: NotificationModel): Notification {
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_tracking)
-            .setContentTitle(model.carName ?: getString(R.string.app_name))
-            .setContentText(model.stateText)
+            .setContentTitle(model.title)
+            .setContentText(model.status)
             .setContentIntent(openAppIntent())
-            .addAction(
-                R.drawable.ic_stat_tracking,
-                getString(R.string.tracking_stop),
-                stopIntent(),
-            )
             .setOngoing(true)
             .setSilent(true)
             .setOnlyAlertOnce(true)
             .setShowWhen(false)
             .setCategory(NotificationCompat.CATEGORY_STATUS)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+        if (model.showWake) {
+            builder.addAction(
+                R.drawable.ic_stat_tracking,
+                getString(R.string.tracking_wake),
+                wakeIntent(),
+            )
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             builder.setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
         }
@@ -135,11 +140,11 @@ class BleTrackingService : Service() {
         )
     }
 
-    private fun stopIntent(): PendingIntent {
-        val intent = Intent(this, BleTrackingService::class.java).setAction(ACTION_STOP)
+    private fun wakeIntent(): PendingIntent {
+        val intent = Intent(this, BleTrackingService::class.java).setAction(ACTION_WAKE)
         return PendingIntent.getService(
             this,
-            REQUEST_STOP,
+            REQUEST_WAKE,
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
@@ -160,17 +165,18 @@ class BleTrackingService : Service() {
     }
 
     private data class NotificationModel(
-        val carName: String?,
-        val stateText: String,
+        val title: String,
+        val status: String,
+        val showWake: Boolean,
     )
 
     companion object {
         private const val ACTION_START = "com.dzid26.teslable.action.START_TRACKING"
-        private const val ACTION_STOP = "com.dzid26.teslable.action.STOP_TRACKING"
+        private const val ACTION_WAKE = "com.dzid26.teslable.action.WAKE_VEHICLE"
         private const val CHANNEL_ID = "tracking"
         private const val NOTIFICATION_ID = 1
         private const val REQUEST_OPEN_APP = 0
-        private const val REQUEST_STOP = 1
+        private const val REQUEST_WAKE = 1
 
         /** True while the foreground service is running (same process). */
         @Volatile

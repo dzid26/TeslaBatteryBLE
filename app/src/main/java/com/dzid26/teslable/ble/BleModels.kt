@@ -48,6 +48,7 @@ enum class PairingPhase {
 
 data class BleUiState(
     val scanning: Boolean = false,
+    val trackingEnabled: Boolean = true,
     val devices: List<TeslaAdvert> = emptyList(),
     val connections: Map<String, TeslaConnection> = emptyMap(),
     val selectedAddress: String? = null,
@@ -65,12 +66,34 @@ data class KnownCar(
     val gattName: String? = null,
 )
 
+/** The title and status line both the app list and the notification show for a car. */
+data class ConnectionDisplay(
+    val title: String,
+    val status: String,
+)
+
 /**
- * The four connection states shown in the app and the tracking notification:
- * disconnected, connected while asleep, connected and reading, or connected
- * with a battery percentage.
+ * Builds the display for a car, shared by the app list and the tracking
+ * notification so the two surfaces cannot drift apart.
  */
-fun connectionStateText(connection: TeslaConnection?, showHints: Boolean = false): String = when {
+fun connectionDisplay(
+    connection: TeslaConnection?,
+    advert: TeslaAdvert?,
+    showHints: Boolean = false,
+): ConnectionDisplay {
+    val title = connection?.gattDeviceName ?: connection?.name ?: advert?.name ?: "Tesla"
+    val state = connectionStateText(connection, showHints)
+    return ConnectionDisplay(
+        title = title,
+        status = advert?.let { "$state · RSSI ${it.rssi} dBm" } ?: state,
+    )
+}
+
+/**
+ * The four connection states: disconnected, connected while asleep, connected
+ * and reading, or connected with a battery percentage.
+ */
+private fun connectionStateText(connection: TeslaConnection?, showHints: Boolean): String = when {
     connection == null -> "Disconnected"
 
     connection.phase == ConnectionPhase.READY && connection.status?.asleep == true ->

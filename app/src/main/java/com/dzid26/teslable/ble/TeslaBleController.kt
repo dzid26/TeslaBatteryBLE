@@ -43,12 +43,16 @@ class TeslaBleController(context: Context) {
     private var sessionRetryAttempts = 0
     private var reconnectAttempts = 0
     private var wakeRefreshAttempts = 0
+    private var readChargeAfterWake = false
 
     private val wakeRefresh = object : Runnable {
         override fun run() {
             val address = _state.value.selectedAddress ?: return
             if (_state.value.connections[address]?.status?.asleep == false) return
-            if (wakeRefreshAttempts++ >= WAKE_REFRESH_MAX_ATTEMPTS) return
+            if (wakeRefreshAttempts++ >= WAKE_REFRESH_MAX_ATTEMPTS) {
+                readChargeAfterWake = false
+                return
+            }
             requestVcsecStatus(address)
             handler.postDelayed(this, WAKE_REFRESH_MS)
         }
@@ -131,6 +135,9 @@ class TeslaBleController(context: Context) {
 
     init {
         knownCarStore.load().forEach { knownCars[it.name] = it }
+        if (!prefs.getBoolean(KEY_TRACKING_ENABLED, true)) {
+            _state.update { it.copy(trackingEnabled = false) }
+        }
         val savedVin = prefs.getString(KEY_VIN, "").orEmpty()
         if (savedVin.isNotEmpty()) {
             setVinInput(savedVin)
@@ -150,6 +157,7 @@ class TeslaBleController(context: Context) {
     }
 
     fun startScan() {
+        if (!_state.value.trackingEnabled) return
         clients.values.forEach { it.close() }
         clients.clear()
         failedAddresses.clear()
@@ -162,6 +170,7 @@ class TeslaBleController(context: Context) {
         pendingSessions.clear()
         pendingCommands.clear()
         chargeAfterSession = false
+        readChargeAfterWake = false
         sessionRetryAttempts = 0
         reconnectAttempts = 0
         _state.update {
@@ -205,6 +214,7 @@ class TeslaBleController(context: Context) {
      * the paired car is discovered and auto-connected again.
      */
     fun ensureConnected() {
+        if (!_state.value.trackingEnabled) return
         if (knownCars.isEmpty() || !hasBlePermissions(appContext)) return
         if (_state.value.scanning) return
         if (_state.value.connections.values.any { it.phase in ACTIVE_PHASES }) return
@@ -235,16 +245,51 @@ class TeslaBleController(context: Context) {
         }
     }
 
-    fun close() {
+    /** Master switch: off tears everything down, on reconnects to paired cars. */
+    fun setTrackingEnabled(enabled: Boolean) {
+        if (_state.value.trackingEnabled == enabled) return
+        prefs.edit().putBoolean(KEY_TRACKING_ENABLED, enabled).apply()
+        _state.update { it.copy(trackingEnabled = enabled) }
+        if (enabled) {
+            log("Background tracking enabled")
+            ensureConnected()
+        } else {
+            disableTracking()
+        }
+    }
+
+    private fun disableTracking() {
+        BleTrackingService.stop(appContext)
         scanner.stop()
         clients.values.forEach { it.close() }
         clients.clear()
+        failedAddresses.clear()
         handler.removeCallbacks(pairingTimeout)
         handler.removeCallbacks(whitelistPoll)
         handler.removeCallbacks(sessionRetry)
         handler.removeCallbacks(reconnect)
         handler.removeCallbacks(wakeRefresh)
         keySlotQueue = emptyList()
+        sessions.clear()
+        pendingSessions.clear()
+        pendingCommands.clear()
+        chargeAfterSession = false
+        readChargeAfterWake = false
+        sessionRetryAttempts = 0
+        reconnectAttempts = 0
+        wakeRefreshAttempts = 0
+        whitelistPollAttempts = 0
+        _state.update {
+            it.copy(
+                scanning = false,
+                devices = emptyList(),
+                connections = emptyMap(),
+                selectedAddress = null,
+                pairingPhase = PairingPhase.IDLE,
+                log = emptyList(),
+            )
+        }
+        log("Background tracking disabled")
     }
 
     @SuppressLint("MissingPermission")
@@ -335,6 +380,7 @@ class TeslaBleController(context: Context) {
     }
 
     private fun autoConnect() {
+        if (!_state.value.trackingEnabled) return
         val state = _state.value
         val target = state.devices.firstOrNull() ?: return
         if (!knownCars.containsKey(target.name)) return
@@ -437,6 +483,10 @@ class TeslaBleController(context: Context) {
                     "${nameFor(address)}: VCSEC status locked=${status.locked} " +
                         "asleep=${status.asleep} userPresent=${status.userPresent}"
                 )
+                if (!status.asleep && readChargeAfterWake) {
+                    readChargeAfterWake = false
+                    requestChargeState()
+                }
             } else {
                 log("${nameFor(address)}: RX ${message.size} bytes ${message.toHex()}")
             }
@@ -628,6 +678,7 @@ class TeslaBleController(context: Context) {
             kind = CommandKind.WAKE,
         )
         wakeRefreshAttempts = 0
+        readChargeAfterWake = true
         handler.removeCallbacks(wakeRefresh)
         handler.postDelayed(wakeRefresh, WAKE_REFRESH_MS)
     }
@@ -753,6 +804,7 @@ class TeslaBleController(context: Context) {
         const val WAKE_REFRESH_MAX_ATTEMPTS = 6
         const val PREFS = "teslable"
         const val KEY_VIN = "vin"
+        const val KEY_TRACKING_ENABLED = "tracking_enabled"
         val ACTIVE_PHASES = setOf(
             ConnectionPhase.CONNECTING,
             ConnectionPhase.CONNECTED,
