@@ -57,3 +57,37 @@ data class BleUiState(
     val pairingKeyId: String? = null,
     val log: List<String> = emptyList(),
 )
+
+/** A car that was paired and connected at least once, remembered for reconnects. */
+data class KnownCar(
+    val address: String,
+    val name: String,
+    val gattName: String? = null,
+)
+
+/**
+ * The four connection states shown in the app and the tracking notification:
+ * disconnected, connected while asleep, connected and reading, or connected
+ * with a battery percentage.
+ */
+fun connectionStateText(connection: TeslaConnection?, showHints: Boolean = false): String = when {
+    connection == null -> "Disconnected"
+
+    connection.phase == ConnectionPhase.READY && connection.status?.asleep == true ->
+        "Connected \uD83D\uDCA4"
+
+    connection.phase == ConnectionPhase.READY && connection.status?.asleep == false ->
+        connection.charge?.batteryLevel?.let { "Connected · $it%" } ?: "Connected (reading)"
+
+    connection.phase == ConnectionPhase.READY -> "Connected (reading)"
+
+    connection.phase == ConnectionPhase.FAILED ->
+        if (showHints) "Disconnected · tap to retry" else "Disconnected"
+
+    connection.phase == ConnectionPhase.DISCONNECTED ->
+        if (showHints) "Disconnected · tap to reconnect" else "Disconnected"
+
+    connection.phase == ConnectionPhase.IDLE -> "Disconnected"
+
+    else -> "Connecting..."
+}

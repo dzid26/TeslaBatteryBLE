@@ -20,10 +20,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 
 /**
@@ -46,9 +43,8 @@ class BleTrackingService : Service() {
         createChannel()
         val controller = BleControllerHolder.get(this)
         scope.launch {
-            combine(controller.state, batteryPercent) { state, battery ->
-                modelFor(state, battery)
-            }.collect { model ->
+            controller.state.collect { state ->
+                val model = modelFor(state)
                 if (!foregroundStarted || model == lastModel) return@collect
                 lastModel = model
                 postNotification(model)
@@ -62,7 +58,7 @@ class BleTrackingService : Service() {
             return START_NOT_STICKY
         }
         val controller = BleControllerHolder.get(this)
-        val model = modelFor(controller.state.value, batteryPercent.value)
+        val model = modelFor(controller.state.value)
         lastModel = model
         ServiceCompat.startForeground(
             this,
@@ -75,6 +71,8 @@ class BleTrackingService : Service() {
             },
         )
         foregroundStarted = true
+        // START_STICKY may restart us after a process kill; find the paired car again.
+        controller.ensureConnected()
         return START_STICKY
     }
 
@@ -93,44 +91,21 @@ class BleTrackingService : Service() {
         }
     }
 
-    private fun modelFor(state: BleUiState, battery: Int?): NotificationModel {
+    private fun modelFor(state: BleUiState): NotificationModel {
         val connection = state.selectedAddress?.let { state.connections[it] }
             ?: state.connections.values.firstOrNull { it.phase == ConnectionPhase.READY }
             ?: state.connections.values.firstOrNull()
         return NotificationModel(
             carName = connection?.gattDeviceName ?: connection?.name,
-            connected = connection?.phase == ConnectionPhase.READY,
-            batteryPercent = battery,
-            locked = connection?.status?.locked,
-            asleep = connection?.status?.asleep,
+            stateText = connectionStateText(connection),
         )
     }
 
     private fun buildNotification(model: NotificationModel): Notification {
-        val battery = model.batteryPercent?.let { "$it%" }
-            ?: getString(R.string.tracking_battery_placeholder)
-        val connectionState = getString(
-            if (model.connected) {
-                R.string.tracking_state_connected
-            } else {
-                R.string.tracking_state_disconnected
-            },
-        )
-        val lines = buildList {
-            add(getString(R.string.tracking_battery, battery))
-            add(connectionState)
-            model.locked?.let {
-                add(getString(if (it) R.string.tracking_locked else R.string.tracking_unlocked))
-            }
-            model.asleep?.let {
-                add(getString(if (it) R.string.tracking_asleep else R.string.tracking_awake))
-            }
-        }
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_tracking)
             .setContentTitle(model.carName ?: getString(R.string.app_name))
-            .setContentText(lines.joinToString(" \u00b7 "))
-            .setStyle(NotificationCompat.BigTextStyle().bigText(lines.joinToString("\n")))
+            .setContentText(model.stateText)
             .setContentIntent(openAppIntent())
             .addAction(
                 R.drawable.ic_stat_tracking,
@@ -186,10 +161,7 @@ class BleTrackingService : Service() {
 
     private data class NotificationModel(
         val carName: String?,
-        val connected: Boolean,
-        val batteryPercent: Int?,
-        val locked: Boolean?,
-        val asleep: Boolean?,
+        val stateText: String,
     )
 
     companion object {
@@ -199,11 +171,6 @@ class BleTrackingService : Service() {
         private const val NOTIFICATION_ID = 1
         private const val REQUEST_OPEN_APP = 0
         private const val REQUEST_STOP = 1
-
-        private val batteryPercentFlow = MutableStateFlow<Int?>(null)
-
-        /** Latest battery percentage pushed by the BLE layer, or null while unknown. */
-        val batteryPercent: StateFlow<Int?> = batteryPercentFlow.asStateFlow()
 
         /** True while the foreground service is running (same process). */
         @Volatile
@@ -218,15 +185,6 @@ class BleTrackingService : Service() {
 
         fun stop(context: Context) {
             context.stopService(Intent(context, BleTrackingService::class.java))
-        }
-
-        /**
-         * Placeholder hook: call this with the real SOC once the BLE layer reads
-         * `BodyControllerState` / `GetState(Charge)` (ADR-0001 milestone 4).
-         * Until then the notification shows [R.string.tracking_battery_placeholder].
-         */
-        fun updateBatteryPercent(percent: Int?) {
-            batteryPercentFlow.value = percent?.coerceIn(0, 100)
         }
     }
 }

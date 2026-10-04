@@ -5,7 +5,6 @@ import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.location.LocationManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -28,6 +27,9 @@ import com.dzid26.teslable.ble.BleControllerHolder
 import com.dzid26.teslable.ble.BleTrackingService
 import com.dzid26.teslable.ble.ConnectionPhase
 import com.dzid26.teslable.ble.PairingPhase
+import com.dzid26.teslable.ble.hasBlePermissions
+import com.dzid26.teslable.ble.isLocationEnabled
+import com.dzid26.teslable.ble.requiredBlePermissions
 import com.dzid26.teslable.ui.ScannerScreen
 import com.dzid26.teslable.ui.TeslaBleTheme
 
@@ -42,6 +44,11 @@ class MainActivity : ComponentActivity() {
                 // Shared with BleTrackingService so the BLE connection survives
                 // Activity destruction while background tracking is active.
                 val controller = remember { BleControllerHolder.get(context) }
+
+                // Reconnect to a paired car automatically when the app opens.
+                LaunchedEffect(Unit) {
+                    controller.ensureConnected()
+                }
 
                 val state by controller.state.collectAsState()
                 var permissionsGranted by remember { mutableStateOf(hasBlePermissions(context)) }
@@ -133,25 +140,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
-
-private fun requiredBlePermissions(): List<String> =
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-        listOf(
-            Manifest.permission.BLUETOOTH_SCAN,
-            Manifest.permission.BLUETOOTH_CONNECT,
-            Manifest.permission.ACCESS_FINE_LOCATION,
-        )
-    } else {
-        listOf(Manifest.permission.ACCESS_FINE_LOCATION)
-    }
-
-private fun hasBlePermissions(context: Context): Boolean =
-    requiredBlePermissions().all {
-        ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
-    }
-
-private fun isLocationEnabled(context: Context): Boolean =
-    context.getSystemService(LocationManager::class.java)?.isLocationEnabled == true
 
 private fun hasNotificationPermission(context: Context): Boolean =
     Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||

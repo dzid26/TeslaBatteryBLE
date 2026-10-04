@@ -29,6 +29,7 @@ import com.dzid26.teslable.ble.ConnectionPhase
 import com.dzid26.teslable.ble.PairingPhase
 import com.dzid26.teslable.ble.TeslaAdvert
 import com.dzid26.teslable.ble.TeslaConnection
+import com.dzid26.teslable.ble.connectionStateText
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -214,7 +215,7 @@ private fun DeviceRow(
             )
             if (connection != null) {
                 Text(
-                    text = connectionStateText(connection),
+                    text = connectionStateText(connection, showHints = true),
                     style = MaterialTheme.typography.titleSmall,
                     color = when {
                         connection.phase == ConnectionPhase.FAILED ->
@@ -264,20 +265,3 @@ private fun DeviceRow(
     }
 }
 
-private fun connectionStateText(connection: TeslaConnection): String = when {
-    connection.phase == ConnectionPhase.READY && connection.status?.asleep == true ->
-        "Connected \uD83D\uDCA4"
-
-    connection.phase == ConnectionPhase.READY && connection.status?.asleep == false ->
-        connection.charge?.batteryLevel?.let { "Connected · $it%" } ?: "Connected (reading)"
-
-    connection.phase == ConnectionPhase.READY -> "Connected (reading)"
-
-    connection.phase == ConnectionPhase.FAILED -> "Disconnected · tap to retry"
-
-    connection.phase == ConnectionPhase.DISCONNECTED -> "Disconnected · tap to reconnect"
-
-    connection.phase == ConnectionPhase.IDLE -> "Disconnected"
-
-    else -> "Connecting..."
-}
