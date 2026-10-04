@@ -67,7 +67,9 @@ A trustworthy shell around the existing protocol work. No user-facing features.
 - [ ] UX P0: permission rationale + pairing walkthrough (incl. NFC card tap), connection state clarity, last-known SOC, readable errors.
 - [ ] About screen: version, licenses, privacy statement, donation links.
 - [ ] Dark theme + strings extracted to resources (translation-ready).
-- [ ] Fake BLE transport + simulated car; controller state-machine tests; store tests.
+- [x] Fake BLE transport + simulated car (`FakeCarProtocol`, round-trip tests, CI demo run).
+- [ ] Controller state-machine tests.
+- [ ] Store tests.
 - [ ] Compose UI smoke tests + screenshot tests in CI.
 - [ ] Protocol vectors: nonce/metadata/counter/clock-skew edge cases + negative tests.
 - [ ] Static analysis zero baseline; R8 + resource shrinking; Baseline Profile; LeakCanary (debug only).
