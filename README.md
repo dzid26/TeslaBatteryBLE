@@ -105,6 +105,13 @@ pull requests use templates in [`.github/`](.github/).
 - [`SECURITY.md`](SECURITY.md) — how to report vulnerabilities privately
 - [`PRIVACY.md`](PRIVACY.md) — what the app does (and deliberately does not do) with data
 
+## Support
+
+TeslaBatteryBLE is free, ad-free, and telemetry-free. If it's useful to you, you
+can support development via [GitHub Sponsors](https://github.com/sponsors/dzid26).
+Donations help cover development costs (test hardware, tooling) and keep the
+project independent.
+
 ## License
 
 TeslaBatteryBLE is licensed under the **GNU Affero General Public License v3.0 only**

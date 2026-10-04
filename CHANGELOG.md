@@ -13,6 +13,7 @@ All notable changes to this project are documented here. The format is based on
 - Protocol documentation under `docs/protocol/`
 - App icon (adaptive + monochrome)
 - SPDX license headers across the source tree
+- GitHub Sponsors funding config and README support section
 
 ### Changed
 
