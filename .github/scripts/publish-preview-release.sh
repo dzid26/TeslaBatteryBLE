@@ -7,11 +7,12 @@ set -euo pipefail
 
 REPO="${GITHUB_REPOSITORY:?GITHUB_REPOSITORY is required}"
 SHA="${GITHUB_SHA:-$(git rev-parse HEAD)}"
+SHORT_SHA="$(git rev-parse --short "$SHA")"
 TAG="preview"
 TITLE="Preview build"
 APK="dist/app-debug.apk"
 SCREENSHOTS_DIR="screenshots"
-ASSET_APK="TeslaBatteryBLE-preview.apk"
+ASSET_APK="TeslaBatteryBLE-preview-$SHORT_SHA.apk"
 
 [ -f "$APK" ] || { echo "missing $APK" >&2; exit 1; }
 cp "$APK" "$ASSET_APK"
@@ -28,6 +29,8 @@ git push origin "refs/tags/$TAG" --force
 
 {
   echo "Rolling preview of \`main\` — rebuilt on every push. The APK is a debug build."
+  echo
+  echo "**APK**: [\`$ASSET_APK\`](https://github.com/$REPO/releases/download/$TAG/$ASSET_APK)"
   echo
   if [ -n "$PREV_TAG" ]; then
     echo "## Changes since [$PREV_TAG](https://github.com/$REPO/releases/tag/$PREV_TAG)"
@@ -57,11 +60,12 @@ git push origin "refs/tags/$TAG" --force
 } > preview-notes.md
 
 if gh release view "$TAG" > /dev/null 2>&1; then
-  # Drop screenshots from the previous run so stale images never linger.
+  # Drop assets from the previous run (SHA-named APK, screenshots) so stale
+  # files never linger.
   while read -r name; do
     [ -n "$name" ] || continue
     gh release delete-asset "$TAG" "$name" --yes || true
-  done < <(gh release view "$TAG" --json assets --jq '.assets[].name | select(endswith(".png"))')
+  done < <(gh release view "$TAG" --json assets --jq '.assets[].name | select(endswith(".png") or endswith(".apk"))')
   gh release edit "$TAG" --title "$TITLE" --prerelease --notes-file preview-notes.md
 else
   gh release create "$TAG" --title "$TITLE" --prerelease --notes-file preview-notes.md "$ASSET_APK"
