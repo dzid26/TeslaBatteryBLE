@@ -39,6 +39,28 @@ class TeslaBleController(context: Context) {
     private val pendingCommands = mutableMapOf<String, PendingCommand>()
     private var chargeAfterSession = false
     private var sessionRetryAttempts = 0
+    private var reconnectAttempts = 0
+
+    private val reconnect = object : Runnable {
+        override fun run() {
+            val address = _state.value.selectedAddress ?: return
+            val phase = _state.value.connections[address]?.phase
+            if (phase == ConnectionPhase.READY || phase == ConnectionPhase.CONNECTING) return
+            log("${nameFor(address)}: reconnecting")
+            connect(address)
+        }
+    }
+
+    private fun scheduleReconnect(address: String) {
+        if (_state.value.selectedAddress != address) return
+        if (reconnectAttempts >= RECONNECT_MAX_ATTEMPTS) {
+            log("${nameFor(address)}: reconnect stopped after $reconnectAttempts attempts")
+            return
+        }
+        reconnectAttempts++
+        handler.removeCallbacks(reconnect)
+        handler.postDelayed(reconnect, RECONNECT_DELAY_MS)
+    }
 
     private val sessionRetry = object : Runnable {
         override fun run() {
@@ -119,12 +141,14 @@ class TeslaBleController(context: Context) {
         failedAddresses.clear()
         handler.removeCallbacks(whitelistPoll)
         handler.removeCallbacks(sessionRetry)
+        handler.removeCallbacks(reconnect)
         keySlotQueue = emptyList()
         sessions.clear()
         pendingSessions.clear()
         pendingCommands.clear()
         chargeAfterSession = false
         sessionRetryAttempts = 0
+        reconnectAttempts = 0
         _state.update {
             it.copy(
                 scanning = true,
@@ -144,6 +168,7 @@ class TeslaBleController(context: Context) {
     }
 
     fun onTeslaClicked(address: String) {
+        reconnectAttempts = 0
         _state.update { it.copy(selectedAddress = address) }
         when (_state.value.connections[address]?.phase) {
             ConnectionPhase.READY -> {
@@ -189,6 +214,7 @@ class TeslaBleController(context: Context) {
         handler.removeCallbacks(pairingTimeout)
         handler.removeCallbacks(whitelistPoll)
         handler.removeCallbacks(sessionRetry)
+        handler.removeCallbacks(reconnect)
         keySlotQueue = emptyList()
     }
 
@@ -204,6 +230,7 @@ class TeslaBleController(context: Context) {
         }
         clients.remove(address)?.close()
         failedAddresses.remove(address)
+        val existing = _state.value.connections[address]
         _state.update {
             it.copy(
                 connections = it.connections + (
@@ -211,6 +238,13 @@ class TeslaBleController(context: Context) {
                         address = address,
                         name = nameFor(address),
                         phase = ConnectionPhase.CONNECTING,
+                        gattDeviceName = existing?.gattDeviceName,
+                        services = existing?.services ?: emptyList(),
+                        mtu = existing?.mtu,
+                        status = existing?.status,
+                        keySlot = existing?.keySlot,
+                        sessions = existing?.sessions ?: emptyList(),
+                        charge = existing?.charge,
                     )
                     )
             )
@@ -244,18 +278,26 @@ class TeslaBleController(context: Context) {
 
     private fun listenerFor(address: String) = object : TeslaGattClient.Listener {
         override fun onPhase(phase: ConnectionPhase) {
-            if (phase == ConnectionPhase.FAILED) {
+            if (phase == ConnectionPhase.FAILED || phase == ConnectionPhase.DISCONNECTED) {
                 failedAddresses.add(address)
-            }
-            if (phase == ConnectionPhase.DISCONNECTED) {
                 clients.remove(address)?.close()
+                val hadData = _state.value.connections[address]?.let {
+                    it.sessions.isNotEmpty() || it.status != null || it.charge != null
+                } == true
+                val display = if (hadData) ConnectionPhase.DISCONNECTED else ConnectionPhase.FAILED
+                updateConnection(address) { it.copy(phase = display) }
+                scheduleReconnect(address)
+                return
             }
             updateConnection(address) { it.copy(phase = phase) }
-            if (phase == ConnectionPhase.READY && _state.value.selectedAddress == address) {
-                requestVcsecStatus(address)
-                requestKeySlot(address)
-                startSession(address)
-                stopScan()
+            if (phase == ConnectionPhase.READY) {
+                reconnectAttempts = 0
+                if (_state.value.selectedAddress == address) {
+                    requestVcsecStatus(address)
+                    requestKeySlot(address)
+                    startSession(address)
+                    stopScan()
+                }
             }
         }
 
@@ -605,6 +647,8 @@ class TeslaBleController(context: Context) {
         const val COMMAND_EXPIRES_SECONDS = 5
         const val SESSION_RETRY_MS = 3000L
         const val SESSION_MAX_ATTEMPTS = 20
+        const val RECONNECT_DELAY_MS = 5000L
+        const val RECONNECT_MAX_ATTEMPTS = 12
         const val PREFS = "teslable"
         const val KEY_VIN = "vin"
         val SESSION_DOMAINS = listOf(

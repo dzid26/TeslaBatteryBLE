@@ -270,5 +270,5 @@ private fun connectionSummary(connection: TeslaConnection): String = when (conne
 
     ConnectionPhase.FAILED -> "connection failed - tap to retry"
 
-    ConnectionPhase.DISCONNECTED -> "disconnected - tap to reconnect"
+    ConnectionPhase.DISCONNECTED -> "disconnected - showing last data, tap to reconnect"
 }

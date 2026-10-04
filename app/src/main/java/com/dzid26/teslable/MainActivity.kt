@@ -91,7 +91,11 @@ class MainActivity : ComponentActivity() {
                 val selectedConnection = state.selectedAddress?.let { state.connections[it] }
                 val trackingNeeded = selectedConnection != null &&
                     selectedConnection.phase == ConnectionPhase.READY &&
-                    (state.pairingPhase == PairingPhase.OK || selectedConnection.keySlot != null)
+                    (
+                        state.pairingPhase == PairingPhase.OK ||
+                            selectedConnection.keySlot != null ||
+                            selectedConnection.sessions.isNotEmpty()
+                        )
                 LaunchedEffect(trackingNeeded) {
                     if (!trackingNeeded || BleTrackingService.isRunning) return@LaunchedEffect
                     if (!hasNotificationPermission(context)) {
