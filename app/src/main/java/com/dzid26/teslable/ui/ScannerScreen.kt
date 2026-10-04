@@ -330,8 +330,7 @@ private fun CarTab(
         selectedConnection?.let { connection ->
             CarHeader(
                 display = connectionDisplay(connection, selectedAdvert),
-                address = connection.address,
-                asleep = connection.status?.asleep,
+                connection = connection,
             )
             Spacer(Modifier.height(16.dp))
         }
@@ -361,22 +360,41 @@ private fun CarTab(
 @Composable
 private fun CarHeader(
     display: ConnectionDisplay,
-    address: String,
-    asleep: Boolean?,
+    connection: TeslaConnection?,
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp)) {
             Text(display.title, style = MaterialTheme.typography.titleMedium)
-            Text(address, style = MaterialTheme.typography.bodySmall)
+            connection?.address?.let { address ->
+                Text(address, style = MaterialTheme.typography.bodySmall)
+            }
             Text(
                 text = display.status,
                 style = MaterialTheme.typography.titleSmall,
-                color = if (asleep == false) {
+                color = if (connection?.status?.asleep == false) {
                     MaterialTheme.colorScheme.primary
                 } else {
                     MaterialTheme.colorScheme.onSurfaceVariant
                 },
             )
+            connection?.status?.let { status ->
+                Text(
+                    text = vehicleStatusText(status),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            connection?.charge?.let { charge ->
+                val details = buildList {
+                    charge.chargeLimit?.let { add("Charge limit $it%") }
+                    charge.chargingState?.let { add(chargingStateText(it)) }
+                }
+                if (details.isNotEmpty()) {
+                    Text(
+                        text = details.joinToString(" · "),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
         }
     }
 }
@@ -428,12 +446,6 @@ private fun DeviceRow(
                     },
                 )
             }
-            connection?.status?.let { status ->
-                Text(
-                    text = vehicleStatusText(status),
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
             connection?.keySlot?.let { slot ->
                 Text(
                     text = "Phone key slot $slot",
@@ -446,18 +458,6 @@ private fun DeviceRow(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.primary,
                 )
-            }
-            connection?.charge?.let { charge ->
-                val details = buildList {
-                    charge.chargeLimit?.let { add("Charge limit $it%") }
-                    charge.chargingState?.let { add(chargingStateText(it)) }
-                }
-                if (details.isNotEmpty()) {
-                    Text(
-                        text = details.joinToString(" · "),
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
             }
             if (showPair) {
                 Spacer(Modifier.height(8.dp))
