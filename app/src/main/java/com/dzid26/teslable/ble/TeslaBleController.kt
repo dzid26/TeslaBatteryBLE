@@ -51,7 +51,6 @@ class TeslaBleController(context: Context) {
     private var sessionRetryAttempts = 0
     private var reconnectAttempts = 0
     private var wakeRefreshAttempts = 0
-    private var readChargeAfterWake = false
     private var uiVisible = false
     private val decryptFailures = mutableMapOf<String, Int>()
     private var lastRehandshakeMs = 0L
@@ -60,10 +59,7 @@ class TeslaBleController(context: Context) {
         override fun run() {
             val address = _state.value.selectedAddress ?: return
             if (_state.value.connections[address]?.status?.asleep == false) return
-            if (wakeRefreshAttempts++ >= WAKE_REFRESH_MAX_ATTEMPTS) {
-                readChargeAfterWake = false
-                return
-            }
+            if (wakeRefreshAttempts++ >= WAKE_REFRESH_MAX_ATTEMPTS) return
             requestVcsecStatus(address)
             handler.postDelayed(this, WAKE_REFRESH_MS)
         }
@@ -81,22 +77,14 @@ class TeslaBleController(context: Context) {
     }
 
     /**
-     * ADR cadence: VCSEC status every ~10s (safe while asleep), charge state
-     * only while the car is awake. Never wakes the car to read SOC.
+     * ADR cadence: VCSEC status every ~10s (safe while asleep). Infotainment
+     * is only touched while the car is awake; never wakes it to read SOC.
      */
     private val poll = object : Runnable {
         override fun run() {
             val address = _state.value.selectedAddress ?: return
             val connection = _state.value.connections[address] ?: return
             if (connection.phase != ConnectionPhase.READY) return
-            val awake = connection.status?.asleep == false
-            val infoSession = sessions[address]?.containsKey(Domain.DOMAIN_INFOTAINMENT) == true
-            if (awake && infoSession) {
-                requestChargeState()
-            } else if (awake && !chargeAfterSession) {
-                chargeAfterSession = true
-                startSession(address)
-            }
             clients[address]?.readRssi()
             requestVcsecStatus(address)
             handler.postDelayed(this, POLL_MS)
@@ -159,7 +147,7 @@ class TeslaBleController(context: Context) {
         override fun run() {
             val address = _state.value.selectedAddress ?: return
             if (_state.value.connections[address]?.phase != ConnectionPhase.READY) return
-            val needed = SESSION_DOMAINS.filter { sessions[address]?.containsKey(it) != true }
+            val needed = neededSessions(address)
             if (needed.isEmpty()) return
             if (sessionRetryAttempts++ >= SESSION_MAX_ATTEMPTS) {
                 log("${nameFor(address)}: session not established (${needed.joinToString { it.name }})")
@@ -354,7 +342,6 @@ class TeslaBleController(context: Context) {
         pendingSessions.clear()
         pendingCommands.clear()
         chargeAfterSession = false
-        readChargeAfterWake = false
         decryptFailures.clear()
         sessionRetryAttempts = 0
         reconnectAttempts = 0
@@ -606,8 +593,10 @@ class TeslaBleController(context: Context) {
                             "asleep=${status.asleep} userPresent=${status.userPresent}"
                     )
                 }
-                if (!status.asleep && readChargeAfterWake) {
-                    readChargeAfterWake = false
+                if (!status.asleep &&
+                    !chargeAfterSession &&
+                    _state.value.selectedAddress == address
+                ) {
                     requestChargeState()
                 }
             } else {
@@ -638,13 +627,21 @@ class TeslaBleController(context: Context) {
             log("${nameFor(address)}: enter your VIN to establish a session")
             return
         }
+        val needed = neededSessions(address)
+        if (needed.isEmpty()) return
         sessionRetryAttempts = 0
-        sendSessionRequests(
-            address,
-            SESSION_DOMAINS.filter { sessions[address]?.containsKey(it) != true },
-        )
+        sendSessionRequests(address, needed)
         handler.removeCallbacks(sessionRetry)
         handler.postDelayed(sessionRetry, SESSION_RETRY_MS)
+    }
+
+    /** Infotainment needs an awake car, so it is only requested then. */
+    private fun neededSessions(address: String): List<Domain> {
+        val awake = _state.value.connections[address]?.status?.asleep == false
+        return SESSION_DOMAINS.filter { domain ->
+            sessions[address]?.containsKey(domain) != true &&
+                (domain != Domain.DOMAIN_INFOTAINMENT || awake)
+        }
     }
 
     private fun sendSessionRequests(address: String, domains: List<Domain>) {
@@ -800,7 +797,6 @@ class TeslaBleController(context: Context) {
             kind = CommandKind.WAKE,
         )
         wakeRefreshAttempts = 0
-        readChargeAfterWake = true
         handler.removeCallbacks(wakeRefresh)
         handler.postDelayed(wakeRefresh, WAKE_REFRESH_MS)
     }
