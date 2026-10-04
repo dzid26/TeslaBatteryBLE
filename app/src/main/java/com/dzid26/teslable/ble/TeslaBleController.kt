@@ -134,6 +134,10 @@ class TeslaBleController(context: Context) {
             updateConnection(address) { it.copy(mtu = mtu) }
         }
 
+        override fun onMessage(message: ByteArray) {
+            log("${nameFor(address)}: RX ${message.size} bytes ${message.toHex()}")
+        }
+
         override fun onLog(message: String) {
             log("${nameFor(address)}: $message")
         }
@@ -153,6 +157,9 @@ class TeslaBleController(context: Context) {
             ?: _state.value.devices.firstOrNull { it.address == address }?.name
             ?: address
     }
+
+    private fun ByteArray.toHex(): String =
+        joinToString("") { (it.toInt() and 0xFF).toString(16).padStart(2, '0') }
 
     private fun log(message: String) {
         _state.update { it.copy(log = (it.log + message).takeLast(LOG_MAX_LINES)) }
