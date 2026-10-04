@@ -17,314 +17,381 @@
 | Mapped to a BLE equivalent | 125 |
 | Cloud-only (no BLE equivalent, reviewed) | 113 |
 | Unreviewed upstream signals (drift watch) | 0 |
+| Documented in Tesla's signals table | 239 |
+| In protos but missing from Tesla's table | 11 |
 | BLE fields catalogued | 249 |
+
+## Fidelity
+
+The cloud side is **dynamic at the wire level**: Fleet Telemetry wraps readings in a `Value` oneof where strings are the default. Legacy fields (before field 179, firmware < 2024.38) commonly arrive as string-encoded numbers — observed payloads include `BatteryLevel string_value: "40.982"` and `ChargeLimitSoc "100"`. Fields from 179 on are always returned typed, and Tesla notes types may change with vehicle software. The cloud `Type` column below is Tesla's documented logical type.
+
+The BLE side is **strongly typed protobuf** with fixed types per field: precision is predictable but can be coarser (see the differences table below).
+
+Update model also differs: telemetry pushes on change with a configurable minimum interval (500 ms floor, per-signal `interval_seconds`); BLE is strictly request/response polling with no subscription primitive.
+
+The `vehicle_data` JSON column is reproduced from Tesla's published table and may contain vendor errors (e.g. `TpmsPressureRr` lists `tpms_pressure_fr`).
+
+Tesla's docs table itself lags the protos: it has no entry yet for several signals in the pinned revision — including `NominalFullPackEnergyKwh`, `BrickSocMinPercent`, and `LifetimeEnergyChargedKwh` (added for firmware 2026.32). Treat the *In protos but missing from Tesla's docs table* section as a documentation drift watch.
+
+Where the same physical value is typed differently on each transport:
+
+| Cloud signal | Cloud type | BLE field | BLE type | Note |
+|---|---|---|---|---|
+| `Soc` | real | `ChargeState.usable_battery_level` | int32 | Usable SOC per Tesla docs (`charge_state.usable_battery_level`); cloud real vs BLE int32 whole percent |
+| `BatteryLevel` | real | `ChargeState.battery_level` | int32 | Displayed SOC (`charge_state.battery_level`); cloud real with sub-percent values observed (e.g. 40.982) vs BLE int32 whole percent |
+| `ChargeState` | string | `ChargeState.charging_state` | ChargingState | Generic signal; overlaps DetailedChargeState |
+| `TimeToFullCharge` | real | `ChargeState.minutes_to_full_charge` | int32 | Cloud real **hours**; BLE int32 **minutes** |
+| `EstimatedHoursToChargeTermination` | real | `ChargeState.minutes_to_full_charge` | int32 | Cloud real hours; BLE int32 minutes; likely same underlying value |
+| `ChargeAmps` | real | `ChargeState.charger_actual_current` | int32 | Cloud real sensed line current (`charge_state.charger_actual_current`); BLE int32 — it also exposes `charging_amps` (the requested setting) |
+| `ChargerVoltage` | real | `ChargeState.charger_voltage` | int32 | EVSE-side voltage, not pack voltage; cloud real vs BLE int32 |
+| `ACChargingPower` | real | `ChargeState.charger_power` | int32 | Cloud real kW; BLE int32 whole kW, no AC/DC split |
+| `DCChargingPower` | real | `ChargeState.charger_power` | int32 | Cloud real kW; BLE int32 whole kW (`fast_charger_present` disambiguates) |
+| `ScheduledChargingStartTime` | timestamp | `ChargeState.scheduled_charging_start_time` | uint64 |  |
+| `LocatedAtHome` | boolean | `ChargeState.home_location` | LatLong | BLE exposes raw coordinates, not the derived bool |
+| `LocatedAtWork` | boolean | `ChargeState.work_location` | LatLong | BLE exposes raw coordinates, not the derived bool |
+| `Odometer` | real | `DriveState.odometer_in_hundredths_of_a_mile` | int32 | Cloud real miles; BLE int32 hundredths of a mile (0.01 mi resolution) |
+| `ExpectedEnergyPercentAtTripArrival` | integer | `DriveState.active_route_energy_at_arrival` | float | Telemetry percent vs BLE energy-at-arrival |
+| `RouteLastUpdated` | time | `DriveState.last_route_update` | uint32 | Units/epoch differ |
+| `HvacPower` | HvacPowerState enum | `ClimateState.is_climate_on` | bool | Closest BLE signal |
+| `HvacSteeringWheelHeatLevel` | integer | `ClimateState.steering_wheel_heat_level` | StwHeatLevel |  |
+| `Locked` | boolean | `VehicleStatus.vehicleLockState` | VehicleLockState_E | Cloud boolean vs BLE enum (`unknown` representable); VCSEC is readable while the car sleeps, `ClosuresState.locked` when awake |
+| `FdWindow` | WindowState enum | `ClosuresState.window_open_driver_front` | bool |  |
+| `FpWindow` | WindowState enum | `ClosuresState.window_open_passenger_front` | bool |  |
+| `RdWindow` | WindowState enum | `ClosuresState.window_open_driver_rear` | bool |  |
+| `RpWindow` | WindowState enum | `ClosuresState.window_open_passenger_rear` | bool |  |
+| `SpeedLimitMode` | boolean | `ClosuresState.speed_limit_mode` | SpeedLimitMode |  |
+| `CurrentLimitMph` | real | `ClosuresState.speed_limit_mode` | SpeedLimitMode | Value lives inside the BLE speed-limit message |
+| `GuestModeEnabled` | boolean | `VehicleState.guestMode` | GuestMode |  |
+| `TonneauOpenPercent` | real | `ClosuresState.tonneau_percent_open` | uint32 |  |
+| `MediaPlaybackSource` | string | `MediaState.now_playing_source` | MediaSourceType |  |
+| `SoftwareUpdateScheduledStartTime` | timestamp | `SoftwareUpdateState.scheduled_time_ms` | uint64 | Epoch/units may differ |
+| `Location` | Location | `LocationState.latitude` | float | BLE also has `longitude` |
+| `GpsHeading` | real | `LocationState.heading` | uint32 |  |
 
 ## Battery & charging — BLE readable
 
-| Cloud signal | BLE equivalent | Notes |
-|---|---|---|
-| `Soc` | `ChargeState.battery_level` | Displayed SOC; BLE additionally exposes `usable_battery_level` |
-| `BatteryLevel` | `ChargeState.usable_battery_level` | Naming overlap between transports; verify semantics per fleet |
-| `RatedRange` | `ChargeState.battery_range` | Rated miles |
-| `EstBatteryRange` | `ChargeState.est_battery_range` |  |
-| `IdealBatteryRange` | `ChargeState.ideal_battery_range` |  |
-| `ChargeLimitSoc` | `ChargeState.charge_limit_soc` |  |
-| `DetailedChargeState` | `ChargeState.charging_state` | Disconnected / Charging / Complete / Calibrating … |
-| `ChargeState` | `ChargeState.charging_state` | Generic signal; overlaps DetailedChargeState |
-| `TimeToFullCharge` | `ChargeState.minutes_to_full_charge` |  |
-| `EstimatedHoursToChargeTermination` | `ChargeState.minutes_to_full_charge` | Hours vs minutes; likely same underlying value |
-| `ChargeRateMilePerHour` | `ChargeState.charge_rate_mph_float` |  |
-| `ChargeAmps` | `ChargeState.charging_amps` | Setting echo |
-| `ChargeCurrentRequest` | `ChargeState.charge_current_request` |  |
-| `ChargeCurrentRequestMax` | `ChargeState.charge_current_request_max` |  |
-| `ChargeEnableRequest` | `ChargeState.charge_enable_request` |  |
-| `FastChargerPresent` | `ChargeState.fast_charger_present` | Distinguishes DC charging over BLE |
-| `FastChargerType` | `ChargeState.fast_charger_type` |  |
-| `ChargerVoltage` | `ChargeState.charger_voltage` | EVSE-side voltage, not pack voltage |
-| `ChargerPhases` | `ChargeState.charger_phases` |  |
-| `ACChargingPower` | `ChargeState.charger_power` | BLE does not split AC/DC power |
-| `DCChargingPower` | `ChargeState.charger_power` | Same BLE field; `fast_charger_present` disambiguates |
-| `ACChargingEnergyIn` | `ChargeState.charge_energy_added` | BLE does not split AC/DC energy |
-| `DCChargingEnergyIn` | `ChargeState.charge_energy_added` | Charger-measured vs battery-measured distinction is lost over BLE |
-| `ChargingCableType` | `ChargeState.conn_charge_cable` |  |
-| `ChargePortDoorOpen` | `ChargeState.charge_port_door_open` |  |
-| `ChargePortLatch` | `ChargeState.charge_port_latch` |  |
-| `ChargePort` | `ChargeState.charge_port_color` | Port color/LED state; enum mapping may differ |
-| `ChargePortColdWeatherMode` | `ChargeState.charge_port_cold_weather_mode` |  |
-| `ScheduledChargingStartTime` | `ChargeState.scheduled_charging_start_time` |  |
-| `ScheduledChargingPending` | `ChargeState.scheduled_charging_pending` |  |
-| `ScheduledChargingMode` | `ChargeState.scheduled_charging_mode` | Off / StartAt / DepartBy |
-| `ScheduledDepartureTime` | `ChargeState.scheduled_departure_time` |  |
-| `PreconditioningEnabled` | `ChargeState.preconditioning_enabled` |  |
-| `SuperchargerSessionTripPlanner` | `ChargeState.supercharger_session_trip_planner` |  |
-| `BatteryHeaterOn` | `ClimateState.battery_heater` | Binary battery-thermal proxy |
-| `NotEnoughPowerToHeat` | `ClimateState.battery_heater_no_power` |  |
-| `LocatedAtHome` | `ChargeState.home_location` | BLE exposes raw coordinates, not the derived bool |
-| `LocatedAtWork` | `ChargeState.work_location` | BLE exposes raw coordinates, not the derived bool |
-| `LocatedAtFavorite` | — | Derived cloud flag; BLE has raw coordinates only |
-| `PowershareInstantaneousPowerKW` | `ChargeState.powershare_instantaneous_load_kw` | Powershare-capable vehicles only |
-| `PowershareStatus` | `ChargeState.powershare_status` |  |
-| `PowershareStopReason` | `ChargeState.powershare_stop_reason` |  |
-| `PowershareType` | `ChargeState.powershare_type` |  |
-| `PowershareHoursLeft` | `ChargeState.powershare_vehicle_energy_left_hr` |  |
+| Cloud signal | Cloud type | Fleet API `vehicle_data` JSON | BLE equivalent | BLE type | Notes |
+|---|---|---|---|---|---|
+| `Soc` | real | charge_state.usable_battery_level | `ChargeState.usable_battery_level` | int32 | Usable SOC per Tesla docs (`charge_state.usable_battery_level`); cloud real vs BLE int32 whole percent |
+| `BatteryLevel` | real | charge_state.battery_level | `ChargeState.battery_level` | int32 | Displayed SOC (`charge_state.battery_level`); cloud real with sub-percent values observed (e.g. 40.982) vs BLE int32 whole percent |
+| `RatedRange` | real | charge_state.battery_range | `ChargeState.battery_range` | float | Rated miles |
+| `EstBatteryRange` | real | charge_state.est_battery_range | `ChargeState.est_battery_range` | float |  |
+| `IdealBatteryRange` | real | — | `ChargeState.ideal_battery_range` | float |  |
+| `ChargeLimitSoc` | integer | charge_state.charge_limit_soc | `ChargeState.charge_limit_soc` | int32 |  |
+| `DetailedChargeState` | DetailedChargeStateValue enum | — | `ChargeState.charging_state` | ChargingState | Disconnected / Charging / Complete / Calibrating … |
+| `ChargeState` | string | — | `ChargeState.charging_state` | ChargingState | Generic signal; overlaps DetailedChargeState |
+| `TimeToFullCharge` | real | charge_state.minutes_to_full_charge charge_state.time_to_full_charge | `ChargeState.minutes_to_full_charge` | int32 | Cloud real **hours**; BLE int32 **minutes** |
+| `EstimatedHoursToChargeTermination` | real | — | `ChargeState.minutes_to_full_charge` | int32 | Cloud real hours; BLE int32 minutes; likely same underlying value |
+| `ChargeRateMilePerHour` | real | charge_state.charge_rate | `ChargeState.charge_rate_mph_float` | float |  |
+| `ChargeAmps` | real | charge_state.charger_actual_current | `ChargeState.charger_actual_current` | int32 | Cloud real sensed line current (`charge_state.charger_actual_current`); BLE int32 — it also exposes `charging_amps` (the requested setting) |
+| `ChargeCurrentRequest` | integer | charge_state.charge_current_request | `ChargeState.charge_current_request` | int32 |  |
+| `ChargeCurrentRequestMax` | integer | charge_state.charge_current_request_max | `ChargeState.charge_current_request_max` | int32 |  |
+| `ChargeEnableRequest` | boolean | charge_state.charge_enable_request | `ChargeState.charge_enable_request` | bool |  |
+| `FastChargerPresent` | boolean | charge_state.fast_charger_present | `ChargeState.fast_charger_present` | bool | Distinguishes DC charging over BLE |
+| `FastChargerType` | FastCharger enum | charge_state.fast_charger_type | `ChargeState.fast_charger_type` | ChargerType |  |
+| `ChargerVoltage` | real | charge_state.charger_voltage | `ChargeState.charger_voltage` | int32 | EVSE-side voltage, not pack voltage; cloud real vs BLE int32 |
+| `ChargerPhases` | integer | charge_state.charger_phases | `ChargeState.charger_phases` | int32 |  |
+| `ACChargingPower` | real | charge_state.charger_power | `ChargeState.charger_power` | int32 | Cloud real kW; BLE int32 whole kW, no AC/DC split |
+| `DCChargingPower` | real | charge_state.charger_power | `ChargeState.charger_power` | int32 | Cloud real kW; BLE int32 whole kW (`fast_charger_present` disambiguates) |
+| `ACChargingEnergyIn` | real | — | `ChargeState.charge_energy_added` | float | BLE does not split AC/DC energy |
+| `DCChargingEnergyIn` | real | charge_state.charge_energy_added | `ChargeState.charge_energy_added` | float | Charger-measured vs battery-measured distinction is lost over BLE |
+| `ChargingCableType` | CableType enum | charge_state.conn_charge_cable | `ChargeState.conn_charge_cable` | CableType |  |
+| `ChargePortDoorOpen` | boolean | charge_state.charge_port_door_open | `ChargeState.charge_port_door_open` | bool |  |
+| `ChargePortLatch` | ChargePortLatchValue enum | charge_state.charge_port_latch | `ChargeState.charge_port_latch` | ChargePortLatchState |  |
+| `ChargePort` | ChargePortValue enum | vehicle_config.charge_port_type | `ChargeState.charge_port_color` | ChargePortColor_E | Port color/LED state; enum mapping may differ |
+| `ChargePortColdWeatherMode` | boolean | charge_state.charge_port_cold_weather_mode | `ChargeState.charge_port_cold_weather_mode` | bool |  |
+| `ScheduledChargingStartTime` | timestamp | charge_state.scheduled_charging_start_time | `ChargeState.scheduled_charging_start_time` | uint64 |  |
+| `ScheduledChargingPending` | boolean | charge_state.scheduled_charging_pending | `ChargeState.scheduled_charging_pending` | bool |  |
+| `ScheduledChargingMode` | ScheduledChargingModeValue enum | charge_state.scheduled_charging_mode | `ChargeState.scheduled_charging_mode` | ScheduledChargingMode | Off / StartAt / DepartBy |
+| `ScheduledDepartureTime` | — | — | `ChargeState.scheduled_departure_time` | google.protobuf.Timestamp |  |
+| `PreconditioningEnabled` | boolean | charge_state.preconditioning_enabled | `ChargeState.preconditioning_enabled` | bool |  |
+| `SuperchargerSessionTripPlanner` | boolean | charge_state.supercharger_session_trip_planner | `ChargeState.supercharger_session_trip_planner` | bool |  |
+| `BatteryHeaterOn` | boolean | climate_state.battery_heater_on | `ClimateState.battery_heater` | bool | Binary battery-thermal proxy |
+| `NotEnoughPowerToHeat` | boolean | charge_state.not_enough_power_to_heat | `ClimateState.battery_heater_no_power` | bool |  |
+| `LocatedAtHome` | boolean | — | `ChargeState.home_location` | LatLong | BLE exposes raw coordinates, not the derived bool |
+| `LocatedAtWork` | boolean | — | `ChargeState.work_location` | LatLong | BLE exposes raw coordinates, not the derived bool |
+| `LocatedAtFavorite` | boolean | — | — | — | Derived cloud flag; BLE has raw coordinates only |
+| `PowershareInstantaneousPowerKW` | real | — | `ChargeState.powershare_instantaneous_load_kw` | float | Powershare-capable vehicles only |
+| `PowershareStatus` | PowershareState enum | — | `ChargeState.powershare_status` | PowershareStatus |  |
+| `PowershareStopReason` | PowershareStopReasonStatus enum | — | `ChargeState.powershare_stop_reason` | PowershareStopReason |  |
+| `PowershareType` | PowershareTypeStatus enum | — | `ChargeState.powershare_type` | PowershareType |  |
+| `PowershareHoursLeft` | integer | — | `ChargeState.powershare_vehicle_energy_left_hr` | int32 |  |
 
 ## Pack, BMS & energy — cloud only (no BLE field exists)
 
 Verified by field search of the pinned BLE protos: none of these signals exist in the BLE protocol. Fleet Telemetry (or OBD/CAN) only.
 
-| Cloud signal | BLE equivalent | Notes |
-|---|---|---|
-| `PackVoltage` | — | Pack voltage |
-| `PackCurrent` | — | Pack current (enables coulomb counting) |
-| `BrickVoltageMax` | — | Cell-group max voltage (imbalance input) |
-| `BrickVoltageMin` | — | Cell-group min voltage (imbalance input) |
-| `NumBrickVoltageMax` | — | Which brick is the max |
-| `NumBrickVoltageMin` | — | Which brick is the min |
-| `BrickSocMinPercent` | — | Weakest brick SOC (added 2026.32) |
-| `ModuleTempMax` | — | Pack thermal |
-| `ModuleTempMin` | — | Pack thermal |
-| `NumModuleTempMax` | — | Which module is the max |
-| `NumModuleTempMin` | — | Which module is the min |
-| `NominalFullPackEnergyKwh` | — | True pack capacity (added 2026.32) — the SoH denominator |
-| `LifetimeEnergyChargedKwh` | — | Lifetime energy in (added 2026.32) |
-| `EnergyRemaining` | — | Usable energy left |
-| `BMSState` | — | BMS state machine |
-| `BmsFullchargecomplete` | — | Full-charge marker |
-| `IsolationResistance` | — | HV isolation |
-| `Hvil` | — | HV interlock loop |
-| `DCDCEnable` | — | DC/DC converter state |
-| `ServiceMode` | — | Service mode state |
-| `LifetimeEnergyUsed` | — | Lifetime energy out |
-| `LifetimeEnergyGainedRegen` | — | Lifetime regen |
+| Cloud signal | Cloud type | Fleet API `vehicle_data` JSON | BLE equivalent | BLE type | Notes |
+|---|---|---|---|---|---|
+| `PackVoltage` | real | — | — | — | Pack voltage |
+| `PackCurrent` | real | — | — | — | Pack current (enables coulomb counting) |
+| `BrickVoltageMax` | real | — | — | — | Cell-group max voltage (imbalance input) |
+| `BrickVoltageMin` | real | — | — | — | Cell-group min voltage (imbalance input) |
+| `NumBrickVoltageMax` | integer | — | — | — | Which brick is the max |
+| `NumBrickVoltageMin` | integer | — | — | — | Which brick is the min |
+| `BrickSocMinPercent` | — | — | — | — | Weakest brick SOC (added 2026.32) |
+| `ModuleTempMax` | real | — | — | — | Pack thermal |
+| `ModuleTempMin` | real | — | — | — | Pack thermal |
+| `NumModuleTempMax` | integer | — | — | — | Which module is the max |
+| `NumModuleTempMin` | integer | — | — | — | Which module is the min |
+| `NominalFullPackEnergyKwh` | — | — | — | — | True pack capacity (added 2026.32) — the SoH denominator |
+| `LifetimeEnergyChargedKwh` | — | — | — | — | Lifetime energy in (added 2026.32) |
+| `EnergyRemaining` | real | — | — | — | Usable energy left |
+| `BMSState` | BMSStateValue enum | — | — | — | BMS state machine |
+| `BmsFullchargecomplete` | boolean | — | — | — | Full-charge marker |
+| `IsolationResistance` | real | — | — | — | HV isolation |
+| `Hvil` | HvilStatus enum | — | — | — | HV interlock loop |
+| `DCDCEnable` | boolean | — | — | — | DC/DC converter state |
+| `ServiceMode` | boolean | vehicle_state.service_mode | — | — | Service mode state |
+| `LifetimeEnergyUsed` | real | — | — | — | Lifetime energy out |
+| `LifetimeEnergyGainedRegen` | — | — | — | — | Lifetime regen |
 
 ## Drive, route & power electronics — BLE partial or cloud only
 
-| Cloud signal | BLE equivalent | Notes |
-|---|---|---|
-| `Odometer` | `DriveState.odometer_in_hundredths_of_a_mile` | Hundredths of a mile |
-| `VehicleSpeed` | `DriveState.speed_float` |  |
-| `Gear` | `DriveState.shift_state` |  |
-| `MilesToArrival` | `DriveState.active_route_miles_to_arrival` | Active route only |
-| `MinutesToArrival` | `DriveState.active_route_minutes_to_arrival` | Active route only |
-| `RouteTrafficMinutesDelay` | `DriveState.active_route_traffic_minutes_delay` | Active route only |
-| `ExpectedEnergyPercentAtTripArrival` | `DriveState.active_route_energy_at_arrival` | Telemetry percent vs BLE energy-at-arrival |
-| `DestinationName` | `DriveState.active_route_destination` | Active route only |
-| `RouteLastUpdated` | `DriveState.last_route_update` | Units/epoch differ |
-| `RouteLine` | — | Route polyline; BLE has no equivalent |
-| `OriginLocation` | — | Cloud-only |
-| `DestinationLocation` | — | Cloud-only |
-| `DriveRail` | — | Cloud/OBD only |
-| `PedalPosition` | — | Cloud/OBD only; BLE has coarse `DriveState.power` |
-| `BrakePedal` | — | Cloud/OBD only |
-| `BrakePedalPos` | — | Cloud/OBD only |
-| `CruiseSetSpeed` | — | Cloud only |
-| `LateralAcceleration` | — | Cloud only |
-| `LongitudinalAcceleration` | — | Cloud only |
-| `GradeEstimatePercent` | — | Cloud only |
-| `MaxSpeedToReachDestinationMph` | — | Cloud only |
-| `MilesSinceReset` | — | Cloud only |
-| `SelfDrivingMilesSinceReset` | — | Cloud only |
+| Cloud signal | Cloud type | Fleet API `vehicle_data` JSON | BLE equivalent | BLE type | Notes |
+|---|---|---|---|---|---|
+| `Odometer` | real | vehicle_state.odometer | `DriveState.odometer_in_hundredths_of_a_mile` | int32 | Cloud real miles; BLE int32 hundredths of a mile (0.01 mi resolution) |
+| `VehicleSpeed` | real | drive_state.speed | `DriveState.speed_float` | float |  |
+| `Gear` | ShiftState enum | drive_state.shift_state | `DriveState.shift_state` | ShiftState |  |
+| `MilesToArrival` | real | drive_state.active_route_miles_to_arrival | `DriveState.active_route_miles_to_arrival` | float | Active route only |
+| `MinutesToArrival` | real | drive_state.active_route_minutes_to_arrival | `DriveState.active_route_minutes_to_arrival` | float | Active route only |
+| `RouteTrafficMinutesDelay` | real | drive_state.active_route_traffic_minutes_delay | `DriveState.active_route_traffic_minutes_delay` | float | Active route only |
+| `ExpectedEnergyPercentAtTripArrival` | integer | drive_state.active_route_energy_at_arrival | `DriveState.active_route_energy_at_arrival` | float | Telemetry percent vs BLE energy-at-arrival |
+| `DestinationName` | string | drive_state.active_route_destination | `DriveState.active_route_destination` | string | Active route only |
+| `RouteLastUpdated` | time | — | `DriveState.last_route_update` | uint32 | Units/epoch differ |
+| `RouteLine` | string | — | — | — | Route polyline; BLE has no equivalent |
+| `OriginLocation` | Location | — | — | — | Cloud-only |
+| `DestinationLocation` | Location | drive_state.active_route_latitude drive_state.active_route_longitude | — | — | Cloud-only |
+| `DriveRail` | boolean | — | — | — | Cloud/OBD only |
+| `PedalPosition` | real | — | — | — | Cloud/OBD only; BLE has coarse `DriveState.power` |
+| `BrakePedal` | boolean | — | — | — | Cloud/OBD only |
+| `BrakePedalPos` | real | — | — | — | Cloud/OBD only |
+| `CruiseSetSpeed` | real | — | — | — | Cloud only |
+| `LateralAcceleration` | real | — | — | — | Cloud only |
+| `LongitudinalAcceleration` | real | — | — | — | Cloud only |
+| `GradeEstimatePercent` | — | — | — | — | Cloud only |
+| `MaxSpeedToReachDestinationMph` | — | — | — | — | Cloud only |
+| `MilesSinceReset` | real | — | — | — | Cloud only |
+| `SelfDrivingMilesSinceReset` | real | — | — | — | Cloud only |
 
 ## Motor, inverter & torque signals — cloud only
 
 All `Di*` signals are Fleet Telemetry / CAN only; the BLE `DriveState.power` field is the closest local signal.
 
-| Cloud signal | BLE equivalent | Notes |
-|---|---|---|
-| `DiStateR` | — |  |
-| `DiStateF` | — |  |
-| `DiStateREL` | — |  |
-| `DiStateRER` | — |  |
-| `DiHeatsinkTR` | — |  |
-| `DiHeatsinkTF` | — |  |
-| `DiHeatsinkTREL` | — |  |
-| `DiHeatsinkTRER` | — |  |
-| `DiAxleSpeedR` | — |  |
-| `DiAxleSpeedF` | — |  |
-| `DiAxleSpeedREL` | — |  |
-| `DiAxleSpeedRER` | — |  |
-| `DiTorquemotor` | — |  |
-| `DiTorqueActualR` | — |  |
-| `DiTorqueActualF` | — |  |
-| `DiTorqueActualREL` | — |  |
-| `DiTorqueActualRER` | — |  |
-| `DiSlaveTorqueCmd` | — |  |
-| `DiStatorTempR` | — |  |
-| `DiStatorTempF` | — |  |
-| `DiStatorTempREL` | — |  |
-| `DiStatorTempRER` | — |  |
-| `DiVBatR` | — |  |
-| `DiVBatF` | — |  |
-| `DiVBatREL` | — |  |
-| `DiVBatRER` | — |  |
-| `DiMotorCurrentR` | — |  |
-| `DiMotorCurrentF` | — |  |
-| `DiMotorCurrentREL` | — |  |
-| `DiMotorCurrentRER` | — |  |
-| `DiInverterTR` | — |  |
-| `DiInverterTF` | — |  |
-| `DiInverterTREL` | — |  |
-| `DiInverterTRER` | — |  |
+| Cloud signal | Cloud type | Fleet API `vehicle_data` JSON | BLE equivalent | BLE type | Notes |
+|---|---|---|---|---|---|
+| `DiStateR` | DriveInverterState enum | — | — | — |  |
+| `DiStateF` | DriveInverterState enum | — | — | — |  |
+| `DiStateREL` | DriveInverterState enum | — | — | — |  |
+| `DiStateRER` | DriveInverterState enum | — | — | — |  |
+| `DiHeatsinkTR` | real | — | — | — |  |
+| `DiHeatsinkTF` | real | — | — | — |  |
+| `DiHeatsinkTREL` | real | — | — | — |  |
+| `DiHeatsinkTRER` | real | — | — | — |  |
+| `DiAxleSpeedR` | real | — | — | — |  |
+| `DiAxleSpeedF` | real | — | — | — |  |
+| `DiAxleSpeedREL` | real | — | — | — |  |
+| `DiAxleSpeedRER` | real | — | — | — |  |
+| `DiTorquemotor` | real | — | — | — |  |
+| `DiTorqueActualR` | real | — | — | — |  |
+| `DiTorqueActualF` | real | — | — | — |  |
+| `DiTorqueActualREL` | real | — | — | — |  |
+| `DiTorqueActualRER` | real | — | — | — |  |
+| `DiSlaveTorqueCmd` | real | — | — | — |  |
+| `DiStatorTempR` | real | — | — | — |  |
+| `DiStatorTempF` | real | — | — | — |  |
+| `DiStatorTempREL` | real | — | — | — |  |
+| `DiStatorTempRER` | real | — | — | — |  |
+| `DiVBatR` | real | — | — | — |  |
+| `DiVBatF` | real | — | — | — |  |
+| `DiVBatREL` | real | — | — | — |  |
+| `DiVBatRER` | real | — | — | — |  |
+| `DiMotorCurrentR` | real | — | — | — |  |
+| `DiMotorCurrentF` | real | — | — | — |  |
+| `DiMotorCurrentREL` | real | — | — | — |  |
+| `DiMotorCurrentRER` | real | — | — | — |  |
+| `DiInverterTR` | real | — | — | — |  |
+| `DiInverterTF` | real | — | — | — |  |
+| `DiInverterTREL` | real | — | — | — |  |
+| `DiInverterTRER` | real | — | — | — |  |
 
 ## Climate & comfort
 
-| Cloud signal | BLE equivalent | Notes |
-|---|---|---|
-| `InsideTemp` | `ClimateState.inside_temp_celsius` |  |
-| `OutsideTemp` | `ClimateState.outside_temp_celsius` |  |
-| `HvacLeftTemperatureRequest` | `ClimateState.driver_temp_setting` | Left/right vs driver/passenger depends on RHD |
-| `HvacRightTemperatureRequest` | `ClimateState.passenger_temp_setting` |  |
-| `HvacFanSpeed` | `ClimateState.fan_status` | Speed vs status semantics |
-| `HvacFanStatus` | `ClimateState.fan_status` |  |
-| `HvacACEnabled` | `ClimateState.is_climate_on` | Closest BLE signal |
-| `HvacPower` | `ClimateState.is_climate_on` | Closest BLE signal |
-| `HvacAutoMode` | `ClimateState.hvac_auto_request` |  |
-| `HvacSteeringWheelHeatAuto` | `ClimateState.auto_steering_wheel_heat` |  |
-| `HvacSteeringWheelHeatLevel` | `ClimateState.steering_wheel_heat_level` |  |
-| `ClimateKeeperMode` | `ClimateState.climate_keeper_mode` |  |
-| `DefrostMode` | `ClimateState.defrost_mode` |  |
-| `DefrostForPreconditioning` | — | No BLE equivalent |
-| `RearDefrostEnabled` | `ClimateState.is_rear_defroster_on` |  |
-| `CabinOverheatProtectionMode` | `ClimateState.cabin_overheat_protection` |  |
-| `CabinOverheatProtectionTemperatureLimit` | `ClimateState.cop_activation_temperature` |  |
-| `WiperHeatEnabled` | `ClimateState.wiper_blade_heater` |  |
-| `SeatHeaterLeft` | `ClimateState.seat_heater_left` |  |
-| `SeatHeaterRight` | `ClimateState.seat_heater_right` |  |
-| `SeatHeaterRearLeft` | `ClimateState.seat_heater_rear_left` |  |
-| `SeatHeaterRearRight` | `ClimateState.seat_heater_rear_right` |  |
-| `SeatHeaterRearCenter` | `ClimateState.seat_heater_rear_center` |  |
-| `RearSeatHeaters` | — | Aggregate flag; BLE exposes per-seat levels |
-| `AutoSeatClimateLeft` | `ClimateState.auto_seat_climate_left` |  |
-| `AutoSeatClimateRight` | `ClimateState.auto_seat_climate_right` |  |
-| `ClimateSeatCoolingFrontLeft` | `ClimateState.seat_fan_front_left` |  |
-| `ClimateSeatCoolingFrontRight` | `ClimateState.seat_fan_front_right` |  |
-| `SeatVentEnabled` | — | Aggregate; BLE exposes per-seat fans |
-| `RearDisplayHvacEnabled` | — | No BLE equivalent |
-| `EuropeVehicle` | — | No BLE equivalent |
-| `RightHandDrive` | — | No BLE equivalent |
+| Cloud signal | Cloud type | Fleet API `vehicle_data` JSON | BLE equivalent | BLE type | Notes |
+|---|---|---|---|---|---|
+| `InsideTemp` | real | climate_state.inside_temp | `ClimateState.inside_temp_celsius` | float |  |
+| `OutsideTemp` | real | climate_state.outside_temp | `ClimateState.outside_temp_celsius` | float |  |
+| `HvacLeftTemperatureRequest` | real | climate_state.driver_temp_setting climate_state.passenger_temp_setting | `ClimateState.driver_temp_setting` | float | Left/right vs driver/passenger depends on RHD |
+| `HvacRightTemperatureRequest` | real | climate_state.driver_temp_setting climate_state.passenger_temp_setting | `ClimateState.passenger_temp_setting` | float |  |
+| `HvacFanSpeed` | integer | — | `ClimateState.fan_status` | int32 | Speed vs status semantics |
+| `HvacFanStatus` | integer | climate_state.fan_status | `ClimateState.fan_status` | int32 |  |
+| `HvacACEnabled` | boolean | — | `ClimateState.is_climate_on` | bool | Closest BLE signal |
+| `HvacPower` | HvacPowerState enum | climate_state.is_climate_on | `ClimateState.is_climate_on` | bool | Closest BLE signal |
+| `HvacAutoMode` | HvacAutoModeState enum | climate_state.hvac_auto_request | `ClimateState.hvac_auto_request` | HvacAutoRequest |  |
+| `HvacSteeringWheelHeatAuto` | boolean | climate_state.auto_steering_wheel_heat | `ClimateState.auto_steering_wheel_heat` | bool |  |
+| `HvacSteeringWheelHeatLevel` | integer | climate_state.steering_wheel_heat_level | `ClimateState.steering_wheel_heat_level` | StwHeatLevel |  |
+| `ClimateKeeperMode` | ClimateKeeperModeState enum | climate_state.climate_keeper_mode | `ClimateState.climate_keeper_mode` | ClimateKeeperMode |  |
+| `DefrostMode` | DefrostModeState enum | climate_state.defrost_mode | `ClimateState.defrost_mode` | DefrostMode |  |
+| `DefrostForPreconditioning` | boolean | — | — | — | No BLE equivalent |
+| `RearDefrostEnabled` | boolean | climate_state.is_rear_defroster_on | `ClimateState.is_rear_defroster_on` | bool |  |
+| `CabinOverheatProtectionMode` | CabinOverheatProtectionModeState enum | climate_state.cabin_overheat_protection | `ClimateState.cabin_overheat_protection` | CabinOverheatProtection_E |  |
+| `CabinOverheatProtectionTemperatureLimit` | ClimateOverheatProtectionTempLimit enum | climate_state.cop_activation_temperature | `ClimateState.cop_activation_temperature` | CopActivationTemp |  |
+| `WiperHeatEnabled` | boolean | climate_state.wiper_blade_heater | `ClimateState.wiper_blade_heater` | bool |  |
+| `SeatHeaterLeft` | integer | climate_state.seat_heater_left | `ClimateState.seat_heater_left` | int32 |  |
+| `SeatHeaterRight` | integer | climate_state.seat_heater_right | `ClimateState.seat_heater_right` | int32 |  |
+| `SeatHeaterRearLeft` | integer | climate_state.seat_heater_rear_left | `ClimateState.seat_heater_rear_left` | int32 |  |
+| `SeatHeaterRearRight` | integer | climate_state.seat_heater_rear_right | `ClimateState.seat_heater_rear_right` | int32 |  |
+| `SeatHeaterRearCenter` | integer | climate_state.seat_heater_rear_center | `ClimateState.seat_heater_rear_center` | int32 |  |
+| `RearSeatHeaters` | string | vehicle_config.rear_seat_heaters | — | — | Aggregate flag; BLE exposes per-seat levels |
+| `AutoSeatClimateLeft` | boolean | climate_state.auto_seat_climate_left | `ClimateState.auto_seat_climate_left` | bool |  |
+| `AutoSeatClimateRight` | boolean | climate_state.auto_seat_climate_right | `ClimateState.auto_seat_climate_right` | bool |  |
+| `ClimateSeatCoolingFrontLeft` | integer | climate_state.seat_fan_front_left | `ClimateState.seat_fan_front_left` | int32 |  |
+| `ClimateSeatCoolingFrontRight` | integer | climate_state.seat_fan_front_right | `ClimateState.seat_fan_front_right` | int32 |  |
+| `SeatVentEnabled` | boolean | — | — | — | Aggregate; BLE exposes per-seat fans |
+| `RearDisplayHvacEnabled` | boolean | — | — | — | No BLE equivalent |
+| `EuropeVehicle` | boolean | vehicle_config.eu_vehicle | — | — | No BLE equivalent |
+| `RightHandDrive` | boolean | vehicle_config.rhd | — | — | No BLE equivalent |
 
 ## Body, security & access
 
-| Cloud signal | BLE equivalent | Notes |
-|---|---|---|
-| `Locked` | `VehicleStatus.vehicleLockState` | VCSEC is readable while the car sleeps; `ClosuresState.locked` when awake |
-| `DoorState` | — | Aggregate; BLE has per-door booleans under `ClosuresState.door_open_*` |
-| `FdWindow` | `ClosuresState.window_open_driver_front` |  |
-| `FpWindow` | `ClosuresState.window_open_passenger_front` |  |
-| `RdWindow` | `ClosuresState.window_open_driver_rear` |  |
-| `RpWindow` | `ClosuresState.window_open_passenger_rear` |  |
-| `SentryMode` | `ClosuresState.sentry_mode_state` |  |
-| `SpeedLimitMode` | `ClosuresState.speed_limit_mode` |  |
-| `CurrentLimitMph` | `ClosuresState.speed_limit_mode` | Value lives inside the BLE speed-limit message |
-| `ValetModeEnabled` | `ClosuresState.valet_mode` |  |
-| `RemoteStartEnabled` | `ClosuresState.remote_start` |  |
-| `RemoteStartActive` | `ClosuresState.remote_start` | Enabled vs active is not distinguished over BLE |
-| `GuestModeEnabled` | `VehicleState.guestMode` |  |
-| `GuestModeMobileAccessState` | — | No BLE equivalent |
-| `PinToDriveEnabled` | — | Fleet API only; BLE returns `ErrRequiresEncryption` |
-| `PairedPhoneKeyAndKeyFobQty` | — | Closest: VCSEC `WhitelistInfo.numberOfEntries` (not in the state catalog) |
-| `TonneauPosition` | `ClosuresState.tonneau_state` |  |
-| `TonneauOpenPercent` | `ClosuresState.tonneau_percent_open` |  |
-| `TonneauTentMode` | — | No BLE equivalent |
-| `CenterDisplay` | `ClosuresState.center_display_state` |  |
-| `HomelinkNearby` | `LocationState.homelink_nearby` |  |
-| `HomelinkDeviceCount` | — | No BLE equivalent |
-| `VehicleName` | — | No BLE equivalent |
-| `CarType` | — | Derivable from VIN locally; not a BLE field |
-| `Trim` | — | Derivable from VIN locally; not a BLE field |
-| `ExteriorColor` | — | No BLE equivalent |
-| `RoofColor` | — | No BLE equivalent |
-| `WheelType` | — | No BLE equivalent |
-| `Version` | `SoftwareUpdateState.version` | Firmware version |
-| `DriverSeatBelt` | — | No BLE equivalent |
-| `PassengerSeatBelt` | — | No BLE equivalent |
-| `DriverSeatOccupied` | — | No BLE equivalent |
-| `OffroadLightbarPresent` | — | No BLE equivalent |
-| `SunroofInstalled` | — | Closest: `ClosuresState.sun_roof_state` (open/closed, not installed) |
+| Cloud signal | Cloud type | Fleet API `vehicle_data` JSON | BLE equivalent | BLE type | Notes |
+|---|---|---|---|---|---|
+| `Locked` | boolean | vehicle_state.locked | `VehicleStatus.vehicleLockState` | VehicleLockState_E | Cloud boolean vs BLE enum (`unknown` representable); VCSEC is readable while the car sleeps, `ClosuresState.locked` when awake |
+| `DoorState` | Doors enum | vehicle_state.df vehicle_state.dr vehicle_state.pf vehicle_state.pr vehicle_state.ft vehicle_state.rt | — | — | Aggregate; BLE has per-door booleans under `ClosuresState.door_open_*` |
+| `FdWindow` | WindowState enum | vehicle_state.fd_window | `ClosuresState.window_open_driver_front` | bool |  |
+| `FpWindow` | WindowState enum | vehicle_state.fp_window | `ClosuresState.window_open_passenger_front` | bool |  |
+| `RdWindow` | WindowState enum | vehicle_state.rd_window | `ClosuresState.window_open_driver_rear` | bool |  |
+| `RpWindow` | WindowState enum | vehicle_state.rp_window | `ClosuresState.window_open_passenger_rear` | bool |  |
+| `SentryMode` | SentryModeState enum | vehicle_state.sentry_mode | `ClosuresState.sentry_mode_state` | SentryModeState |  |
+| `SpeedLimitMode` | boolean | vehicle_state.speed_limit_mode.active | `ClosuresState.speed_limit_mode` | SpeedLimitMode |  |
+| `CurrentLimitMph` | real | vehicle_state.speed_limit_mode.current_limit_mph | `ClosuresState.speed_limit_mode` | SpeedLimitMode | Value lives inside the BLE speed-limit message |
+| `ValetModeEnabled` | boolean | vehicle_state.valet_mode | `ClosuresState.valet_mode` | bool |  |
+| `RemoteStartEnabled` | boolean | vehicle_state.remote_start_enabled | `ClosuresState.remote_start` | bool |  |
+| `RemoteStartActive` | — | — | `ClosuresState.remote_start` | bool | Enabled vs active is not distinguished over BLE |
+| `GuestModeEnabled` | boolean | — | `VehicleState.guestMode` | GuestMode |  |
+| `GuestModeMobileAccessState` | GuestModeMobileAccess enum | — | — | — | No BLE equivalent |
+| `PinToDriveEnabled` | boolean | — | — | — | Fleet API only; BLE returns `ErrRequiresEncryption` |
+| `PairedPhoneKeyAndKeyFobQty` | integer | — | — | — | Closest: VCSEC `WhitelistInfo.numberOfEntries` (not in the state catalog) |
+| `TonneauPosition` | TonneauPositionState enum | — | `ClosuresState.tonneau_state` | VCSEC.ClosureState_E |  |
+| `TonneauOpenPercent` | real | — | `ClosuresState.tonneau_percent_open` | uint32 |  |
+| `TonneauTentMode` | TonneauTentModeState enum | — | — | — | No BLE equivalent |
+| `CenterDisplay` | DisplayState enum | vehicle_state.center_display_state | `ClosuresState.center_display_state` | DisplayState |  |
+| `HomelinkNearby` | boolean | vehicle_state.homelink_device_count | `LocationState.homelink_nearby` | bool |  |
+| `HomelinkDeviceCount` | integer | vehicle_state.homelink_nearby | — | — | No BLE equivalent |
+| `VehicleName` | string | vehicle_state.vehicle_name | — | — | No BLE equivalent |
+| `CarType` | enum | vehicle_config.car_type | — | — | Derivable from VIN locally; not a BLE field |
+| `Trim` | string | vehicle_config.trim_badging | — | — | Derivable from VIN locally; not a BLE field |
+| `ExteriorColor` | string | vehicle_config.exterior_color | — | — | No BLE equivalent |
+| `RoofColor` | string | vehicle_config.roof_color | — | — | No BLE equivalent |
+| `WheelType` | string | vehicle_config.wheel_type | — | — | No BLE equivalent |
+| `Version` | string | vehicle_state.car_version | `SoftwareUpdateState.version` | string | Firmware version |
+| `DriverSeatBelt` | boolean | — | — | — | No BLE equivalent |
+| `PassengerSeatBelt` | BuckleStatus enum | — | — | — | No BLE equivalent |
+| `DriverSeatOccupied` | boolean | — | — | — | No BLE equivalent |
+| `OffroadLightbarPresent` | boolean | — | — | — | No BLE equivalent |
+| `SunroofInstalled` | SunroofInstalledState enum | vehicle_config.sun_roof_installed | — | — | Closest: `ClosuresState.sun_roof_state` (open/closed, not installed) |
 
 ## TPMS
 
-| Cloud signal | BLE equivalent | Notes |
-|---|---|---|
-| `TpmsPressureFl` | `TirePressureState.tpms_pressure_fl` |  |
-| `TpmsPressureFr` | `TirePressureState.tpms_pressure_fr` |  |
-| `TpmsPressureRl` | `TirePressureState.tpms_pressure_rl` |  |
-| `TpmsPressureRr` | `TirePressureState.tpms_pressure_rr` |  |
-| `TpmsLastSeenPressureTimeFl` | `TirePressureState.tpms_last_seen_pressure_time_fl` |  |
-| `TpmsLastSeenPressureTimeFr` | `TirePressureState.tpms_last_seen_pressure_time_fr` |  |
-| `TpmsLastSeenPressureTimeRl` | `TirePressureState.tpms_last_seen_pressure_time_rl` |  |
-| `TpmsLastSeenPressureTimeRr` | `TirePressureState.tpms_last_seen_pressure_time_rr` |  |
-| `TpmsHardWarnings` | — | BLE exposes per-wheel `tpms_hard_warning_*` |
-| `TpmsSoftWarnings` | — | BLE exposes per-wheel `tpms_soft_warning_*` |
+| Cloud signal | Cloud type | Fleet API `vehicle_data` JSON | BLE equivalent | BLE type | Notes |
+|---|---|---|---|---|---|
+| `TpmsPressureFl` | real | vehicle_state.tpms_pressure_fl | `TirePressureState.tpms_pressure_fl` | float |  |
+| `TpmsPressureFr` | real | vehicle_state.tpms_pressure_fr | `TirePressureState.tpms_pressure_fr` | float |  |
+| `TpmsPressureRl` | real | vehicle_state.tpms_pressure_rl | `TirePressureState.tpms_pressure_rl` | float |  |
+| `TpmsPressureRr` | real | vehicle_state.tpms_pressure_fr | `TirePressureState.tpms_pressure_rr` | float |  |
+| `TpmsLastSeenPressureTimeFl` | timestamp | vehicle_state.tpms_last_seen_pressure_time_fl | `TirePressureState.tpms_last_seen_pressure_time_fl` | google.protobuf.Timestamp |  |
+| `TpmsLastSeenPressureTimeFr` | timestamp | vehicle_state.tpms_last_seen_pressure_time_fr | `TirePressureState.tpms_last_seen_pressure_time_fr` | google.protobuf.Timestamp |  |
+| `TpmsLastSeenPressureTimeRl` | timestamp | vehicle_state.tpms_last_seen_pressure_time_rl | `TirePressureState.tpms_last_seen_pressure_time_rl` | google.protobuf.Timestamp |  |
+| `TpmsLastSeenPressureTimeRr` | timestamp | vehicle_state.tpms_last_seen_pressure_time_rr | `TirePressureState.tpms_last_seen_pressure_time_rr` | google.protobuf.Timestamp |  |
+| `TpmsHardWarnings` | TireLocation enum | vehicle_state.tpms_hard_warning_fl vehicle_state.tpms_hard_warning_fr vehicle_state.tpms_hard_warning_rl vehicle_state.tpms_hard_warning_rr | — | — | BLE exposes per-wheel `tpms_hard_warning_*` |
+| `TpmsSoftWarnings` | TireLocation enum | vehicle_state.tpms_soft_warning_fl vehicle_state.tpms_soft_warning_fr vehicle_state.tpms_soft_warning_rl vehicle_state.tpms_soft_warning_rr | — | — | BLE exposes per-wheel `tpms_soft_warning_*` |
 
 ## Media
 
-| Cloud signal | BLE equivalent | Notes |
-|---|---|---|
-| `MediaPlaybackStatus` | `MediaState.media_playback_status` |  |
-| `MediaPlaybackSource` | `MediaState.now_playing_source` |  |
-| `MediaAudioVolume` | `MediaState.audio_volume` |  |
-| `MediaAudioVolumeIncrement` | `MediaState.audio_volume_increment` |  |
-| `MediaAudioVolumeMax` | `MediaState.audio_volume_max` |  |
-| `MediaNowPlayingArtist` | `MediaState.now_playing_artist` |  |
-| `MediaNowPlayingTitle` | `MediaState.now_playing_title` |  |
-| `MediaNowPlayingDuration` | `MediaDetailState.now_playing_duration` |  |
-| `MediaNowPlayingElapsed` | `MediaDetailState.now_playing_elapsed` |  |
-| `MediaNowPlayingAlbum` | `MediaDetailState.now_playing_album` |  |
-| `MediaNowPlayingStation` | `MediaDetailState.now_playing_station` |  |
+| Cloud signal | Cloud type | Fleet API `vehicle_data` JSON | BLE equivalent | BLE type | Notes |
+|---|---|---|---|---|---|
+| `MediaPlaybackStatus` | MediaStatus enum | media_info.media_playback_status | `MediaState.media_playback_status` | MediaPlaybackStatus |  |
+| `MediaPlaybackSource` | string | media_info.now_playing_source | `MediaState.now_playing_source` | MediaSourceType |  |
+| `MediaAudioVolume` | real | media_info.audio_volume | `MediaState.audio_volume` | float |  |
+| `MediaAudioVolumeIncrement` | real | media_info.audio_volume_increment | `MediaState.audio_volume_increment` | float |  |
+| `MediaAudioVolumeMax` | real | media_info.audio_volume_max | `MediaState.audio_volume_max` | float |  |
+| `MediaNowPlayingArtist` | string | media_info.now_playing_artist | `MediaState.now_playing_artist` | string |  |
+| `MediaNowPlayingTitle` | string | media_info.now_playing_title | `MediaState.now_playing_title` | string |  |
+| `MediaNowPlayingDuration` | integer | media_info.now_playing_duration | `MediaDetailState.now_playing_duration` | int32 |  |
+| `MediaNowPlayingElapsed` | integer | media_info.now_playing_elapsed | `MediaDetailState.now_playing_elapsed` | int32 |  |
+| `MediaNowPlayingAlbum` | string | media_info.now_playing_album | `MediaDetailState.now_playing_album` | string |  |
+| `MediaNowPlayingStation` | string | media_info.now_playing_station | `MediaDetailState.now_playing_station` | string |  |
 
 ## Software update
 
-| Cloud signal | BLE equivalent | Notes |
-|---|---|---|
-| `SoftwareUpdateVersion` | `SoftwareUpdateState.version` |  |
-| `SoftwareUpdateDownloadPercentComplete` | `SoftwareUpdateState.download_perc` |  |
-| `SoftwareUpdateInstallationPercentComplete` | `SoftwareUpdateState.install_perc` |  |
-| `SoftwareUpdateScheduledStartTime` | `SoftwareUpdateState.scheduled_time_ms` | Epoch/units may differ |
-| `SoftwareUpdateExpectedDurationMinutes` | `SoftwareUpdateState.expected_duration_sec` | Minutes vs seconds |
-| `SoftwareUpdateAvailable` | `SoftwareUpdateState.status` | BLE status enum covers availability |
-| `SoftwareUpdateInProgress` | `SoftwareUpdateState.status` | BLE status enum covers progress |
+| Cloud signal | Cloud type | Fleet API `vehicle_data` JSON | BLE equivalent | BLE type | Notes |
+|---|---|---|---|---|---|
+| `SoftwareUpdateVersion` | string | vehicle_state.software_update.version | `SoftwareUpdateState.version` | string |  |
+| `SoftwareUpdateDownloadPercentComplete` | integer | vehicle_state.software_update.download_perc | `SoftwareUpdateState.download_perc` | uint32 |  |
+| `SoftwareUpdateInstallationPercentComplete` | integer | vehicle_state.software_update.install_perc | `SoftwareUpdateState.install_perc` | uint32 |  |
+| `SoftwareUpdateScheduledStartTime` | timestamp | vehicle_state.software_update.scheduled_time_ms | `SoftwareUpdateState.scheduled_time_ms` | uint64 | Epoch/units may differ |
+| `SoftwareUpdateExpectedDurationMinutes` | integer | vehicle_state.software_update.expected_duration_sec | `SoftwareUpdateState.expected_duration_sec` | uint32 | Minutes vs seconds |
+| `SoftwareUpdateAvailable` | — | — | `SoftwareUpdateState.status` | SoftwareUpdateStatus | BLE status enum covers availability |
+| `SoftwareUpdateInProgress` | — | — | `SoftwareUpdateState.status` | SoftwareUpdateStatus | BLE status enum covers progress |
 
 ## Location & GPS
 
-| Cloud signal | BLE equivalent | Notes |
-|---|---|---|
-| `Location` | `LocationState.latitude` | BLE also has `longitude` |
-| `GpsHeading` | `LocationState.heading` |  |
-| `GpsAccuracyMeters` | `LocationState.geo_accuracy` |  |
-| `GpsState` | `LocationState.estimated_gps_valid` | Closest BLE signal |
+| Cloud signal | Cloud type | Fleet API `vehicle_data` JSON | BLE equivalent | BLE type | Notes |
+|---|---|---|---|---|---|
+| `Location` | Location | drive_state.latitude drive_state.longitude | `LocationState.latitude` | float | BLE also has `longitude` |
+| `GpsHeading` | real | drive_state.heading | `LocationState.heading` | uint32 |  |
+| `GpsAccuracyMeters` | — | — | `LocationState.geo_accuracy` | float |  |
+| `GpsState` | boolean | — | `LocationState.estimated_gps_valid` | bool | Closest BLE signal |
 
 ## Safety, ADAS & settings — cloud only
 
-| Cloud signal | BLE equivalent | Notes |
-|---|---|---|
-| `CruiseFollowDistance` | — |  |
-| `AutomaticBlindSpotCamera` | — |  |
-| `BlindSpotCollisionWarningChime` | — |  |
-| `SpeedLimitWarning` | — |  |
-| `ForwardCollisionWarning` | — |  |
-| `LaneDepartureAvoidance` | — |  |
-| `EmergencyLaneDepartureAvoidance` | — |  |
-| `AutomaticEmergencyBrakingOff` | — |  |
-| `LightsHazardsActive` | — |  |
-| `LightsTurnSignal` | — |  |
-| `LightsHighBeams` | — |  |
-| `SettingDistanceUnit` | — |  |
-| `SettingTemperatureUnit` | — |  |
-| `Setting24HourTime` | — |  |
-| `SettingTirePressureUnit` | — |  |
-| `SettingChargeUnit` | — |  |
-| `EfficiencyPackage` | — |  |
+| Cloud signal | Cloud type | Fleet API `vehicle_data` JSON | BLE equivalent | BLE type | Notes |
+|---|---|---|---|---|---|
+| `CruiseFollowDistance` | FollowDistance enum | — | — | — |  |
+| `AutomaticBlindSpotCamera` | boolean | — | — | — |  |
+| `BlindSpotCollisionWarningChime` | boolean | — | — | — |  |
+| `SpeedLimitWarning` | SpeedAssistLevel enum | — | — | — |  |
+| `ForwardCollisionWarning` | ForwardCollisionSensitivity enum | — | — | — |  |
+| `LaneDepartureAvoidance` | LaneAssistLevel enum | — | — | — |  |
+| `EmergencyLaneDepartureAvoidance` | boolean | — | — | — |  |
+| `AutomaticEmergencyBrakingOff` | boolean | — | — | — |  |
+| `LightsHazardsActive` | boolean | — | — | — |  |
+| `LightsTurnSignal` | TurnSignalState enum | — | — | — |  |
+| `LightsHighBeams` | boolean | — | — | — |  |
+| `SettingDistanceUnit` | DistanceUnit enum | gui_settings.gui_distance_units | — | — |  |
+| `SettingTemperatureUnit` | TemperatureUnit enum | gui_settings.gui_temperature_units | — | — |  |
+| `Setting24HourTime` | boolean | gui_settings.gui_24_hour_time | — | — |  |
+| `SettingTirePressureUnit` | PressureUnit enum | gui_settings.gui_tirepressure_units | — | — |  |
+| `SettingChargeUnit` | ChargeUnitPreference enum | gui_settings.gui_charge_rate_units | — | — |  |
+| `EfficiencyPackage` | string | vehicle_config.efficiency_package | — | — |  |
 
 ## Unreviewed upstream signals (drift watch)
 
 None — every signal is either mapped or explicitly ignored.
 
+## In protos but missing from Tesla's docs table
+
+Signals that exist in the pinned Fleet Telemetry protos but not yet in developer.tesla.com's table (documentation lag). Types are unknown until Tesla documents them.
+
+| Signal | # | Upstream comment |
+|---|---|---|
+| `ScheduledDepartureTime` | 46 |  |
+| `LifetimeEnergyGainedRegen` | 134 |  |
+| `GpsAccuracyMeters` | 260 |  |
+| `LifetimeEnergyChargedKwh` | 261 |  |
+| `BrickSocMinPercent` | 262 |  |
+| `NominalFullPackEnergyKwh` | 263 |  |
+| `GradeEstimatePercent` | 264 |  |
+| `MaxSpeedToReachDestinationMph` | 265 |  |
+| `SoftwareUpdateAvailable` | 266 |  |
+| `SoftwareUpdateInProgress` | 267 |  |
+| `RemoteStartActive` | 268 |  |
+
 ## BLE fields with no cloud mapping
 
 <details><summary>134 BLE fields not referenced by the cross-map (usually internal, identity, or semi-specific fields)</summary>
 
-**ChargeState** (38): `fast_charger_brand`, `charge_limit_soc_std`, `charge_limit_soc_min`, `charge_limit_soc_max`, `max_range_charge_counter`, `charge_miles_added_rated`, `charge_miles_added_ideal`, `charger_pilot_current`, `charger_actual_current`, `minutes_to_charge_limit`, `trip_charging`, `charge_rate_mph`, `user_charge_enable_request`, `managed_charging_active`, `managed_charging_user_canceled`, `managed_charging_start_time`, `timestamp`, `preconditioning_times`, `off_peak_charging_times`, `off_peak_hours_end_time`, `scheduled_charging_start_time_minutes`, `scheduled_departure_time_minutes`, `scheduled_charging_start_time_app`, `charge_limit_reason`, `managed_charging_state`, `charge_cable_unlatched`, `outlet_state`, `power_feed_state`, `outlet_soc_limit`, `power_feed_soc_limit`, `outlet_time_remaining`, `power_feed_time_remaining`, `powershare_feature_allowed`, `powershare_feature_enabled`, `powershare_request`, `powershare_soc_limit`, `one_time_soc_limit`, `outlet_max_timer_minutes`
+**ChargeState** (38): `fast_charger_brand`, `charge_limit_soc_std`, `charge_limit_soc_min`, `charge_limit_soc_max`, `max_range_charge_counter`, `charge_miles_added_rated`, `charge_miles_added_ideal`, `charger_pilot_current`, `minutes_to_charge_limit`, `trip_charging`, `charge_rate_mph`, `user_charge_enable_request`, `managed_charging_active`, `managed_charging_user_canceled`, `managed_charging_start_time`, `timestamp`, `preconditioning_times`, `off_peak_charging_times`, `off_peak_hours_end_time`, `charging_amps`, `scheduled_charging_start_time_minutes`, `scheduled_departure_time_minutes`, `scheduled_charging_start_time_app`, `charge_limit_reason`, `managed_charging_state`, `charge_cable_unlatched`, `outlet_state`, `power_feed_state`, `outlet_soc_limit`, `power_feed_soc_limit`, `outlet_time_remaining`, `power_feed_time_remaining`, `powershare_feature_allowed`, `powershare_feature_enabled`, `powershare_request`, `powershare_soc_limit`, `one_time_soc_limit`, `outlet_max_timer_minutes`
 
 **ClimateState** (20): `left_temp_direction`, `right_temp_direction`, `is_front_defroster_on`, `min_avail_temp_celsius`, `max_avail_temp_celsius`, `seat_heater_rear_right_back`, `seat_heater_rear_left_back`, `seat_heater_third_row_right`, `seat_heater_third_row_left`, `steering_wheel_heater`, `side_mirror_heaters`, `is_preconditioning`, `remote_heater_control_enabled`, `timestamp`, `bioweapon_mode_on`, `is_auto_conditioning_on`, `allow_cabin_overheat_protection`, `supports_fan_only_cabin_overheat_protection`, `cabin_overheat_protection_actively_cooling`, `cop_not_running_reason`
 

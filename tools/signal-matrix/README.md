@@ -23,9 +23,32 @@ python tools/signal-matrix/generate.py --check    # fail if the committed doc is
 python tools/signal-matrix/generate.py --refresh  # update vendored Fleet Telemetry protos from upstream
 python tools/signal-matrix/generate.py --status   # print pinned vs upstream SHAs
 python tools/signal-matrix/generate.py --dump     # list parsed message fields (mapping authoring)
+python tools/signal-matrix/generate.py --import-docs <markdown>  # refresh Tesla's Available Data snapshot
 ```
 
 No third-party Python packages are required.
+
+## Types and fidelity
+
+The generated doc labels every mapped row with the cloud logical type (from Tesla's
+Available Data table) and the exact BLE proto type, and auto-lists where the same value
+is typed differently (e.g. `BatteryLevel` is `real` on cloud with sub-percent values like
+`40.982`, but BLE `battery_level` is `int32` whole percent; `charger_power` is `real` kW
+on cloud vs `int32` whole kW on BLE). It also documents Tesla's dynamic wire format:
+legacy telemetry fields (< 179) usually arrive as string-encoded numbers, field 179+ are
+always typed.
+
+## Tesla's docs table (types + `vehicle_data` JSON equivalents)
+
+`upstream/tesla-docs/available-data.tsv` is a snapshot of
+[developer.tesla.com Available Data](https://developer.tesla.com/docs/fleet-api/fleet-telemetry/available-data):
+Field, Category, Type, Fleet API `vehicle_data` JSON equivalent, Description.
+
+The docs page is client-rendered, so refresh is a manual step:
+
+1. Fetch the page (browser or `webfetch`) and save the rendered markdown.
+2. `python tools/signal-matrix/generate.py --import-docs <saved-file>`
+3. Regenerate and commit.
 
 ## Rules
 

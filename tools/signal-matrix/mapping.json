@@ -26,31 +26,38 @@
     "**The headline gap:** pack voltage/current, brick voltages, module temperatures, BMS state, and true pack capacity (`NominalFullPackEnergyKwh`) exist only in Fleet Telemetry, not in the BLE protocol. OBD/CAN is the only local alternative.",
     "**What BLE gives instead:** SOC and range, charge limits/energy/power, charge port and schedule state, closures/security, climate, TPMS, media, software update state — and the VCSEC status domain works while the car is asleep."
   ],
+  "fidelity_notes": [
+    "The cloud side is **dynamic at the wire level**: Fleet Telemetry wraps readings in a `Value` oneof where strings are the default. Legacy fields (before field 179, firmware < 2024.38) commonly arrive as string-encoded numbers — observed payloads include `BatteryLevel string_value: \"40.982\"` and `ChargeLimitSoc \"100\"`. Fields from 179 on are always returned typed, and Tesla notes types may change with vehicle software. The cloud `Type` column below is Tesla's documented logical type.",
+    "The BLE side is **strongly typed protobuf** with fixed types per field: precision is predictable but can be coarser (see the differences table below).",
+    "Update model also differs: telemetry pushes on change with a configurable minimum interval (500 ms floor, per-signal `interval_seconds`); BLE is strictly request/response polling with no subscription primitive.",
+    "The `vehicle_data` JSON column is reproduced from Tesla's published table and may contain vendor errors (e.g. `TpmsPressureRr` lists `tpms_pressure_fr`).",
+    "Tesla's docs table itself lags the protos: it has no entry yet for several signals in the pinned revision — including `NominalFullPackEnergyKwh`, `BrickSocMinPercent`, and `LifetimeEnergyChargedKwh` (added for firmware 2026.32). Treat the *In protos but missing from Tesla's docs table* section as a documentation drift watch."
+  ],
   "cross_map": [
     {
       "title": "Battery & charging — BLE readable",
       "rows": [
-        { "cloud": "Soc", "ble": "ChargeState.battery_level", "note": "Displayed SOC; BLE additionally exposes `usable_battery_level`" },
-        { "cloud": "BatteryLevel", "ble": "ChargeState.usable_battery_level", "note": "Naming overlap between transports; verify semantics per fleet" },
+        { "cloud": "Soc", "ble": "ChargeState.usable_battery_level", "note": "Usable SOC per Tesla docs (`charge_state.usable_battery_level`); cloud real vs BLE int32 whole percent" },
+        { "cloud": "BatteryLevel", "ble": "ChargeState.battery_level", "note": "Displayed SOC (`charge_state.battery_level`); cloud real with sub-percent values observed (e.g. 40.982) vs BLE int32 whole percent" },
         { "cloud": "RatedRange", "ble": "ChargeState.battery_range", "note": "Rated miles" },
         { "cloud": "EstBatteryRange", "ble": "ChargeState.est_battery_range", "note": "" },
         { "cloud": "IdealBatteryRange", "ble": "ChargeState.ideal_battery_range", "note": "" },
         { "cloud": "ChargeLimitSoc", "ble": "ChargeState.charge_limit_soc", "note": "" },
         { "cloud": "DetailedChargeState", "ble": "ChargeState.charging_state", "note": "Disconnected / Charging / Complete / Calibrating …" },
         { "cloud": "ChargeState", "ble": "ChargeState.charging_state", "note": "Generic signal; overlaps DetailedChargeState" },
-        { "cloud": "TimeToFullCharge", "ble": "ChargeState.minutes_to_full_charge", "note": "" },
-        { "cloud": "EstimatedHoursToChargeTermination", "ble": "ChargeState.minutes_to_full_charge", "note": "Hours vs minutes; likely same underlying value" },
+        { "cloud": "TimeToFullCharge", "ble": "ChargeState.minutes_to_full_charge", "note": "Cloud real **hours**; BLE int32 **minutes**" },
+        { "cloud": "EstimatedHoursToChargeTermination", "ble": "ChargeState.minutes_to_full_charge", "note": "Cloud real hours; BLE int32 minutes; likely same underlying value" },
         { "cloud": "ChargeRateMilePerHour", "ble": "ChargeState.charge_rate_mph_float", "note": "" },
-        { "cloud": "ChargeAmps", "ble": "ChargeState.charging_amps", "note": "Setting echo" },
+        { "cloud": "ChargeAmps", "ble": "ChargeState.charger_actual_current", "note": "Cloud real sensed line current (`charge_state.charger_actual_current`); BLE int32 — it also exposes `charging_amps` (the requested setting)" },
         { "cloud": "ChargeCurrentRequest", "ble": "ChargeState.charge_current_request", "note": "" },
         { "cloud": "ChargeCurrentRequestMax", "ble": "ChargeState.charge_current_request_max", "note": "" },
         { "cloud": "ChargeEnableRequest", "ble": "ChargeState.charge_enable_request", "note": "" },
         { "cloud": "FastChargerPresent", "ble": "ChargeState.fast_charger_present", "note": "Distinguishes DC charging over BLE" },
         { "cloud": "FastChargerType", "ble": "ChargeState.fast_charger_type", "note": "" },
-        { "cloud": "ChargerVoltage", "ble": "ChargeState.charger_voltage", "note": "EVSE-side voltage, not pack voltage" },
+        { "cloud": "ChargerVoltage", "ble": "ChargeState.charger_voltage", "note": "EVSE-side voltage, not pack voltage; cloud real vs BLE int32" },
         { "cloud": "ChargerPhases", "ble": "ChargeState.charger_phases", "note": "" },
-        { "cloud": "ACChargingPower", "ble": "ChargeState.charger_power", "note": "BLE does not split AC/DC power" },
-        { "cloud": "DCChargingPower", "ble": "ChargeState.charger_power", "note": "Same BLE field; `fast_charger_present` disambiguates" },
+        { "cloud": "ACChargingPower", "ble": "ChargeState.charger_power", "note": "Cloud real kW; BLE int32 whole kW, no AC/DC split" },
+        { "cloud": "DCChargingPower", "ble": "ChargeState.charger_power", "note": "Cloud real kW; BLE int32 whole kW (`fast_charger_present` disambiguates)" },
         { "cloud": "ACChargingEnergyIn", "ble": "ChargeState.charge_energy_added", "note": "BLE does not split AC/DC energy" },
         { "cloud": "DCChargingEnergyIn", "ble": "ChargeState.charge_energy_added", "note": "Charger-measured vs battery-measured distinction is lost over BLE" },
         { "cloud": "ChargingCableType", "ble": "ChargeState.conn_charge_cable", "note": "" },
@@ -107,7 +114,7 @@
     {
       "title": "Drive, route & power electronics — BLE partial or cloud only",
       "rows": [
-        { "cloud": "Odometer", "ble": "DriveState.odometer_in_hundredths_of_a_mile", "note": "Hundredths of a mile" },
+        { "cloud": "Odometer", "ble": "DriveState.odometer_in_hundredths_of_a_mile", "note": "Cloud real miles; BLE int32 hundredths of a mile (0.01 mi resolution)" },
         { "cloud": "VehicleSpeed", "ble": "DriveState.speed_float", "note": "" },
         { "cloud": "Gear", "ble": "DriveState.shift_state", "note": "" },
         { "cloud": "MilesToArrival", "ble": "DriveState.active_route_miles_to_arrival", "note": "Active route only" },
@@ -212,7 +219,7 @@
     {
       "title": "Body, security & access",
       "rows": [
-        { "cloud": "Locked", "ble": "VehicleStatus.vehicleLockState", "note": "VCSEC is readable while the car sleeps; `ClosuresState.locked` when awake" },
+        { "cloud": "Locked", "ble": "VehicleStatus.vehicleLockState", "note": "Cloud boolean vs BLE enum (`unknown` representable); VCSEC is readable while the car sleeps, `ClosuresState.locked` when awake" },
         { "cloud": "DoorState", "ble": null, "note": "Aggregate; BLE has per-door booleans under `ClosuresState.door_open_*`" },
         { "cloud": "FdWindow", "ble": "ClosuresState.window_open_driver_front", "note": "" },
         { "cloud": "FpWindow", "ble": "ClosuresState.window_open_passenger_front", "note": "" },

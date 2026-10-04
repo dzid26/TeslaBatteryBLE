@@ -72,6 +72,7 @@ jobs:
             echo
             echo "Review the diff, especially the **Unreviewed upstream signals** section in \`docs/reference/fleet-telemetry-vs-ble.md\`."
             echo "New signals must be mapped or explicitly listed as cloud-only in \`tools/signal-matrix/mapping.json\`."
+            echo "If the Field enum grew, also re-import Tesla's Available Data table (see \`tools/signal-matrix/README.md\`)."
             echo
             echo '```'
             cat upstream-status.txt

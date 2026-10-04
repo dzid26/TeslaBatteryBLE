@@ -31,6 +31,7 @@ DOC = REPO / "docs" / "reference" / "fleet-telemetry-vs-ble.md"
 MAPPING = TOOL_DIR / "mapping.json"
 FT_DIR = TOOL_DIR / "upstream" / "fleet-telemetry"
 FT_PIN = FT_DIR / "FLEET_TELEMETRY_COMMIT"
+DOCS_TSV = TOOL_DIR / "upstream" / "tesla-docs" / "available-data.tsv"
 TESLA_COMMIT = REPO / "core" / "src" / "main" / "proto" / "TESLA_COMMIT"
 
 FT_API = "https://api.github.com/repos/teslamotors/fleet-telemetry"
@@ -138,6 +139,63 @@ def parse_field_enum(path):
     return fields
 
 
+def import_docs(markdown_path):
+    """Convert the rendered Tesla 'Available Data' page (markdown) into a TSV.
+
+    The developer.tesla.com page is client-rendered, so this import is manual:
+    fetch the page (browser or webfetch), save the markdown, then run
+    `generate.py --import-docs <file>`.
+    """
+    lines = Path(markdown_path).read_text(encoding="utf-8").splitlines()
+    rows, in_table = [], False
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("| Field | Category | Type |") and stripped.count("|") >= 6:
+            in_table = True
+            continue
+        if not in_table:
+            continue
+        if not stripped.startswith("|"):
+            if rows:
+                break
+            continue
+        cells = [cell.strip() for cell in stripped.strip("|").split("|")]
+        if len(cells) < 5 or cells[0].startswith("---") or not cells[0]:
+            continue
+        field, category, ftype, json_eq, description = cells[:5]
+        if field == "Field":
+            continue
+        clean = lambda s: s.replace("\\_", "_").replace("\\.", ".").replace("\\>", ">")
+        rows.append((field, clean(category), clean(ftype), clean(json_eq), clean(description)))
+    if not rows:
+        raise SystemExit(f"no signal table found in {markdown_path}")
+    DOCS_TSV.parent.mkdir(parents=True, exist_ok=True)
+    with DOCS_TSV.open("w", encoding="utf-8", newline="\n") as handle:
+        handle.write("field\tcategory\ttype\tjson_equivalent\tdescription\n")
+        for row in rows:
+            handle.write("\t".join(row) + "\n")
+    return len(rows)
+
+
+def load_docs():
+    """Return {signal: {category, type, json, description}} from the vendored TSV."""
+    if not DOCS_TSV.exists():
+        return {}
+    docs = {}
+    lines = DOCS_TSV.read_text(encoding="utf-8").splitlines()
+    for line in lines[1:]:
+        cells = line.split("\t")
+        if len(cells) < 5:
+            continue
+        docs[cells[0]] = {
+            "category": cells[1],
+            "type": cells[2],
+            "json": cells[3],
+            "description": cells[4],
+        }
+    return docs
+
+
 # ---------------------------------------------------------------------------
 # Upstream refresh / status
 # ---------------------------------------------------------------------------
@@ -200,8 +258,59 @@ def field_ref(message, field):
     return f"{message}.{field}"
 
 
-def render(mapping, cloud_fields, ble_messages):
+def ble_type_of(ble_messages, ref):
+    message, _, field = ref.rpartition(".")
+    for f in ble_messages.get(message, {}).get("fields", []):
+        if f["name"] == field:
+            return f["type"]
+    return None
+
+
+def normalize_type(type_name):
+    """Normalize a cloud (docs) type name for comparison."""
+    if not type_name:
+        return "?"
+    t = type_name.lower().strip()
+    if "enum" in t:
+        return "enum"
+    if "timestamp" in t or t == "time":
+        return "timestamp"
+    if "location" in t:
+        return "location"
+    if "bool" in t:
+        return "bool"
+    if "float" in t or "double" in t or t == "real":
+        return "real"
+    if "string" in t:
+        return "string"
+    if "int" in t:
+        return "int"
+    return t
+
+
+def ble_norm_type(type_name):
+    """Normalize a BLE proto type name for comparison."""
+    if not type_name:
+        return "?"
+    t = type_name.lower()
+    if t in ("float", "double"):
+        return "real"
+    if t in ("int32", "uint32", "int64", "uint64", "sint32", "fixed32", "fixed64"):
+        return "int"
+    if t == "bool":
+        return "bool"
+    if t == "string":
+        return "string"
+    if t == "google.protobuf.timestamp":
+        return "timestamp"
+    if t == "latlong":
+        return "location"
+    return "enum"
+
+
+def render(mapping, cloud_fields, ble_messages, docs):
     ft_pin = FT_PIN.read_text(encoding="utf-8").strip()
+    row_by_cloud = {row["cloud"]: row for group in mapping["cross_map"] for row in group["rows"]}
     vc_pin = TESLA_COMMIT.read_text(encoding="utf-8").strip()
     cloud_names = {f["name"] for f in cloud_fields}
 
@@ -251,6 +360,20 @@ def render(mapping, cloud_fields, ble_messages):
         if rest:
             ble_only[message] = rest
 
+    documented = [f for f in cloud_fields if f["name"] in docs]
+    undocumented = [f for f in cloud_fields if f["name"] not in docs and f["name"] not in ignored]
+
+    type_diffs = []
+    for row in (r for g in mapping["cross_map"] for r in g["rows"] if r.get("ble")):
+        cloud = row["cloud"]
+        info = docs.get(cloud)
+        if not info:
+            continue
+        cloud_t = normalize_type(info["type"])
+        ble_t = ble_norm_type(ble_type_of(ble_messages, row["ble"]))
+        if cloud_t != "?" and cloud_t != ble_t:
+            type_diffs.append((cloud, info["type"], row["ble"], ble_type_of(ble_messages, row["ble"])))
+
     out = []
     w = out.append
     w("# Fleet Telemetry vs BLE — signal matrix")
@@ -278,8 +401,25 @@ def render(mapping, cloud_fields, ble_messages):
     w(f"| Mapped to a BLE equivalent | {mapped_count} |")
     w(f"| Cloud-only (no BLE equivalent, reviewed) | {cloud_only_count} |")
     w(f"| Unreviewed upstream signals (drift watch) | {len(unmapped)} |")
+    w(f"| Documented in Tesla's signals table | {len(documented)} |")
+    w(f"| In protos but missing from Tesla's table | {len(undocumented)} |")
     w(f"| BLE fields catalogued | {ble_field_total} |")
     w("")
+
+    w("## Fidelity")
+    w("")
+    for note in mapping.get("fidelity_notes", []):
+        w(note)
+        w("")
+    if type_diffs:
+        w("Where the same physical value is typed differently on each transport:")
+        w("")
+        w("| Cloud signal | Cloud type | BLE field | BLE type | Note |")
+        w("|---|---|---|---|---|")
+        for cloud, ctype, ble_ref, btype in type_diffs:
+            note = row_by_cloud.get(cloud, {}).get("note", "")
+            w(f"| `{cloud}` | {ctype} | `{ble_ref}` | {btype} | {note} |")
+        w("")
 
     for group in mapping["cross_map"]:
         w(f"## {group['title']}")
@@ -287,11 +427,19 @@ def render(mapping, cloud_fields, ble_messages):
         if group.get("note"):
             w(group["note"])
             w("")
-        w("| Cloud signal | BLE equivalent | Notes |")
-        w("|---|---|---|")
+        w("| Cloud signal | Cloud type | Fleet API `vehicle_data` JSON | BLE equivalent | BLE type | Notes |")
+        w("|---|---|---|---|---|---|")
         for row in group["rows"]:
-            ble = f"`{row['ble']}`" if row.get("ble") else "—"
-            w(f"| `{row['cloud']}` | {ble} | {row.get('note', '')} |")
+            cloud = row["cloud"]
+            info = docs.get(cloud, {})
+            ctype = info.get("type", "—")
+            json_eq = (info.get("json") or "—").replace("|", "/")
+            if row.get("ble"):
+                ble = f"`{row['ble']}`"
+                btype = ble_type_of(ble_messages, row["ble"]) or "—"
+            else:
+                ble, btype = "—", "—"
+            w(f"| `{cloud}` | {ctype} | {json_eq} | {ble} | {btype} | {row.get('note', '')} |")
         w("")
 
     w("## Unreviewed upstream signals (drift watch)")
@@ -309,6 +457,19 @@ def render(mapping, cloud_fields, ble_messages):
     else:
         w("None — every signal is either mapped or explicitly ignored.")
     w("")
+
+    if undocumented:
+        w("## In protos but missing from Tesla's docs table")
+        w("")
+        w("Signals that exist in the pinned Fleet Telemetry protos but not yet in "
+          "developer.tesla.com's table (documentation lag). Types are unknown until "
+          "Tesla documents them.")
+        w("")
+        w("| Signal | # | Upstream comment |")
+        w("|---|---|---|")
+        for f in sorted(undocumented, key=lambda x: x["number"]):
+            w(f"| `{f['name']}` | {f['number']} | {f['comment']} |")
+        w("")
 
     w("## BLE fields with no cloud mapping")
     w("")
@@ -382,8 +543,14 @@ def main():
     parser.add_argument("--refresh", action="store_true", help="update vendored fleet protos from upstream")
     parser.add_argument("--status", action="store_true", help="print pinned vs upstream SHAs")
     parser.add_argument("--dump", action="store_true", help="dump parsed message fields")
+    parser.add_argument("--import-docs", metavar="MARKDOWN",
+                        help="import a rendered Tesla Available Data page (markdown)")
     args = parser.parse_args()
 
+    if args.import_docs:
+        count = import_docs(args.import_docs)
+        print(f"imported {count} signals into {DOCS_TSV.relative_to(REPO)}")
+        return 0
     if args.refresh:
         sha, names = refresh_fleet()
         print(f"refreshed fleet-telemetry protos to {sha} ({len(names)} files)")
@@ -392,6 +559,7 @@ def main():
 
     mapping = json.loads(MAPPING.read_text(encoding="utf-8"))
     cloud_fields = parse_field_enum(FT_DIR / "vehicle_data.proto")
+    docs = load_docs()
     ble_files = [REPO / p for p in mapping["ble_files"]]
     ble_messages = parse_messages(ble_files)
 
@@ -403,7 +571,7 @@ def main():
                 print(f"  {f['name']} : {f['type']}")
         return 0
 
-    doc = render(mapping, cloud_fields, ble_messages)
+    doc = render(mapping, cloud_fields, ble_messages, docs)
     if args.check:
         current = DOC.read_text(encoding="utf-8") if DOC.exists() else ""
         if current == doc:
