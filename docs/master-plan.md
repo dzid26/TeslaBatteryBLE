@@ -100,7 +100,7 @@ A trustworthy shell around the existing protocol work. No user-facing features.
 ## 9. Continuous
 
 - [ ] Dependency updates + security fixes.
-- [ ] Preview rebuild on every `main` push stays green.
+- [x] Preview rebuild on every `main` push stays green.
 - [ ] Docs kept current with every user-visible change.
 - [ ] Real-car validation per milestone.
 - [ ] Community triage once issues arrive.
