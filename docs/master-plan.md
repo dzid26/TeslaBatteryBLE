@@ -82,7 +82,7 @@ A trustworthy shell around the existing protocol work. No user-facing features.
 - [x] SOC history graph + charge sessions (first cut 2026-10-04: CSV store, 6h/24h/7d/All graph, since-last-charge stats; session list + export later).
 - [ ] Notifications: charge complete, SOC thresholds, **vampire-drain alert**.
 - [ ] Widget (Glance), automation intents (Tasker), CSV/JSON export.
-- [ ] Multiple cars; share redacted diagnostics.
+- [ ] Multiple cars; share redacted diagnostics. Requirements: `docs/requirements/multi-vehicle.md` (implementation delegated).
 - [ ] Compatibility matrix (car models, vehicle software, Android versions).
 - [ ] FAQ / troubleshooting.
 - [ ] Coverage thresholds; property/fuzz tests; `tesla-control` interop oracle.
