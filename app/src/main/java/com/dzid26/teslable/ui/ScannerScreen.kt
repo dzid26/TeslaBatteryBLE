@@ -12,10 +12,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
@@ -24,6 +26,7 @@ import com.dzid26.teslable.ble.BleUiState
 import com.dzid26.teslable.ble.ConnectionPhase
 import com.dzid26.teslable.ble.TeslaAdvert
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ScannerScreen(
     state: BleUiState,
@@ -35,15 +38,15 @@ fun ScannerScreen(
     onConnect: (TeslaAdvert) -> Unit,
     onDisconnect: () -> Unit,
 ) {
-    Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+    Scaffold(
+        topBar = { TopAppBar(title = { Text("TeslaBatteryBLE") }) },
+    ) { innerPadding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .padding(innerPadding)
                 .padding(16.dp),
         ) {
-            Text("Tesla BLE scanner", style = MaterialTheme.typography.titleLarge)
-            Spacer(Modifier.height(12.dp))
-
             if (!permissionsGranted) {
                 Button(onClick = onRequestPermissions) {
                     Text("Grant Bluetooth permissions")
