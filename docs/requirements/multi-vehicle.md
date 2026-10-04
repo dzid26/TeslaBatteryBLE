@@ -2,7 +2,7 @@
 
 Status: Draft for implementation (implementation will be delegated)
 Date: 2026-10-04
-Related: `docs/architecture-decision.md` (ADR-0001), `docs/adr/0002-battery-history-storage.md`, `docs/master-plan.md`
+Related: `docs/adr/0001-battery-tracker.md` (ADR-0001), `docs/adr/0002-battery-history-storage.md`, `docs/master-plan.md`
 
 ## 1. Problem
 

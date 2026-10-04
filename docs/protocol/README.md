@@ -1,0 +1,59 @@
+# Protocol notes
+
+How TeslaBatteryBLE talks to a Tesla over Bluetooth LE. Implemented in
+[`core/`](../../core) and wired to Android BLE in [`app/`](../../app). Verified
+against Tesla's [`vehicle-command`](https://github.com/teslamotors/vehicle-command)
+(the proto revision is pinned in [`core/src/main/proto/TESLA_COMMIT`](../../core/src/main/proto/TESLA_COMMIT)).
+
+## Transport
+
+| Item | Value |
+| --- | --- |
+| GATT service | `00000211-b2d1-43f0-9b88-960cebf8b91e` |
+| Write characteristic | `...-00000212-...` |
+| Notify characteristic | `...-00000213-...` |
+| MTU | 256 (negotiated; usable payload `MTU - 3`) |
+| Framing | 2-byte big-endian length prefix, then chunks of `MTU - 3` |
+
+GATT writes are serialized (one request in flight at a time), and responses arrive
+on the notify characteristic. The protocol is strictly **request/response — there is
+no subscription or server-initiated push over BLE**. See
+[`BleFramer.kt`](../../core/src/main/kotlin/com/dzid26/teslable/core/framing/BleFramer.kt)
+and [`TeslaGattClient.kt`](../../app/src/main/java/com/dzid26/teslable/ble/TeslaGattClient.kt).
+
+Scanning: Teslas advertise a name of the form `S<8 hex chars of sha1(vin)>C`.
+Advertising stops when the car has reached its maximum number of BLE connections, so
+"not visible" can mean "slots full", not "out of range".
+
+## Messages and domains
+
+Messages are `UniversalMessage.RoutableMessage` protobufs, routed to one of two
+domains:
+
+| Domain | Scope | Works while car is asleep? |
+| --- | --- | --- |
+| **VCSEC** (`DOMAIN_VEHICLE_SECURITY`) | Lock state, closures, presence, whitelist/key info, wake | **Yes** — this is the always-available channel |
+| **Infotainment** (`DOMAIN_INFOTAINMENT`) | Charge state (SOC, range, charger power), climate, drive state, media, software update | **No** — requires an awake car |
+
+Key facts:
+
+- `GetVehicleData` returns **one category per request** (charge, climate, drive, …).
+- Commands are role-gated car-side: `CHARGING_MANAGER` is enough for charge reads and
+  charge control; locks/climate need `DRIVER`; key management needs `OWNER`.
+- Enrollment uses the unsigned `addKey` flow: the car must be in pairing mode (NFC
+  card tap on the console), then the vehicle confirms. Default role here is
+  `CHARGING_MANAGER` (least privilege); other roles are explicit opt-in.
+- Polling policy: VCSEC ~10 s while tracking; Infotainment only while the car is
+  awake (~10 s while charging). **Never wake the car just to read SOC.**
+
+## Sessions and pairing
+
+See [`session-and-pairing.md`](session-and-pairing.md) for the handshake, crypto, and
+key-storage details.
+
+## Testing the protocol without a car
+
+- **Go fixtures**: `tools/go-fixtures` generates deterministic vectors from Tesla's Go
+  implementation; CI diffs them against `expected.txt`.
+- **Simulated car**: debug builds include a fake transport/protocol so the full
+  scan → pair → read flow runs on the JVM and on emulators.

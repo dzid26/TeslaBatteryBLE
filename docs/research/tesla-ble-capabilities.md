@@ -267,7 +267,7 @@ Verified by case-insensitive search of all pinned `*.proto` for each term
     avoid waking infotainment), `Wakeup`→`wakeupRKE` on BLE, retry loop.
 11. `…/README.md` + `…/cmd/tesla-control/README.md` — protocol scope (climate/
     charging commands), pre-2021 S/X exclusion, BLE pairing flow.
-12. `docs/architecture-decision.md` (ADR-0001) — GATT IDs, MTU 256, NFC-tap
+12. `docs/adr/0001-battery-tracker.md` (ADR-0001) — GATT IDs, MTU 256, NFC-tap
     pairing, CHARGING_MANAGER default, ~10 s polling, never-wake-to-read.
 13. Negative evidence: `grep -in "pack|cell|…|subscri|stream|telemetry|…"
     core/src/main/proto/*.proto` → no matches (2026-10-04); field
