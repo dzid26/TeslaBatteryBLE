@@ -2,7 +2,7 @@
 
 Status: living document. The checkboxes below are the source of truth for scope.
 Created: 2026-10-04 · Maintained alongside every change (see `AGENTS.md`).
-Research: `docs/research/feature-map.md` (battery-health feature synthesis).
+Research: `docs/research/feature-map.md` (battery-health feature synthesis) · `docs/reference/fleet-telemetry-vs-ble.md` (live cloud-vs-BLE signal matrix).
 
 ## 1. What this is
 
@@ -107,6 +107,7 @@ A trustworthy shell around the existing protocol work. No user-facing features.
 - [ ] Dependency updates + security fixes.
 - [x] Preview rebuild on every `main` push stays green.
 - [ ] Docs kept current with every user-visible change.
+- [ ] Signal-matrix drift PRs reviewed (`.github/workflows/signal-matrix.yml`, weekly).
 - [ ] Real-car validation per milestone.
 - [ ] Community triage once issues arrive.
 

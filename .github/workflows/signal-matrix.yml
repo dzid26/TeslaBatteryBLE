@@ -1,0 +1,82 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+name: Signal matrix drift
+
+on:
+  pull_request:
+    paths:
+      - 'tools/signal-matrix/**'
+      - 'docs/reference/fleet-telemetry-vs-ble.md'
+      - 'core/src/main/proto/**'
+  schedule:
+    # Mondays 06:17 UTC
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  check:
+    name: Check generated doc
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Verify the signal matrix is up to date
+        run: python tools/signal-matrix/generate.py --check
+
+  refresh:
+    name: Refresh from upstream
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Refresh vendored Fleet Telemetry protos and regenerate
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python tools/signal-matrix/generate.py --refresh
+
+      - name: Collect upstream status
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          python tools/signal-matrix/generate.py --status > upstream-status.txt || true
+          cat upstream-status.txt
+
+      - name: Open pull request when upstream drifted
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if git diff --quiet; then
+            echo "No upstream drift."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          BRANCH="signal-matrix/refresh-${{ github.run_number }}"
+          git checkout -b "$BRANCH"
+          git add -A
+          git commit -m "Refresh Fleet Telemetry vs BLE signal matrix"
+          git push -u origin "$BRANCH"
+          {
+            echo "Automated weekly refresh of the vendored Fleet Telemetry protos and the generated signal matrix."
+            echo
+            echo "Review the diff, especially the **Unreviewed upstream signals** section in \`docs/reference/fleet-telemetry-vs-ble.md\`."
+            echo "New signals must be mapped or explicitly listed as cloud-only in \`tools/signal-matrix/mapping.json\`."
+            echo
+            echo '```'
+            cat upstream-status.txt
+            echo '```'
+          } > pr-body.md
+          gh pr create \
+            --title "Refresh Fleet Telemetry vs BLE signal matrix" \
+            --body-file pr-body.md
