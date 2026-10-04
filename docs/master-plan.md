@@ -49,7 +49,7 @@ tracking survives screen off → notification updates → key survives app resta
 
 A trustworthy shell around the existing protocol work. No user-facing features.
 
-- [ ] Land the in-flight BLE refactor (`BlePermissions`, `KnownCarStore`, controller, strings) after build + test verification.
+- [x] Land the in-flight BLE refactor (`BlePermissions`, `KnownCarStore`, controller, strings) after build + test verification.
 - [ ] `LICENSE` (AGPL-3.0-only) + `THIRD_PARTY_NOTICES.md` + `SPDX-License-Identifier` headers in sources + first-party license screen data.
 - [ ] README: pitch, badges, screenshots, features, install (GitHub / Obtainium), build, architecture diagram, license, "not affiliated with Tesla, Inc.".
 - [ ] App icon: adaptive + monochrome + 512 px store asset; keep the existing notification icon.
@@ -79,7 +79,7 @@ A trustworthy shell around the existing protocol work. No user-facing features.
 ## 7. Phase 2 — v0.3–0.5 "Product" (target: Nov–Dec)
 
 - [ ] Navigation (Home / Car / Settings / Logs) + ViewModels.
-- [ ] SOC history graph + charge sessions.
+- [x] SOC history graph + charge sessions (first cut 2026-10-04: CSV store, 6h/24h/7d/All graph, since-last-charge stats; session list + export later).
 - [ ] Notifications: charge complete, SOC thresholds, **vampire-drain alert**.
 - [ ] Widget (Glance), automation intents (Tasker), CSV/JSON export.
 - [ ] Multiple cars; share redacted diagnostics.
