@@ -51,7 +51,7 @@ git push origin "refs/tags/$TAG" --force
     echo
     for screenshot in "$SCREENSHOTS_DIR"/*.png; do
       name="$(basename "$screenshot")"
-      echo "![${name%.png}](https://github.com/$REPO/releases/download/$TAG/$name)"
+      echo "<img src=\"https://github.com/$REPO/releases/download/$TAG/$name\" width=\"360\" alt=\"${name%.png}\">"
     done
   fi
 } > preview-notes.md
