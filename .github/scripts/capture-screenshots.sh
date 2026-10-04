@@ -118,4 +118,28 @@ if tap_text "Car"; then
   adb exec-out screencap -p > "$OUT/03-car.png"
 fi
 
+# Demo builds (assembleDebug -PdemoCar=true) simulate a car. These steps are
+# skipped silently on real builds, which share this script.
+if tap_text "Connection"; then
+  sleep 2
+fi
+if tap_text "AA:BB:CC:DD:EE:01"; then
+  sleep 4
+  adb exec-out screencap -p > "$OUT/04-demo-connected.png"
+  if tap_text "Pair key"; then
+    sleep 3
+    adb exec-out screencap -p > "$OUT/05-demo-card-tap.png"
+    sleep 6
+    adb exec-out screencap -p > "$OUT/06-demo-paired.png"
+  fi
+  if tap_text "Wake vehicle"; then
+    sleep 6
+    adb exec-out screencap -p > "$OUT/07-demo-awake.png"
+  fi
+  if tap_text "Read SOC"; then
+    sleep 4
+    adb exec-out screencap -p > "$OUT/08-demo-soc.png"
+  fi
+fi
+
 ls -l "$OUT"
