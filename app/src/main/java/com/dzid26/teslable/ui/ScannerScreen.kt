@@ -12,6 +12,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -97,7 +98,9 @@ fun ScannerScreen(
             Text(text = statusText, style = MaterialTheme.typography.bodyMedium)
             Spacer(Modifier.height(8.dp))
 
-            val canPair = connectedCount > 0 && state.pairingPhase != PairingPhase.SENDING
+            val selectedConnection = state.selectedAddress?.let { state.connections[it] }
+            val canPair = selectedConnection?.phase == ConnectionPhase.READY &&
+                state.pairingPhase != PairingPhase.SENDING
             Button(onClick = onPairKey, enabled = canPair) {
                 Text("Pair charging key")
             }
@@ -133,6 +136,7 @@ fun ScannerScreen(
                         device = device,
                         connection = state.connections[device.address],
                         expectedName = state.expectedBleName,
+                        isSelected = device.address == state.selectedAddress,
                         onClick = { onConnect(device.address) },
                     )
                 }
@@ -158,12 +162,18 @@ private fun DeviceRow(
     device: TeslaAdvert,
     connection: TeslaConnection?,
     expectedName: String?,
+    isSelected: Boolean,
     onClick: () -> Unit,
 ) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
+        colors = if (isSelected) {
+            CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+        } else {
+            CardDefaults.cardColors()
+        },
     ) {
         Column(Modifier.padding(12.dp)) {
             val advertisedName = connection?.name ?: device.name

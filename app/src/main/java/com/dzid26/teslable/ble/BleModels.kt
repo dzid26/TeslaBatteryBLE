@@ -47,6 +47,7 @@ data class BleUiState(
     val scanning: Boolean = false,
     val devices: List<TeslaAdvert> = emptyList(),
     val connections: Map<String, TeslaConnection> = emptyMap(),
+    val selectedAddress: String? = null,
     val vinInput: String = "",
     val expectedBleName: String? = null,
     val pairingPhase: PairingPhase = PairingPhase.IDLE,

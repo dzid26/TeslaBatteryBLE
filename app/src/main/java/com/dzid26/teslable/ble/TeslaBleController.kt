@@ -3,6 +3,8 @@ package com.dzid26.teslable.ble
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothManager
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import com.dzid26.teslable.core.TeslaNames
 import com.dzid26.teslable.core.protocol.TeslaPairing
 import com.dzid26.teslable.core.protocol.TeslaVcsec
@@ -20,7 +22,14 @@ class TeslaBleController(context: Context) {
     private val keyStore = PairingKeyStore(appContext)
     private val clients = mutableMapOf<String, TeslaGattClient>()
     private val failedAddresses = mutableSetOf<String>()
-    private val statusRequested = mutableSetOf<String>()
+    private val handler = Handler(Looper.getMainLooper())
+
+    private val pairingTimeout = Runnable {
+        if (_state.value.pairingPhase == PairingPhase.SENDING) {
+            _state.update { it.copy(pairingPhase = PairingPhase.WAITING_FOR_CARD) }
+            log("No pairing response; tap the card and confirm on the car screen")
+        }
+    }
 
     private val scanner = TeslaScanner(
         context = appContext,
@@ -41,12 +50,12 @@ class TeslaBleController(context: Context) {
         clients.values.forEach { it.close() }
         clients.clear()
         failedAddresses.clear()
-        statusRequested.clear()
         _state.update {
             it.copy(
                 scanning = true,
                 devices = emptyList(),
                 connections = emptyMap(),
+                selectedAddress = null,
                 pairingPhase = PairingPhase.IDLE,
                 log = emptyList(),
             )
@@ -59,8 +68,45 @@ class TeslaBleController(context: Context) {
         _state.update { it.copy(scanning = false) }
     }
 
+    fun onTeslaClicked(address: String) {
+        _state.update { it.copy(selectedAddress = address) }
+        when (_state.value.connections[address]?.phase) {
+            ConnectionPhase.READY -> requestVcsecStatus(address)
+            ConnectionPhase.FAILED, ConnectionPhase.DISCONNECTED, null -> connect(address)
+            else -> Unit
+        }
+    }
+
+    fun pairKey() {
+        val address = _state.value.selectedAddress
+        val connection = address?.let { _state.value.connections[it] }
+        if (address == null || connection?.phase != ConnectionPhase.READY) {
+            log("No selected car ready for pairing")
+            return
+        }
+        val keyPair = keyStore.loadOrCreate()
+        val keyId = keyPair.keyId.toHex()
+        _state.update { it.copy(pairingPhase = PairingPhase.SENDING, pairingKeyId = keyId) }
+        log("${nameFor(address)}: pairing key $keyId")
+        val request = TeslaPairing.buildAddKeyRequest(keyPair.publicKeyRaw)
+        if (clients[address]?.send(request) != true) {
+            _state.update { it.copy(pairingPhase = PairingPhase.ERROR) }
+            log("${nameFor(address)}: failed to send pairing request")
+        } else {
+            handler.removeCallbacks(pairingTimeout)
+            handler.postDelayed(pairingTimeout, PAIRING_TIMEOUT_MS)
+        }
+    }
+
+    fun close() {
+        scanner.stop()
+        clients.values.forEach { it.close() }
+        clients.clear()
+        handler.removeCallbacks(pairingTimeout)
+    }
+
     @SuppressLint("MissingPermission")
-    fun connect(address: String) {
+    private fun connect(address: String) {
         val device = appContext
             .getSystemService(BluetoothManager::class.java)
             ?.adapter
@@ -85,32 +131,6 @@ class TeslaBleController(context: Context) {
         val client = TeslaGattClient(appContext, listenerFor(address))
         clients[address] = client
         client.connect(device)
-    }
-
-    fun pairKey() {
-        val address = _state.value.connections.values
-            .firstOrNull { it.phase == ConnectionPhase.READY }
-            ?.address
-        if (address == null) {
-            log("No connected car to pair with")
-            return
-        }
-        val keyPair = keyStore.loadOrCreate()
-        val keyId = keyPair.keyId.toHex()
-        _state.update { it.copy(pairingPhase = PairingPhase.SENDING, pairingKeyId = keyId) }
-        log("${nameFor(address)}: pairing key $keyId")
-        val request = TeslaPairing.buildAddKeyRequest(keyPair.publicKeyRaw)
-        if (clients[address]?.send(request) != true) {
-            _state.update { it.copy(pairingPhase = PairingPhase.ERROR) }
-            log("${nameFor(address)}: failed to send pairing request")
-        }
-    }
-
-    fun close() {
-        scanner.stop()
-        clients.values.forEach { it.close() }
-        clients.clear()
-        statusRequested.clear()
     }
 
     private fun onDevicesFound(devices: List<TeslaAdvert>) {
@@ -144,7 +164,7 @@ class TeslaBleController(context: Context) {
                 clients.remove(address)?.close()
             }
             updateConnection(address) { it.copy(phase = phase) }
-            if (phase == ConnectionPhase.READY) {
+            if (phase == ConnectionPhase.READY && _state.value.selectedAddress == address) {
                 requestVcsecStatus(address)
             }
         }
@@ -164,6 +184,7 @@ class TeslaBleController(context: Context) {
         override fun onMessage(message: ByteArray) {
             val pairing = runCatching { TeslaPairing.parseAddKeyResponse(message) }.getOrNull()
             if (pairing != null) {
+                handler.removeCallbacks(pairingTimeout)
                 val phase = when (pairing) {
                     TeslaPairing.Result.OK -> PairingPhase.OK
                     TeslaPairing.Result.WAITING_FOR_CARD -> PairingPhase.WAITING_FOR_CARD
@@ -192,7 +213,6 @@ class TeslaBleController(context: Context) {
     }
 
     private fun requestVcsecStatus(address: String) {
-        if (!statusRequested.add(address)) return
         val request = TeslaVcsec.buildStatusRequest()
         log("${nameFor(address)}: TX ${request.size} bytes ${request.toHex()}")
         if (clients[address]?.send(request) != true) {
@@ -225,5 +245,6 @@ class TeslaBleController(context: Context) {
     private companion object {
         const val VIN_LENGTH = 17
         const val LOG_MAX_LINES = 200
+        const val PAIRING_TIMEOUT_MS = 5000L
     }
 }

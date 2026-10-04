@@ -1,19 +1,19 @@
 package com.dzid26.teslable.core.protocol
 
 import com.tesla.generated.keys.Role
-import com.tesla.generated.universalmessage.Domain
 import com.tesla.generated.universalmessage.RoutableMessage
 import com.tesla.generated.vcsec.CommandStatus
 import com.tesla.generated.vcsec.FromVCSECMessage
 import com.tesla.generated.vcsec.KeyFormFactor
 import com.tesla.generated.vcsec.OperationStatus_E
+import com.tesla.generated.vcsec.SignatureType
+import com.tesla.generated.vcsec.ToVCSECMessage
 import com.tesla.generated.vcsec.UnsignedMessage
 import okio.ByteString.Companion.toByteString
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -39,17 +39,16 @@ class TeslaPairingTest {
     }
 
     @Test
-    fun `add key request carries the public key role and form factor`() {
+    fun `add key request is a present-key envelope with the public key and role`() {
         val keyPair = TeslaKeys.generate()
-        val request = RoutableMessage.ADAPTER.decode(
+        val envelope = ToVCSECMessage.ADAPTER.decode(
             TeslaPairing.buildAddKeyRequest(keyPair.publicKeyRaw)
         )
-        assertEquals(Domain.DOMAIN_VEHICLE_SECURITY, request.to_destination?.domain)
-        assertEquals(16, request.uuid.size)
-        assertEquals(16, request.from_destination?.routing_address?.size)
-        assertEquals(0, request.flags)
+        val signedMessage = envelope.signedMessage
+        assertNotNull(signedMessage)
+        assertEquals(SignatureType.SIGNATURE_TYPE_PRESENT_KEY, signedMessage!!.signatureType)
 
-        val payload = UnsignedMessage.ADAPTER.decode(request.protobuf_message_as_bytes!!)
+        val payload = UnsignedMessage.ADAPTER.decode(signedMessage.protobufMessageAsBytes!!)
         val operation = payload.VCSEC_WhitelistOperation
         assertNotNull(operation)
         val change = operation!!.addKeyToWhitelistAndAddPermissions
@@ -63,26 +62,33 @@ class TeslaPairingTest {
     }
 
     @Test
-    fun `parses add key responses`() {
+    fun `parses raw add key responses`() {
         assertEquals(
             TeslaPairing.Result.WAITING_FOR_CARD,
-            TeslaPairing.parseAddKeyResponse(responseWith(OperationStatus_E.OPERATIONSTATUS_WAIT)),
+            TeslaPairing.parseAddKeyResponse(rawResponse(OperationStatus_E.OPERATIONSTATUS_WAIT)),
         )
         assertEquals(
             TeslaPairing.Result.OK,
-            TeslaPairing.parseAddKeyResponse(responseWith(OperationStatus_E.OPERATIONSTATUS_OK)),
+            TeslaPairing.parseAddKeyResponse(rawResponse(OperationStatus_E.OPERATIONSTATUS_OK)),
         )
         assertEquals(
             TeslaPairing.Result.ERROR,
-            TeslaPairing.parseAddKeyResponse(responseWith(OperationStatus_E.OPERATIONSTATUS_ERROR)),
+            TeslaPairing.parseAddKeyResponse(rawResponse(OperationStatus_E.OPERATIONSTATUS_ERROR)),
         )
-        assertEquals(null, TeslaPairing.parseAddKeyResponse(RoutableMessage().encode()))
+        assertEquals(null, TeslaPairing.parseAddKeyResponse(byteArrayOf()))
     }
 
-    private fun responseWith(status: OperationStatus_E): ByteArray {
+    @Test
+    fun `parses wrapped add key responses`() {
         val payload = FromVCSECMessage(
+            commandStatus = CommandStatus(operationStatus = OperationStatus_E.OPERATIONSTATUS_WAIT),
+        ).encode()
+        val wrapped = RoutableMessage(protobuf_message_as_bytes = payload.toByteString()).encode()
+        assertEquals(TeslaPairing.Result.WAITING_FOR_CARD, TeslaPairing.parseAddKeyResponse(wrapped))
+    }
+
+    private fun rawResponse(status: OperationStatus_E): ByteArray =
+        FromVCSECMessage(
             commandStatus = CommandStatus(operationStatus = status),
         ).encode()
-        return RoutableMessage(protobuf_message_as_bytes = payload.toByteString()).encode()
-    }
 }

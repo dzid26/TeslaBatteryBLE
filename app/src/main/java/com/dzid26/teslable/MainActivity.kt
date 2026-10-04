@@ -94,7 +94,7 @@ class MainActivity : ComponentActivity() {
                         }
                     },
                     onVinChange = controller::setVinInput,
-                    onConnect = controller::connect,
+                    onConnect = controller::onTeslaClicked,
                     onPairKey = controller::pairKey,
                 )
             }
