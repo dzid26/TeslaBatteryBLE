@@ -31,6 +31,21 @@ class TeslaBleController(context: Context) {
         }
     }
 
+    private var whitelistPollAttempts = 0
+    private val whitelistPoll = object : Runnable {
+        override fun run() {
+            val address = _state.value.selectedAddress ?: return
+            val phase = _state.value.pairingPhase
+            if (phase == PairingPhase.OK || phase == PairingPhase.ERROR) return
+            if (whitelistPollAttempts++ >= WHITELIST_MAX_ATTEMPTS) {
+                log("Key not enrolled yet; tap the card and retry if needed")
+                return
+            }
+            clients[address]?.send(TeslaVcsec.buildWhitelistInfoRequest())
+            handler.postDelayed(this, WHITELIST_POLL_MS)
+        }
+    }
+
     private val scanner = TeslaScanner(
         context = appContext,
         onDevices = ::onDevicesFound,
@@ -50,6 +65,7 @@ class TeslaBleController(context: Context) {
         clients.values.forEach { it.close() }
         clients.clear()
         failedAddresses.clear()
+        handler.removeCallbacks(whitelistPoll)
         _state.update {
             it.copy(
                 scanning = true,
@@ -95,6 +111,9 @@ class TeslaBleController(context: Context) {
         } else {
             handler.removeCallbacks(pairingTimeout)
             handler.postDelayed(pairingTimeout, PAIRING_TIMEOUT_MS)
+            whitelistPollAttempts = 0
+            handler.removeCallbacks(whitelistPoll)
+            handler.postDelayed(whitelistPoll, WHITELIST_POLL_MS)
         }
     }
 
@@ -103,6 +122,7 @@ class TeslaBleController(context: Context) {
         clients.values.forEach { it.close() }
         clients.clear()
         handler.removeCallbacks(pairingTimeout)
+        handler.removeCallbacks(whitelistPoll)
     }
 
     @SuppressLint("MissingPermission")
@@ -195,6 +215,22 @@ class TeslaBleController(context: Context) {
                 return
             }
 
+            val whitelist = runCatching { TeslaVcsec.parseWhitelistInfoResponse(message) }.getOrNull()
+            if (whitelist != null) {
+                val keyId = _state.value.pairingKeyId
+                val enrolled = keyId != null && whitelist.whitelistEntries.any {
+                    it.publicKeySHA1.toByteArray().copyOf(keyId.length / 2).toHex() == keyId
+                }
+                if (enrolled) {
+                    handler.removeCallbacks(whitelistPoll)
+                    _state.update { it.copy(pairingPhase = PairingPhase.OK) }
+                    log("${nameFor(address)}: key enrolled (${whitelist.numberOfEntries} keys)")
+                } else if (whitelistPollAttempts == 1) {
+                    log("${nameFor(address)}: whitelist has ${whitelist.numberOfEntries} keys")
+                }
+                return
+            }
+
             val status = runCatching { TeslaVcsec.parseStatusResponse(message) }.getOrNull()
             if (status != null) {
                 updateConnection(address) { it.copy(status = status) }
@@ -246,5 +282,7 @@ class TeslaBleController(context: Context) {
         const val VIN_LENGTH = 17
         const val LOG_MAX_LINES = 200
         const val PAIRING_TIMEOUT_MS = 5000L
+        const val WHITELIST_POLL_MS = 2000L
+        const val WHITELIST_MAX_ATTEMPTS = 30
     }
 }

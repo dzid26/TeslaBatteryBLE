@@ -10,6 +10,7 @@ import com.tesla.generated.vcsec.UnsignedMessage
 import com.tesla.generated.vcsec.UserPresence_E
 import com.tesla.generated.vcsec.VehicleLockState_E
 import com.tesla.generated.vcsec.VehicleSleepStatus_E
+import com.tesla.generated.vcsec.WhitelistInfo
 import okio.ByteString.Companion.toByteString
 import java.security.SecureRandom
 
@@ -24,20 +25,11 @@ object TeslaVcsec {
         val userPresent: Boolean,
     )
 
-    fun buildStatusRequest(): ByteArray {
-        val payload = UnsignedMessage(
-            VCSEC_InformationRequest = InformationRequest(
-                informationRequestType = InformationRequestType.INFORMATION_REQUEST_TYPE_GET_STATUS,
-            ),
-        ).encode()
-        return RoutableMessage(
-            to_destination = Destination(domain = Domain.DOMAIN_VEHICLE_SECURITY),
-            from_destination = Destination(routing_address = randomBytes().toByteString()),
-            protobuf_message_as_bytes = payload.toByteString(),
-            uuid = randomBytes().toByteString(),
-            flags = 0,
-        ).encode()
-    }
+    fun buildStatusRequest(): ByteArray =
+        buildInformationRequest(InformationRequestType.INFORMATION_REQUEST_TYPE_GET_STATUS)
+
+    fun buildWhitelistInfoRequest(): ByteArray =
+        buildInformationRequest(InformationRequestType.INFORMATION_REQUEST_TYPE_GET_WHITELIST_INFO)
 
     fun parseStatusResponse(bytes: ByteArray): Status? {
         val message = RoutableMessage.ADAPTER.decode(bytes)
@@ -48,6 +40,27 @@ object TeslaVcsec {
             asleep = status.vehicleSleepStatus == VehicleSleepStatus_E.VEHICLE_SLEEP_STATUS_ASLEEP,
             userPresent = status.userPresence == UserPresence_E.VEHICLE_USER_PRESENCE_PRESENT,
         )
+    }
+
+    fun parseWhitelistInfoResponse(bytes: ByteArray): WhitelistInfo? {
+        val message = RoutableMessage.ADAPTER.decode(bytes)
+        val payload = message.protobuf_message_as_bytes ?: return null
+        return FromVCSECMessage.ADAPTER.decode(payload).whitelistInfo
+    }
+
+    private fun buildInformationRequest(type: InformationRequestType): ByteArray {
+        val payload = UnsignedMessage(
+            VCSEC_InformationRequest = InformationRequest(
+                informationRequestType = type,
+            ),
+        ).encode()
+        return RoutableMessage(
+            to_destination = Destination(domain = Domain.DOMAIN_VEHICLE_SECURITY),
+            from_destination = Destination(routing_address = randomBytes().toByteString()),
+            protobuf_message_as_bytes = payload.toByteString(),
+            uuid = randomBytes().toByteString(),
+            flags = 0,
+        ).encode()
     }
 
     private fun randomBytes(): ByteArray = ByteArray(ADDRESS_LENGTH).also(random::nextBytes)
