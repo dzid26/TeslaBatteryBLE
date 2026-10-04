@@ -122,6 +122,8 @@ class MainActivity : ComponentActivity() {
                     onVinChange = controller::setVinInput,
                     onConnect = controller::onTeslaClicked,
                     onPairKey = controller::pairKey,
+                    onWake = controller::wakeVehicle,
+                    onReadSoc = controller::requestChargeState,
                 )
             }
         }

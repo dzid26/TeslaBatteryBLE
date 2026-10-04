@@ -3,6 +3,7 @@ package com.dzid26.teslable.ui
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -40,6 +41,8 @@ fun ScannerScreen(
     onVinChange: (String) -> Unit,
     onConnect: (String) -> Unit,
     onPairKey: () -> Unit,
+    onWake: () -> Unit,
+    onReadSoc: () -> Unit,
 ) {
     Scaffold(
         topBar = { TopAppBar(title = { Text("TeslaBatteryBLE") }) },
@@ -125,6 +128,23 @@ fun ScannerScreen(
                         else -> MaterialTheme.colorScheme.onSurfaceVariant
                     },
                 )
+            }
+            Spacer(Modifier.height(8.dp))
+
+            val selectedSessions = selectedConnection?.sessions ?: emptyList()
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = onWake,
+                    enabled = selectedSessions.contains("DOMAIN_VEHICLE_SECURITY"),
+                ) {
+                    Text("Wake vehicle")
+                }
+                Button(
+                    onClick = onReadSoc,
+                    enabled = selectedConnection?.phase == ConnectionPhase.READY,
+                ) {
+                    Text("Read SOC")
+                }
             }
             Spacer(Modifier.height(8.dp))
 
@@ -217,6 +237,14 @@ private fun DeviceRow(
             if (connection != null && connection.sessions.isNotEmpty()) {
                 Text(
                     text = "sessions: ${connection.sessions.joinToString()}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+            connection?.charge?.let { charge ->
+                Text(
+                    text = "SOC: ${charge.batteryLevel ?: "?"}%  limit: ${charge.chargeLimit ?: "?"}%  " +
+                        (charge.chargingState ?: ""),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.primary,
                 )

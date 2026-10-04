@@ -6,6 +6,7 @@ import com.tesla.generated.universalmessage.RoutableMessage
 import com.tesla.generated.vcsec.FromVCSECMessage
 import com.tesla.generated.vcsec.InformationRequest
 import com.tesla.generated.vcsec.InformationRequestType
+import com.tesla.generated.vcsec.OperationStatus_E
 import com.tesla.generated.vcsec.UnsignedMessage
 import com.tesla.generated.vcsec.UserPresence_E
 import com.tesla.generated.vcsec.VehicleLockState_E
@@ -60,6 +61,9 @@ object TeslaVcsec {
         val payload = message.protobuf_message_as_bytes ?: return null
         return FromVCSECMessage.ADAPTER.decode(payload).whitelistEntryInfo
     }
+
+    fun parseCommandStatus(payload: ByteArray): OperationStatus_E? =
+        FromVCSECMessage.ADAPTER.decode(payload).commandStatus?.operationStatus
 
     private fun buildInformationRequest(
         type: InformationRequestType,

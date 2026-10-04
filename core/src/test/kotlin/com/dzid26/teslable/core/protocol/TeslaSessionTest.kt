@@ -106,6 +106,33 @@ class TeslaSessionTest {
         assertEquals(null, session.decrypt(response, requestId))
     }
 
+    @Test
+    fun `encrypt uses the injected nonce`() {
+        val fixedNonce = ByteArray(12) { 7 }
+        val info = sessionInfo()
+        val tag = TeslaSession.sessionInfoHmac(sessionKey, vin, challenge, info)
+        val session = TeslaSession.import(
+            privateKeyPkcs8 = client.privateKeyPkcs8,
+            publicKeyRaw = client.publicKeyRaw,
+            vin = vin,
+            challenge = challenge,
+            encodedInfo = info,
+            tag = tag,
+            clock = { 0 },
+            nonceGenerator = { fixedNonce },
+        )!!
+        val message = RoutableMessage(
+            to_destination = Destination(domain = Domain.DOMAIN_INFOTAINMENT),
+            from_destination = Destination(routing_address = ByteArray(16).toByteString()),
+            protobuf_message_as_bytes = "hello".toByteArray().toByteString(),
+        )
+        val encrypted = session.encrypt(message, 5)!!
+        assertArrayEquals(
+            fixedNonce,
+            encrypted.signature_data?.AES_GCM_Personalized_data?.nonce?.toByteArray(),
+        )
+    }
+
     private fun vehicleResponse(
         requestId: ByteArray,
         plaintext: ByteArray,

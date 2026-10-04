@@ -44,3 +44,28 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: app/build/outputs/apk/debug/*.apk
+
+  go-vectors:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: Clone vehicle-command
+        run: git clone --depth 1 https://github.com/teslamotors/vehicle-command.git /tmp/vehicle-command
+
+      - name: Generate fixtures from the Go runtime
+        run: |
+          mkdir -p /tmp/vehicle-command/fixtures
+          cp tools/go-fixtures/main.go /tmp/vehicle-command/fixtures/main.go
+          cd /tmp/vehicle-command
+          go run ./fixtures > /tmp/fixtures.txt
+
+      - name: Compare deterministic fixtures
+        run: |
+          grep -E '^(CLIENT_PRIVATE_PKCS8|CLIENT_PUBLIC|VEHICLE_PUBLIC|SESSION_INFO|CHALLENGE|SESSION_INFO_TAG|RESPONSE_REQUEST_ID|RESPONSE_PLAINTEXT)=' /tmp/fixtures.txt > /tmp/got.txt
+          diff tools/go-fixtures/expected.txt /tmp/got.txt

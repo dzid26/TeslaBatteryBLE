@@ -1,5 +1,6 @@
 package com.dzid26.teslable.ble
 
+import com.dzid26.teslable.core.protocol.TeslaCommands
 import com.dzid26.teslable.core.protocol.TeslaVcsec
 import java.util.UUID
 
@@ -19,6 +20,7 @@ data class TeslaConnection(
     val status: TeslaVcsec.Status? = null,
     val keySlot: Int? = null,
     val sessions: List<String> = emptyList(),
+    val charge: TeslaCommands.Charge? = null,
 )
 
 data class GattServiceInfo(

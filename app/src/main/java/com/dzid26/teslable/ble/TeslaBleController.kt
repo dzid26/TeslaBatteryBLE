@@ -5,6 +5,7 @@ import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import com.dzid26.teslable.core.protocol.TeslaCommands
 import com.dzid26.teslable.core.protocol.TeslaCrypto
 import com.dzid26.teslable.core.protocol.TeslaSession
 import com.dzid26.teslable.core.protocol.TeslaSessionRequests
@@ -35,8 +36,19 @@ class TeslaBleController(context: Context) {
     private val clientAddress = TeslaCrypto.randomBytes(16)
     private val sessions = mutableMapOf<String, MutableMap<Domain, TeslaSession>>()
     private val pendingSessions = mutableMapOf<String, PendingSession>()
+    private val pendingCommands = mutableMapOf<String, PendingCommand>()
+    private var chargeAfterSession = false
 
     private data class PendingSession(val address: String, val domain: Domain)
+
+    private data class PendingCommand(
+        val address: String,
+        val domain: Domain,
+        val requestId: ByteArray,
+        val kind: CommandKind,
+    )
+
+    private enum class CommandKind { WAKE, CHARGE }
 
     private val pairingTimeout = Runnable {
         if (_state.value.pairingPhase == PairingPhase.SENDING) {
@@ -93,6 +105,8 @@ class TeslaBleController(context: Context) {
         keySlotQueue = emptyList()
         sessions.clear()
         pendingSessions.clear()
+        pendingCommands.clear()
+        chargeAfterSession = false
         _state.update {
             it.copy(
                 scanning = true,
@@ -240,6 +254,7 @@ class TeslaBleController(context: Context) {
 
         override fun onMessage(message: ByteArray) {
             if (handleSessionInfo(address, message)) return
+            if (handleEncryptedResponse(address, message)) return
 
             val pairing = runCatching { TeslaPairing.parseAddKeyResponse(message) }.getOrNull()
             if (pairing != null) {
@@ -360,6 +375,10 @@ class TeslaBleController(context: Context) {
             )
         }
         log("${nameFor(address)}: session established (${pending.domain.name})")
+        if (pending.domain == Domain.DOMAIN_INFOTAINMENT && chargeAfterSession) {
+            chargeAfterSession = false
+            requestChargeState()
+        }
         return true
     }
 
@@ -427,6 +446,97 @@ class TeslaBleController(context: Context) {
     private fun occupiedSlots(slotMask: Int): List<Int> =
         (0 until Int.SIZE_BITS).filter { (slotMask ushr it) and 1 == 1 }
 
+    fun wakeVehicle() {
+        val address = _state.value.selectedAddress ?: return
+        if (sessions[address]?.containsKey(Domain.DOMAIN_VEHICLE_SECURITY) != true) {
+            log("${nameFor(address)}: no VCSEC session to wake with")
+            return
+        }
+        sendAuthenticated(
+            address = address,
+            domain = Domain.DOMAIN_VEHICLE_SECURITY,
+            payload = TeslaCommands.buildWakeRequest(),
+            kind = CommandKind.WAKE,
+        )
+    }
+
+    fun requestChargeState() {
+        val address = _state.value.selectedAddress ?: return
+        if (sessions[address]?.containsKey(Domain.DOMAIN_INFOTAINMENT) == true) {
+            sendAuthenticated(
+                address = address,
+                domain = Domain.DOMAIN_INFOTAINMENT,
+                payload = TeslaCommands.buildChargeStateRequest(),
+                kind = CommandKind.CHARGE,
+            )
+        } else {
+            chargeAfterSession = true
+            log("${nameFor(address)}: requesting Infotainment session for SOC")
+            startSession(address)
+        }
+    }
+
+    private fun sendAuthenticated(
+        address: String,
+        domain: Domain,
+        payload: ByteArray,
+        kind: CommandKind,
+    ): Boolean {
+        val session = sessions[address]?.get(domain) ?: run {
+            log("${nameFor(address)}: no session for ${domain.name}")
+            return false
+        }
+        val uuid = TeslaCrypto.randomBytes(16)
+        val routing = if (domain == Domain.DOMAIN_VEHICLE_SECURITY) {
+            TeslaCrypto.randomBytes(16)
+        } else {
+            clientAddress
+        }
+        val message = TeslaSessionRequests.buildAuthenticatedRequest(domain, payload, routing, uuid)
+        val encrypted = session.encrypt(message, COMMAND_EXPIRES_SECONDS) ?: run {
+            log("${nameFor(address)}: encryption failed")
+            return false
+        }
+        val requestId = session.requestId(encrypted) ?: return false
+        pendingCommands[uuid.toHex()] = PendingCommand(address, domain, requestId, kind)
+        log("${nameFor(address)}: TX ${kind.name.lowercase()} (${encrypted.protobuf_message_as_bytes?.size ?: 0} bytes)")
+        return clients[address]?.send(encrypted.encode()) == true
+    }
+
+    private fun handleEncryptedResponse(address: String, bytes: ByteArray): Boolean {
+        val message = runCatching { RoutableMessage.ADAPTER.decode(bytes) }.getOrNull()
+            ?: return false
+        if (message.signature_data?.AES_GCM_Response_data == null) return false
+        val pending = pendingCommands.remove(message.request_uuid.toByteArray().toHex()) ?: return false
+        val session = sessions[pending.address]?.get(pending.domain) ?: return true
+        val plaintext = session.decrypt(message, pending.requestId)
+        if (plaintext == null) {
+            log("${nameFor(pending.address)}: response decryption failed (${pending.kind.name.lowercase()})")
+            return true
+        }
+        when (pending.kind) {
+            CommandKind.WAKE -> {
+                val status = runCatching { TeslaVcsec.parseCommandStatus(plaintext) }.getOrNull()
+                log("${nameFor(pending.address)}: wake ${status?.name ?: "response received"}")
+            }
+
+            CommandKind.CHARGE -> {
+                val charge = runCatching { TeslaCommands.parseChargeState(plaintext) }.getOrNull()
+                if (charge != null) {
+                    updateConnection(pending.address) { it.copy(charge = charge) }
+                    log(
+                        "${nameFor(pending.address)}: SOC ${charge.batteryLevel}% " +
+                            "(${charge.chargingState ?: "unknown"})"
+                    )
+                    charge.batteryLevel?.let { BleTrackingService.updateBatteryPercent(it) }
+                } else {
+                    log("${nameFor(pending.address)}: charge response missing data")
+                }
+            }
+        }
+        return true
+    }
+
     private fun updateConnection(address: String, transform: (TeslaConnection) -> TeslaConnection) {
         _state.update { state ->
             val connection = state.connections[address] ?: return@update state
@@ -455,6 +565,7 @@ class TeslaBleController(context: Context) {
         const val PAIRING_TIMEOUT_MS = 5000L
         const val WHITELIST_POLL_MS = 2000L
         const val WHITELIST_MAX_ATTEMPTS = 30
+        const val COMMAND_EXPIRES_SECONDS = 5
         const val PREFS = "teslable"
         const val KEY_VIN = "vin"
         val SESSION_DOMAINS = listOf(

@@ -18,6 +18,7 @@ class TeslaSession private constructor(
     private val epoch: ByteArray,
     private var timeZeroMs: Long,
     private val clock: () -> Long,
+    private val nonceGenerator: () -> ByteArray,
 ) {
     private val window = AntiReplayWindow()
 
@@ -43,7 +44,7 @@ class TeslaSession private constructor(
             metadata.addUint32(Tag.TAG_FLAGS.value, message.flags)
         }
 
-        val nonce = TeslaCrypto.randomBytes(TeslaCrypto.NONCE_SIZE)
+        val nonce = nonceGenerator()
         val (ciphertext, tag) = TeslaCrypto.encryptGcm(
             sessionKey,
             nonce,
@@ -129,6 +130,7 @@ class TeslaSession private constructor(
             encodedInfo: ByteArray,
             tag: ByteArray,
             clock: () -> Long = System::currentTimeMillis,
+            nonceGenerator: () -> ByteArray = { TeslaCrypto.randomBytes(TeslaCrypto.NONCE_SIZE) },
         ): TeslaSession? {
             val info = runCatching { SessionInfo.ADAPTER.decode(encodedInfo) }.getOrNull() ?: return null
             val remotePublic = info.publicKey.toByteArray()
@@ -147,6 +149,7 @@ class TeslaSession private constructor(
                 epoch = info.epoch.toByteArray(),
                 timeZeroMs = clock() - info.clock_time * 1000L,
                 clock = clock,
+                nonceGenerator = nonceGenerator,
             )
         }
     }
