@@ -1,18 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- API 31+: exclude all app data from cloud backup and device-to-device transfer. -->
+<!-- API 31+: keep user data in backup/transfer, but never the pairing key material. -->
 <data-extraction-rules>
     <cloud-backup>
-        <exclude domain="root" path="." />
-        <exclude domain="file" path="." />
-        <exclude domain="database" path="." />
-        <exclude domain="sharedpref" path="." />
-        <exclude domain="external" path="." />
+        <exclude domain="sharedpref" path="pairing_key.xml" />
     </cloud-backup>
     <device-transfer>
-        <exclude domain="root" path="." />
-        <exclude domain="file" path="." />
-        <exclude domain="database" path="." />
-        <exclude domain="sharedpref" path="." />
-        <exclude domain="external" path="." />
+        <exclude domain="sharedpref" path="pairing_key.xml" />
     </device-transfer>
 </data-extraction-rules>
