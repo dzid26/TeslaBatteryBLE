@@ -118,6 +118,7 @@ class TeslaBleController(context: Context) {
                 requestVcsecStatus(address)
                 requestKeySlot(address)
                 startSession(address)
+                stopScan()
             }
 
             ConnectionPhase.FAILED, ConnectionPhase.DISCONNECTED, null -> connect(address)

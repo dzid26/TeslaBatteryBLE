@@ -10,6 +10,8 @@ import android.bluetooth.BluetoothProfile
 import android.bluetooth.BluetoothStatusCodes
 import android.content.Context
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import com.dzid26.teslable.core.TeslaGatt
 import com.dzid26.teslable.core.framing.BleFramer
 
@@ -35,6 +37,13 @@ class TeslaGattClient(
     private var mtuDone = false
     private var deviceNameRequested = false
     private val framer = BleFramer()
+    private val handler = Handler(Looper.getMainLooper())
+    private val writeQueue = ArrayDeque<ByteArray>()
+    private var writeInProgress = false
+    private val writeTimeout = Runnable {
+        writeInProgress = false
+        processWriteQueue()
+    }
 
     @SuppressLint("MissingPermission")
     fun connect(device: BluetoothDevice) {
@@ -54,36 +63,53 @@ class TeslaGattClient(
         descriptorWriteDone = false
         mtuDone = false
         deviceNameRequested = false
+        writeQueue.clear()
+        writeInProgress = false
+        handler.removeCallbacks(writeTimeout)
     }
 
     fun send(payload: ByteArray): Boolean {
-        val gatt = gatt ?: return false
-        val characteristic = txCharacteristic ?: run {
+        if (gatt == null) return false
+        if (txCharacteristic == null) {
             listener.onLog("TX characteristic not ready")
             return false
         }
         val chunkSize = (negotiatedMtu - ATT_HEADER_BYTES).coerceAtLeast(MIN_CHUNK_SIZE)
-        for (chunk in BleFramer.encode(payload, chunkSize)) {
-            val started = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                gatt.writeCharacteristic(
-                    characteristic,
-                    chunk,
-                    BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE,
-                ) == BluetoothStatusCodes.SUCCESS
-            } else {
-                @Suppress("DEPRECATION")
-                characteristic.writeType = BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
-                @Suppress("DEPRECATION")
-                characteristic.value = chunk
-                @Suppress("DEPRECATION")
-                gatt.writeCharacteristic(characteristic)
-            }
-            if (!started) {
-                listener.onLog("writeCharacteristic() failed")
-                return false
-            }
-        }
+        writeQueue.addAll(BleFramer.encode(payload, chunkSize))
+        processWriteQueue()
         return true
+    }
+
+    private fun processWriteQueue() {
+        if (writeInProgress) return
+        val gatt = gatt ?: return
+        val characteristic = txCharacteristic ?: return
+        val chunk = writeQueue.removeFirstOrNull() ?: return
+
+        writeInProgress = true
+        val started = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            gatt.writeCharacteristic(
+                characteristic,
+                chunk,
+                BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE,
+            ) == BluetoothStatusCodes.SUCCESS
+        } else {
+            @Suppress("DEPRECATION")
+            characteristic.writeType = BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
+            @Suppress("DEPRECATION")
+            characteristic.value = chunk
+            @Suppress("DEPRECATION")
+            gatt.writeCharacteristic(characteristic)
+        }
+
+        if (!started) {
+            writeInProgress = false
+            writeQueue.addFirst(chunk)
+            handler.postDelayed({ processWriteQueue() }, WRITE_RETRY_MS)
+            return
+        }
+        handler.removeCallbacks(writeTimeout)
+        handler.postDelayed(writeTimeout, WRITE_TIMEOUT_MS)
     }
 
     private val callback = object : BluetoothGattCallback() {
@@ -217,6 +243,20 @@ class TeslaGattClient(
         ) {
             handleNotification(value)
         }
+
+        override fun onCharacteristicWrite(
+            gatt: BluetoothGatt,
+            characteristic: BluetoothGattCharacteristic,
+            status: Int,
+        ) {
+            if (characteristic.uuid != TeslaGatt.TO_VEHICLE_UUID) return
+            if (status != BluetoothGatt.GATT_SUCCESS) {
+                listener.onLog("write failed with status $status")
+            }
+            handler.removeCallbacks(writeTimeout)
+            writeInProgress = false
+            processWriteQueue()
+        }
     }
 
     @SuppressLint("MissingPermission")
@@ -295,6 +335,8 @@ class TeslaGattClient(
         private const val DEFAULT_MTU = 23
         private const val ATT_HEADER_BYTES = 3
         private const val MIN_CHUNK_SIZE = 20
+        private const val WRITE_TIMEOUT_MS = 1000L
+        private const val WRITE_RETRY_MS = 100L
         private val GENERIC_ACCESS_SERVICE =
             java.util.UUID.fromString("00001800-0000-1000-8000-00805f9b34fb")
         private val DEVICE_NAME_CHARACTERISTIC =
