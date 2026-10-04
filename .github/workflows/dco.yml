@@ -1,0 +1,36 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+name: DCO
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dco-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  dco:
+    runs-on: ubuntu-latest
+    if: github.actor != 'dependabot[bot]'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check DCO sign-off
+        shell: bash
+        run: |
+          missing=0
+          for sha in $(git log --format=%H "origin/${{ github.base_ref }}..${{ github.sha }}"); do
+            if ! git log -1 --format=%B "$sha" | grep -qiE '^Signed-off-by: .+ <.+>'; then
+              echo "Missing Signed-off-by trailer in commit: $sha"
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            echo "All commits must include a Signed-off-by trailer (git commit -s)."
+            exit 1
+          fi
+          echo "All commits are signed off."
