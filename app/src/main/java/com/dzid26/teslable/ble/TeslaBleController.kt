@@ -539,6 +539,10 @@ class TeslaBleController(context: Context) {
 
     fun wakeVehicle() {
         val address = _state.value.selectedAddress ?: return
+        if (_state.value.connections[address]?.status?.asleep == false) {
+            log("${nameFor(address)}: car is already awake")
+            return
+        }
         if (sessions[address]?.containsKey(Domain.DOMAIN_VEHICLE_SECURITY) != true) {
             log("${nameFor(address)}: no VCSEC session to wake with")
             return

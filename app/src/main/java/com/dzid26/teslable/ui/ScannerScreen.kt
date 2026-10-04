@@ -135,7 +135,8 @@ fun ScannerScreen(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(
                     onClick = onWake,
-                    enabled = selectedSessions.contains("DOMAIN_VEHICLE_SECURITY"),
+                    enabled = selectedSessions.contains("DOMAIN_VEHICLE_SECURITY") &&
+                        selectedConnection?.status?.asleep == true,
                 ) {
                     Text("Wake vehicle")
                 }
