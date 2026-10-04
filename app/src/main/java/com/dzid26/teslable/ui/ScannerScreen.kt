@@ -128,14 +128,14 @@ fun ScannerScreen(
                     onToggleScan = onToggleScan,
                     onConnect = onConnect,
                     onPairKey = onPairKey,
-                    onWake = onWake,
-                    onReadSoc = onReadSoc,
                 )
 
                 else -> CarTab(
                     state = state,
                     history = history,
                     onVinChange = onVinChange,
+                    onWake = onWake,
+                    onReadSoc = onReadSoc,
                 )
             }
         }
@@ -151,8 +151,6 @@ private fun ConnectionTab(
     onToggleScan: () -> Unit,
     onConnect: (String) -> Unit,
     onPairKey: (String) -> Unit,
-    onWake: () -> Unit,
-    onReadSoc: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -222,26 +220,6 @@ private fun ConnectionTab(
             Spacer(Modifier.height(8.dp))
         }
 
-        val selectedConnection = state.selectedAddress?.let { state.connections[it] }
-        val selectedSessions = selectedConnection?.sessions ?: emptyList()
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(
-                onClick = onWake,
-                enabled = selectedSessions.contains("DOMAIN_VEHICLE_SECURITY") &&
-                    selectedConnection?.status?.asleep == true,
-            ) {
-                Text("Wake vehicle")
-            }
-            Button(
-                onClick = onReadSoc,
-                enabled = selectedConnection?.phase == ConnectionPhase.READY &&
-                    selectedConnection.status?.asleep == false,
-            ) {
-                Text("Read SOC")
-            }
-        }
-        Spacer(Modifier.height(8.dp))
-
         LazyColumn(
             modifier = Modifier
                 .weight(1f)
@@ -302,12 +280,15 @@ private fun CarTab(
     state: BleUiState,
     history: List<BatterySample>,
     onVinChange: (String) -> Unit,
+    onWake: () -> Unit,
+    onReadSoc: () -> Unit,
 ) {
     val selectedConnection = state.selectedAddress?.let { state.connections[it] }
     val selectedAdvert = selectedConnection?.let { connection ->
         state.devices.firstOrNull { it.address == connection.address }
             ?: TeslaAdvert(connection.name, connection.address, connection.rssi)
     }
+    val selectedSessions = selectedConnection?.sessions ?: emptyList()
     var editingVin by rememberSaveable { mutableStateOf(state.vinInput.isEmpty()) }
 
     Column(
@@ -316,15 +297,6 @@ private fun CarTab(
             .verticalScroll(rememberScrollState())
             .padding(16.dp),
     ) {
-        selectedConnection?.let { connection ->
-            CarHeader(
-                display = connectionDisplay(connection, selectedAdvert),
-                address = connection.address,
-                asleep = connection.status?.asleep,
-            )
-            Spacer(Modifier.height(16.dp))
-        }
-
         if (editingVin) {
             OutlinedTextField(
                 value = state.vinInput,
@@ -342,21 +314,43 @@ private fun CarTab(
             )
         } else {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("VIN", style = MaterialTheme.typography.labelSmall)
-                    Text(state.vinInput, style = MaterialTheme.typography.bodyMedium)
-                }
+                Text(
+                    text = "VIN ${state.vinInput}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontFamily = FontFamily.Monospace,
+                    modifier = Modifier.weight(1f),
+                )
                 TextButton(onClick = { editingVin = true }) {
                     Text("Edit")
                 }
             }
         }
-        state.expectedBleName?.let { expected ->
-            Text(
-                text = "Advertised name: $expected",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+        Spacer(Modifier.height(16.dp))
+
+        selectedConnection?.let { connection ->
+            CarHeader(
+                display = connectionDisplay(connection, selectedAdvert),
+                address = connection.address,
+                asleep = connection.status?.asleep,
             )
+            Spacer(Modifier.height(16.dp))
+        }
+
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(
+                onClick = onWake,
+                enabled = selectedSessions.contains("DOMAIN_VEHICLE_SECURITY") &&
+                    selectedConnection?.status?.asleep == true,
+            ) {
+                Text("Wake vehicle")
+            }
+            Button(
+                onClick = onReadSoc,
+                enabled = selectedConnection?.phase == ConnectionPhase.READY &&
+                    selectedConnection.status?.asleep == false,
+            ) {
+                Text("Read SOC")
+            }
         }
         Spacer(Modifier.height(16.dp))
 
