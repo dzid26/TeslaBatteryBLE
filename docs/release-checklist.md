@@ -24,9 +24,9 @@
 
 ## Current status
 
-- Stable signing keystore is pending (owner action). Until it exists there are no production-signed releases.
-- The preview channel ships debug APKs on the rolling `preview` tag, rebuilt from `main` on every push.
-- Do not call debug APKs production. Preview builds install side by side with a future stable release but carry no release signature.
+- Stable signing: one owner-held keystore signs local builds, preview builds and tagged releases (Gradle reads the gitignored `keystore.properties`; CI reads the `SIGNING_*` repository secrets). Keep the keystore and its password backed up - losing them means no further updates to installed apps.
+- The preview channel ships signed debug APKs on the rolling `preview` tag, rebuilt from `main` on every push.
+- Switching signing keys (or installing a build signed elsewhere, e.g. F-Droid) requires uninstall + reinstall, which also deletes the car pairing key (re-pair with the NFC card).
 
 ## Store distribution (when signed)
 
