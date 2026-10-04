@@ -5,6 +5,10 @@
 # Usage: capture-screenshots.sh <apk> <output-dir> [package] [activity]
 set -euo pipefail
 
+# Git Bash on Windows rewrites /sdcard paths passed to adb; keep them literal.
+export MSYS_NO_PATHCONV=1
+export MSYS2_ARG_CONV_EXCL='*'
+
 APK="${1:?usage: capture-screenshots.sh <apk> <output-dir> [package] [activity]}"
 OUT="${2:?usage: capture-screenshots.sh <apk> <output-dir> [package] [activity]}"
 PKG="${3:-com.dzid26.teslable}"
@@ -93,8 +97,8 @@ adb exec-out screencap -p > "$OUT/01-overview.png"
 tap_text() {
   local text="$1" bounds cx cy
   adb shell uiautomator dump /sdcard/window.xml > /dev/null 2>&1 || return 1
-  adb pull /sdcard/window.xml /tmp/window.xml > /dev/null 2>&1 || return 1
-  bounds="$(tr '>' '\n' < /tmp/window.xml \
+  adb pull /sdcard/window.xml "$OUT/.window.xml" > /dev/null 2>&1 || return 1
+  bounds="$(tr '>' '\n' < "$OUT/.window.xml" \
     | grep -F "text=\"$text\"" \
     | grep -o 'bounds="\[[0-9]*,[0-9]*\]\[[0-9]*,[0-9]*\]"' \
     | head -n 1)" || return 1
