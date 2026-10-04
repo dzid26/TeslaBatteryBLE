@@ -1,0 +1,64 @@
+name: Bug report
+description: Something isn't working (app, protocol, pairing, background tracking)
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Never paste VINs, private keys, or session keys — redact them.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open the app
+        2. Scan for Teslas
+        3. ...
+    validations:
+      required: true
+  - type: input
+    id: app-version
+    attributes:
+      label: App version
+      description: From the About screen or the APK filename (e.g. 0.1.0-beta.1 / preview 7f07bd1)
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Device and Android version
+      placeholder: Pixel 8, Android 16
+    validations:
+      required: true
+  - type: input
+    id: car
+    attributes:
+      label: Car (optional)
+      placeholder: Model 3 2022, vehicle software 2026.32, region EU
+    validations:
+      required: false
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs (optional, redacted)
+      description: Relevant logcat output. Remove VINs and any key material.
+      render: text
+    validations:
+      required: false
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues for duplicates
+          required: true
+        - label: I removed VINs, keys, and other sensitive data from this report
+          required: true
