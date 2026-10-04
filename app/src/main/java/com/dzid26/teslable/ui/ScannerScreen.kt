@@ -109,9 +109,12 @@ fun ScannerScreen(
                     text = when (state.pairingPhase) {
                         PairingPhase.SENDING -> "Sending pairing request..."
                         PairingPhase.WAITING_FOR_CARD ->
-                            "Tap your NFC card on the center console, then confirm on the car screen."
+                            "Tap your NFC card on the center console and confirm on the car screen. " +
+                                "Then rename the new 'Unknown device' key in Controls > Locks."
 
-                        PairingPhase.OK -> "Key paired: ${state.pairingKeyId}"
+                        PairingPhase.OK ->
+                            "Key paired: ${state.pairingKeyId} (rename it in Controls > Locks)"
+
                         PairingPhase.ERROR -> "Pairing failed"
                         PairingPhase.IDLE -> ""
                     },

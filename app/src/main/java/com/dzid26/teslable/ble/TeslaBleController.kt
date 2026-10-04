@@ -196,6 +196,7 @@ class TeslaBleController(context: Context) {
             if (phase == ConnectionPhase.READY && _state.value.selectedAddress == address) {
                 requestVcsecStatus(address)
                 requestKeySlot(address)
+                stopScan()
             }
         }
 
