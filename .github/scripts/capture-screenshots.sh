@@ -13,14 +13,25 @@ mkdir -p "$OUT"
 
 adb wait-for-device
 
-# The emulator script starts as soon as the device is online, which can still
-# be inside the boot animation; wait for the system to finish booting.
-for _ in $(seq 1 60); do
-  if [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; then
+# UI interaction needs more than sys.boot_completed: the input service and the
+# package manager must be up too, and they can lag minutes behind without KVM.
+ready=false
+for _ in $(seq 1 96); do
+  boot_completed="$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')"
+  input_service="$(adb shell service check input 2>/dev/null | tr -d '\r')"
+  package_manager="$(adb shell pm path android 2>/dev/null | tr -d '\r')"
+  if [ "$boot_completed" = "1" ] &&
+    [ "${input_service#*: }" = "found" ] &&
+    [ "${package_manager%%:*}" = "package" ]; then
+    ready=true
     break
   fi
   sleep 5
 done
+if [ "$ready" != true ]; then
+  echo "emulator framework did not become ready; skipping screenshots" >&2
+  exit 1
+fi
 
 # Keep the screen on and make sure it is awake. `screencap` returns a black
 # frame while the emulator display is asleep.
@@ -35,7 +46,18 @@ done
 adb shell input keyevent KEYCODE_WAKEUP || true
 adb shell wm dismiss-keyguard || true
 
-adb install -r "$APK"
+installed=false
+for _ in 1 2 3; do
+  if adb install -r "$APK"; then
+    installed=true
+    break
+  fi
+  sleep 10
+done
+if [ "$installed" != true ]; then
+  echo "failed to install $APK" >&2
+  exit 1
+fi
 
 # Grant the permissions the app asks for so no dialogs cover the UI.
 for permission in \

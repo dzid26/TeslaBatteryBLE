@@ -67,9 +67,15 @@ jobs:
           name: teslable-debug-apk
           path: dist
 
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
       - name: Capture screenshots on emulator
         continue-on-error: true
-        timeout-minutes: 10
+        timeout-minutes: 15
         uses: ReactiveCircus/android-emulator-runner@v2
         with:
           api-level: 30
