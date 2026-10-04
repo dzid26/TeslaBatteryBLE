@@ -30,7 +30,7 @@ class GoVectorTest {
     fun `decrypts a response produced by the go runtime`() {
         val session = createSession()!!
         val message = RoutableMessage.ADAPTER.decode(RESPONSE_MESSAGE.hex())
-        val plaintext = session.decrypt(message, RESPONSE_REQUEST_ID.hex())
+        val plaintext = session.decrypt(message, RESPONSE_REQUEST_ID.hex(), AntiReplayWindow())
         assertArrayEquals(RESPONSE_PLAINTEXT.hex(), plaintext)
     }
 

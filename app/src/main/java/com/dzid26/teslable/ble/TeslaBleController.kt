@@ -5,6 +5,7 @@ import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import com.dzid26.teslable.core.protocol.AntiReplayWindow
 import com.dzid26.teslable.core.protocol.TeslaCommands
 import com.dzid26.teslable.core.protocol.TeslaCrypto
 import com.dzid26.teslable.core.protocol.TeslaSession
@@ -101,6 +102,7 @@ class TeslaBleController(context: Context) {
         val domain: Domain,
         val requestId: ByteArray,
         val kind: CommandKind,
+        val window: AntiReplayWindow = AntiReplayWindow(),
     )
 
     private enum class CommandKind { WAKE, CHARGE }
@@ -736,7 +738,7 @@ class TeslaBleController(context: Context) {
         if (message.signature_data?.AES_GCM_Response_data == null) return false
         val pending = pendingCommands.remove(message.request_uuid.toByteArray().toHex()) ?: return false
         val session = sessions[pending.address]?.get(pending.domain) ?: return true
-        val plaintext = session.decrypt(message, pending.requestId)
+        val plaintext = session.decrypt(message, pending.requestId, pending.window)
         if (plaintext == null) {
             log("${nameFor(pending.address)}: response decryption failed (${pending.kind.name.lowercase()})")
             return true

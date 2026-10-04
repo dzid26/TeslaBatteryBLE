@@ -99,11 +99,33 @@ class TeslaSessionTest {
 
         val requestId = session.requestId(encrypted)!!
         val response = vehicleResponse(requestId, "world".toByteArray(), counter = 3)
-        val plaintext = session.decrypt(response, requestId)
+        val window = AntiReplayWindow()
+        val plaintext = session.decrypt(response, requestId, window)
         assertNotNull(plaintext)
         assertArrayEquals("world".toByteArray(), plaintext)
 
-        assertEquals(null, session.decrypt(response, requestId))
+        assertEquals(null, session.decrypt(response, requestId, window))
+    }
+
+    @Test
+    fun `decrypts responses for separate requests that reuse a counter`() {
+        val session = createSession()!!
+        val firstId = ByteArray(33) { 1 }
+        val secondId = ByteArray(33) { 2 }
+
+        val first = session.decrypt(
+            vehicleResponse(firstId, "first".toByteArray(), counter = 0),
+            firstId,
+            AntiReplayWindow(),
+        )
+        val second = session.decrypt(
+            vehicleResponse(secondId, "second".toByteArray(), counter = 0),
+            secondId,
+            AntiReplayWindow(),
+        )
+
+        assertArrayEquals("first".toByteArray(), first)
+        assertArrayEquals("second".toByteArray(), second)
     }
 
     @Test

@@ -20,7 +20,6 @@ class TeslaSession private constructor(
     private val clock: () -> Long,
     private val nonceGenerator: () -> ByteArray,
 ) {
-    private val window = AntiReplayWindow()
 
     fun encrypt(message: RoutableMessage, expiresInSeconds: Int): RoutableMessage? {
         if (counter == COUNTER_MAX) return null
@@ -76,7 +75,16 @@ class TeslaSession private constructor(
         return byteArrayOf(SignatureType.SIGNATURE_TYPE_AES_GCM_PERSONALIZED.value.toByte()) + tag
     }
 
-    fun decrypt(message: RoutableMessage, requestId: ByteArray): ByteArray? {
+    /**
+     * Decrypts a response. The anti-replay [window] is per request: the Go
+     * dispatcher keeps one per response handler, and the vehicle may reuse a
+     * counter for different request ids.
+     */
+    fun decrypt(
+        message: RoutableMessage,
+        requestId: ByteArray,
+        window: AntiReplayWindow,
+    ): ByteArray? {
         val gcmData = message.signature_data?.AES_GCM_Response_data ?: return null
         val domain = message.from_destination?.domain ?: return null
         val fault = message.signedMessageStatus?.signed_message_fault?.value ?: 0
