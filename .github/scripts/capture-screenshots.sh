@@ -132,6 +132,10 @@ if tap_text "AA:BB:CC:DD:EE:01"; then
     sleep 6
     adb exec-out screencap -p > "$OUT/06-demo-paired.png"
   fi
+  # Wake and Read SOC live on the Car tab.
+  if tap_text "Car"; then
+    sleep 2
+  fi
   if tap_text "Wake vehicle"; then
     sleep 6
     adb exec-out screencap -p > "$OUT/07-demo-awake.png"
