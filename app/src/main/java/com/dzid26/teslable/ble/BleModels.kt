@@ -72,8 +72,11 @@ data class KnownCar(
 /** The title and status line both the app list and the notification show for a car. */
 data class ConnectionDisplay(
     val title: String,
-    val status: String,
-)
+    val stateText: String,
+    val rssi: Int?,
+) {
+    val status: String get() = rssi?.let { "$stateText · RSSI $it dBm" } ?: stateText
+}
 
 /**
  * Builds the display for a car, shared by the app list and the tracking
@@ -85,11 +88,10 @@ fun connectionDisplay(
     showHints: Boolean = false,
 ): ConnectionDisplay {
     val title = connection?.gattDeviceName ?: connection?.name ?: advert?.name ?: "Tesla"
-    val state = connectionStateText(connection, showHints)
-    val rssi = connection?.rssi ?: advert?.rssi
     return ConnectionDisplay(
         title = title,
-        status = rssi?.let { "$state · RSSI $it dBm" } ?: state,
+        stateText = connectionStateText(connection, showHints),
+        rssi = connection?.rssi ?: advert?.rssi,
     )
 }
 

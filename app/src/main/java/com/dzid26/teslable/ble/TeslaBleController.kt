@@ -52,6 +52,7 @@ class TeslaBleController(context: Context) {
     private var reconnectAttempts = 0
     private var wakeRefreshAttempts = 0
     private var readChargeAfterWake = false
+    private var uiVisible = false
     private val decryptFailures = mutableMapOf<String, Int>()
     private var lastRehandshakeMs = 0L
 
@@ -99,6 +100,33 @@ class TeslaBleController(context: Context) {
             clients[address]?.readRssi()
             requestVcsecStatus(address)
             handler.postDelayed(this, POLL_MS)
+        }
+    }
+
+    /** Signal strength is local to the BLE controller, so it can refresh quickly. */
+    private val rssiPoll = object : Runnable {
+        override fun run() {
+            val address = _state.value.selectedAddress ?: return
+            if (!uiVisible) return
+            if (_state.value.connections[address]?.phase != ConnectionPhase.READY) return
+            clients[address]?.readRssi()
+            handler.postDelayed(this, RSSI_POLL_MS)
+        }
+    }
+
+    private fun startRssiPoll() {
+        if (!uiVisible) return
+        handler.removeCallbacks(rssiPoll)
+        handler.post(rssiPoll)
+    }
+
+    /** The UI polls RSSI fast only while it is on screen. */
+    fun setUiVisible(visible: Boolean) {
+        uiVisible = visible
+        if (visible) {
+            startRssiPoll()
+        } else {
+            handler.removeCallbacks(rssiPoll)
         }
     }
 
@@ -234,6 +262,7 @@ class TeslaBleController(context: Context) {
                 requestKeySlot(address)
                 startSession(address)
                 stopScan()
+                startRssiPoll()
                 handler.removeCallbacks(poll)
                 handler.postDelayed(poll, POLL_MS)
             }
@@ -319,6 +348,7 @@ class TeslaBleController(context: Context) {
         handler.removeCallbacks(reconnect)
         handler.removeCallbacks(wakeRefresh)
         handler.removeCallbacks(poll)
+        handler.removeCallbacks(rssiPoll)
         keySlotQueue = emptyList()
         sessions.clear()
         pendingSessions.clear()
@@ -491,6 +521,7 @@ class TeslaBleController(context: Context) {
                 failedAddresses.add(address)
                 clients.remove(address)?.close()
                 handler.removeCallbacks(poll)
+                handler.removeCallbacks(rssiPoll)
                 val hadData = _state.value.connections[address]?.let {
                     it.sessions.isNotEmpty() || it.status != null || it.charge != null
                 } == true
@@ -503,7 +534,7 @@ class TeslaBleController(context: Context) {
             if (phase == ConnectionPhase.READY) {
                 reconnectAttempts = 0
                 if (_state.value.selectedAddress == address) {
-                    clients[address]?.readRssi()
+                    startRssiPoll()
                     requestVcsecStatus(address)
                     requestKeySlot(address)
                     startSession(address)
@@ -910,6 +941,7 @@ class TeslaBleController(context: Context) {
         const val SESSION_RETRY_MS = 3000L
         const val SESSION_MAX_ATTEMPTS = 20
         const val POLL_MS = 10_000L
+        const val RSSI_POLL_MS = 500L
         const val REHANDSHAKE_COOLDOWN_MS = 60_000L
         const val RECONNECT_DELAY_MS = 5000L
         const val RECONNECT_MAX_DELAY_MS = 60_000L

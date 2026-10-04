@@ -14,6 +14,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -48,6 +49,12 @@ class MainActivity : ComponentActivity() {
                 // Reconnect to a paired car automatically when the app opens.
                 LaunchedEffect(Unit) {
                     controller.ensureConnected()
+                }
+
+                // Poll RSSI fast only while the screen is showing the app.
+                DisposableEffect(Unit) {
+                    controller.setUiVisible(true)
+                    onDispose { controller.setUiVisible(false) }
                 }
 
                 val state by controller.state.collectAsState()

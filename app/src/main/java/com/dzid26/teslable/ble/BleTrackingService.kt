@@ -45,7 +45,7 @@ class BleTrackingService : Service() {
         scope.launch {
             controller.state.collect { state ->
                 val model = modelFor(state)
-                if (!foregroundStarted || model == lastModel) return@collect
+                if (!foregroundStarted || !shouldPost(lastModel, model)) return@collect
                 lastModel = model
                 postNotification(model)
             }
@@ -99,9 +99,29 @@ class BleTrackingService : Service() {
         return NotificationModel(
             title = display.title,
             status = display.status,
+            stateText = display.stateText,
+            rssi = display.rssi,
             showWake = connection?.status?.asleep == true &&
                 connection.sessions.contains("DOMAIN_VEHICLE_SECURITY"),
         )
+    }
+
+    /**
+     * The UI polls RSSI fast; the notification only re-posts when the state
+     * changes or the signal moves enough to matter.
+     */
+    private fun shouldPost(previous: NotificationModel?, current: NotificationModel): Boolean {
+        if (previous == null) return true
+        if (previous.title != current.title ||
+            previous.stateText != current.stateText ||
+            previous.showWake != current.showWake
+        ) {
+            return true
+        }
+        val oldRssi = previous.rssi
+        val newRssi = current.rssi
+        if (oldRssi == null || newRssi == null) return oldRssi != newRssi
+        return kotlin.math.abs(newRssi - oldRssi) >= RSSI_NOTIFICATION_STEP
     }
 
     private fun buildNotification(model: NotificationModel): Notification {
@@ -167,6 +187,8 @@ class BleTrackingService : Service() {
     private data class NotificationModel(
         val title: String,
         val status: String,
+        val stateText: String,
+        val rssi: Int?,
         val showWake: Boolean,
     )
 
@@ -177,6 +199,7 @@ class BleTrackingService : Service() {
         private const val NOTIFICATION_ID = 1
         private const val REQUEST_OPEN_APP = 0
         private const val REQUEST_WAKE = 1
+        private const val RSSI_NOTIFICATION_STEP = 5
 
         /** True while the foreground service is running (same process). */
         @Volatile
