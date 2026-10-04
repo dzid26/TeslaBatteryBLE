@@ -184,7 +184,7 @@ private fun DeviceRow(
                 style = MaterialTheme.typography.titleMedium,
             )
             Text(
-                text = "${device.address}   RSSI ${device.rssi} dBm   connectable=${device.connectable}",
+                text = "${device.address}   RSSI ${device.rssi} dBm",
                 style = MaterialTheme.typography.bodySmall,
             )
             if (connection != null) {

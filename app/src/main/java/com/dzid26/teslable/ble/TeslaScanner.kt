@@ -28,7 +28,6 @@ class TeslaScanner(
                 name = name,
                 address = result.device.address,
                 rssi = result.rssi,
-                connectable = result.isConnectable,
             )
             onDevices(found.values.sortedByDescending { it.rssi })
         }

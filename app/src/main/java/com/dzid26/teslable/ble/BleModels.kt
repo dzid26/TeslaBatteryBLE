@@ -7,7 +7,6 @@ data class TeslaAdvert(
     val name: String,
     val address: String,
     val rssi: Int,
-    val connectable: Boolean,
 )
 
 data class TeslaConnection(
