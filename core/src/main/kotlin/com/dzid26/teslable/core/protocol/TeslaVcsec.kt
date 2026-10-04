@@ -15,7 +15,6 @@ import java.security.SecureRandom
 
 object TeslaVcsec {
 
-    private const val ENCRYPT_RESPONSE_FLAG = 2
     private const val ADDRESS_LENGTH = 16
     private val random = SecureRandom()
 
@@ -36,7 +35,7 @@ object TeslaVcsec {
             from_destination = Destination(routing_address = randomBytes().toByteString()),
             protobuf_message_as_bytes = payload.toByteString(),
             uuid = randomBytes().toByteString(),
-            flags = ENCRYPT_RESPONSE_FLAG,
+            flags = 0,
         ).encode()
     }
 

@@ -24,7 +24,7 @@ class TeslaVcsecTest {
         assertEquals(Domain.DOMAIN_VEHICLE_SECURITY, request.to_destination?.domain)
         assertEquals(16, request.uuid.size)
         assertEquals(16, request.from_destination?.routing_address?.size)
-        assertEquals(2, request.flags)
+        assertEquals(0, request.flags)
 
         val payload = UnsignedMessage.ADAPTER.decode(request.protobuf_message_as_bytes!!)
         assertEquals(
