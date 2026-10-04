@@ -5,7 +5,6 @@ import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
-import com.dzid26.teslable.core.protocol.AntiReplayWindow
 import com.dzid26.teslable.core.protocol.TeslaCommands
 import com.dzid26.teslable.core.protocol.TeslaCrypto
 import com.dzid26.teslable.core.protocol.TeslaSession
@@ -15,8 +14,11 @@ import com.tesla.generated.universalmessage.RoutableMessage
 import com.tesla.generated.vcsec.WhitelistEntryInfo
 import com.tesla.generated.vcsec.WhitelistInfo
 import com.dzid26.teslable.core.TeslaNames
+import com.dzid26.teslable.core.history.BatterySample
+import com.dzid26.teslable.core.protocol.AntiReplayWindow
 import com.dzid26.teslable.core.protocol.TeslaPairing
 import com.dzid26.teslable.core.protocol.TeslaVcsec
+import com.dzid26.teslable.history.BatteryHistoryStore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -31,7 +33,12 @@ class TeslaBleController(context: Context) {
 
     private val keyStore = PairingKeyStore(appContext)
     private val knownCarStore = KnownCarStore(appContext)
+    private val historyStore = BatteryHistoryStore(appContext)
     private val knownCars = mutableMapOf<String, KnownCar>()
+
+    /** Battery readings recorded from every charge response, oldest first. */
+    val batteryHistory: StateFlow<List<BatterySample>> = historyStore.samples
+
     private val clients = mutableMapOf<String, TeslaGattClient>()
     private val failedAddresses = mutableSetOf<String>()
     private val handler = Handler(Looper.getMainLooper())
@@ -66,6 +73,28 @@ class TeslaBleController(context: Context) {
             if (phase == ConnectionPhase.READY || phase == ConnectionPhase.CONNECTING) return
             log("${nameFor(address)}: reconnecting")
             connect(address)
+        }
+    }
+
+    /**
+     * ADR cadence: VCSEC status every ~10s (safe while asleep), charge state
+     * only while the car is awake. Never wakes the car to read SOC.
+     */
+    private val poll = object : Runnable {
+        override fun run() {
+            val address = _state.value.selectedAddress ?: return
+            val connection = _state.value.connections[address] ?: return
+            if (connection.phase != ConnectionPhase.READY) return
+            val awake = connection.status?.asleep == false
+            val infoSession = sessions[address]?.containsKey(Domain.DOMAIN_INFOTAINMENT) == true
+            if (awake && infoSession) {
+                requestChargeState()
+            } else if (awake && !chargeAfterSession) {
+                chargeAfterSession = true
+                startSession(address)
+            }
+            requestVcsecStatus(address)
+            handler.postDelayed(this, POLL_MS)
         }
     }
 
@@ -167,6 +196,7 @@ class TeslaBleController(context: Context) {
         handler.removeCallbacks(sessionRetry)
         handler.removeCallbacks(reconnect)
         handler.removeCallbacks(wakeRefresh)
+        handler.removeCallbacks(poll)
         keySlotQueue = emptyList()
         sessions.clear()
         pendingSessions.clear()
@@ -202,6 +232,8 @@ class TeslaBleController(context: Context) {
                 requestKeySlot(address)
                 startSession(address)
                 stopScan()
+                handler.removeCallbacks(poll)
+                handler.postDelayed(poll, POLL_MS)
             }
 
             ConnectionPhase.FAILED, ConnectionPhase.DISCONNECTED, ConnectionPhase.IDLE, null ->
@@ -271,6 +303,7 @@ class TeslaBleController(context: Context) {
         handler.removeCallbacks(sessionRetry)
         handler.removeCallbacks(reconnect)
         handler.removeCallbacks(wakeRefresh)
+        handler.removeCallbacks(poll)
         keySlotQueue = emptyList()
         sessions.clear()
         pendingSessions.clear()
@@ -414,6 +447,7 @@ class TeslaBleController(context: Context) {
             if (phase == ConnectionPhase.FAILED || phase == ConnectionPhase.DISCONNECTED) {
                 failedAddresses.add(address)
                 clients.remove(address)?.close()
+                handler.removeCallbacks(poll)
                 val hadData = _state.value.connections[address]?.let {
                     it.sessions.isNotEmpty() || it.status != null || it.charge != null
                 } == true
@@ -430,6 +464,8 @@ class TeslaBleController(context: Context) {
                     requestKeySlot(address)
                     startSession(address)
                     stopScan()
+                    handler.removeCallbacks(poll)
+                    handler.postDelayed(poll, POLL_MS)
                 }
             }
         }
@@ -480,11 +516,17 @@ class TeslaBleController(context: Context) {
                 if (!status.asleep) {
                     handler.removeCallbacks(wakeRefresh)
                 }
+                val previous = _state.value.connections[address]?.status
                 updateConnection(address) { it.copy(status = status) }
-                log(
-                    "${nameFor(address)}: VCSEC status locked=${status.locked} " +
-                        "asleep=${status.asleep} userPresent=${status.userPresent}"
-                )
+                if (previous?.locked != status.locked ||
+                    previous.asleep != status.asleep ||
+                    previous.userPresent != status.userPresent
+                ) {
+                    log(
+                        "${nameFor(address)}: VCSEC status locked=${status.locked} " +
+                            "asleep=${status.asleep} userPresent=${status.userPresent}"
+                    )
+                }
                 if (!status.asleep && readChargeAfterWake) {
                     readChargeAfterWake = false
                     requestChargeState()
@@ -501,7 +543,6 @@ class TeslaBleController(context: Context) {
 
     private fun requestVcsecStatus(address: String) {
         val request = TeslaVcsec.buildStatusRequest()
-        log("${nameFor(address)}: TX ${request.size} bytes ${request.toHex()}")
         if (clients[address]?.send(request) != true) {
             log("${nameFor(address)}: failed to send VCSEC status request")
         }
@@ -728,7 +769,6 @@ class TeslaBleController(context: Context) {
         }
         val requestId = session.requestId(encrypted) ?: return false
         pendingCommands[uuid.toHex()] = PendingCommand(address, domain, requestId, kind)
-        log("${nameFor(address)}: TX ${kind.name.lowercase()} (${encrypted.protobuf_message_as_bytes?.size ?: 0} bytes)")
         return clients[address]?.send(encrypted.encode()) == true
     }
 
@@ -752,11 +792,17 @@ class TeslaBleController(context: Context) {
             CommandKind.CHARGE -> {
                 val charge = runCatching { TeslaCommands.parseChargeState(plaintext) }.getOrNull()
                 if (charge != null) {
+                    val previous = _state.value.connections[pending.address]?.charge
                     updateConnection(pending.address) { it.copy(charge = charge) }
-                    log(
-                        "${nameFor(pending.address)}: SOC ${charge.batteryLevel}% " +
-                            "(${charge.chargingState ?: "unknown"})"
-                    )
+                    historyStore.record(charge)
+                    if (previous?.batteryLevel != charge.batteryLevel ||
+                        previous?.chargingState != charge.chargingState
+                    ) {
+                        log(
+                            "${nameFor(pending.address)}: SOC ${charge.batteryLevel}% " +
+                                "(${charge.chargingState ?: "unknown"})"
+                        )
+                    }
                 } else {
                     val status = runCatching { TeslaCommands.parseActionStatus(plaintext) }.getOrNull()
                     log(
@@ -800,6 +846,7 @@ class TeslaBleController(context: Context) {
         const val COMMAND_EXPIRES_SECONDS = 5
         const val SESSION_RETRY_MS = 3000L
         const val SESSION_MAX_ATTEMPTS = 20
+        const val POLL_MS = 10_000L
         const val RECONNECT_DELAY_MS = 5000L
         const val RECONNECT_MAX_ATTEMPTS = 12
         const val WAKE_REFRESH_MS = 5000L

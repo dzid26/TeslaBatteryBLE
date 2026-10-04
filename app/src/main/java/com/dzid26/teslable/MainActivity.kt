@@ -51,6 +51,7 @@ class MainActivity : ComponentActivity() {
                 }
 
                 val state by controller.state.collectAsState()
+                val batteryHistory by controller.batteryHistory.collectAsState()
                 var permissionsGranted by remember { mutableStateOf(hasBlePermissions(context)) }
                 var locationEnabled by remember { mutableStateOf(isLocationEnabled(context)) }
                 var requestedOnce by remember { mutableStateOf(false) }
@@ -115,6 +116,7 @@ class MainActivity : ComponentActivity() {
 
                 ScannerScreen(
                     state = state,
+                    history = batteryHistory,
                     permissionsGranted = permissionsGranted,
                     locationServicesEnabled = locationEnabled,
                     onRequestPermissions = requestPermissions,
