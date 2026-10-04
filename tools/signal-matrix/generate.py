@@ -47,51 +47,77 @@ TOKEN = re.compile(
 )
 
 
-def strip_comment(line, in_block):
-    """Remove // comments, honouring /* ... */ blocks (rare here)."""
-    out = []
+def split_comment(line, in_block):
+    """Return (code, comment text, in_block), honouring // and /* ... */."""
+    out, comments = [], []
     i = 0
     while i < len(line):
         if in_block:
             end = line.find("*/", i)
             if end == -1:
-                return "".join(out), True
+                comments.append(line[i:])
+                return "".join(out), " ".join(comments).strip(), True
+            comments.append(line[i:end])
             i = end + 2
             in_block = False
         else:
-            start = line.find("/*", i)
-            slash = line.find("//", i)
-            if slash != -1 and (start == -1 or slash < start):
-                out.append(line[i:slash])
-                return "".join(out), False
-            if start != -1:
-                out.append(line[i:start])
-                i = start + 2
+            block = line.find("/*", i)
+            line_comment = line.find("//", i)
+            if line_comment != -1 and (block == -1 or line_comment < block):
+                out.append(line[i:line_comment])
+                comments.append(line[line_comment + 2:])
+                return "".join(out), " ".join(comments).strip(), False
+            if block != -1:
+                out.append(line[i:block])
+                comments.append(line[block + 2:])
+                i = block + 2
                 in_block = True
             else:
                 out.append(line[i:])
                 break
-    return "".join(out), in_block
+    return "".join(out), " ".join(comments).strip(), in_block
+
+
+PRECISION_RE = re.compile(r"\d+\s+decimals?|hundredths?|tenths?|seconds\s*/\s*datetime|precision", re.IGNORECASE)
+
+
+def ble_precision_note(comment):
+    """Return the comment when it documents precision/units, else empty."""
+    if comment and PRECISION_RE.search(comment):
+        return comment
+    return ""
 
 
 def parse_messages(paths):
-    """Return {full_name: {"file": name, "fields": [{name,type,repeated}]}}.
+    """Return {full_name: {"file": name, "fields": [{name,type,repeated,comment}]}}.
 
     full_name is dotted for nested messages; cataloguing uses top-level names.
+    Field comments capture trailing `//` comments and preceding comment lines
+    (Tesla documents precision that way, e.g. `// 2 decimals`).
     """
     messages = {}
     for path in paths:
         path = Path(path)
-        text = path.read_text(encoding="utf-8")
-        code_lines = []
+        lines = path.read_text(encoding="utf-8").splitlines()
+        code_lines, line_comments = [], []
         in_block = False
-        for line in text.splitlines():
-            stripped, in_block = strip_comment(line, in_block)
-            code_lines.append(stripped)
+        for line in lines:
+            code, comment, in_block = split_comment(line, in_block)
+            code_lines.append(code)
+            line_comments.append(comment)
         code = "\n".join(code_lines)
 
+        line_starts, offset = [], 0
+        for code_line in code_lines:
+            line_starts.append(offset)
+            offset += len(code_line) + 1
+
         stack = []  # (kind, name)
+        fields_by_line = {}
+        line_index = 0
         for m in TOKEN.finditer(code):
+            while line_index + 1 < len(line_starts) and line_starts[line_index + 1] <= m.start():
+                line_index += 1
             if m.group(1):
                 kind, name = m.group(1), m.group(2)
                 stack.append((kind, name))
@@ -111,10 +137,42 @@ def parse_messages(paths):
                     if kind == "message":
                         full = ".".join(n for k, n in stack if k == "message")
                         messages.setdefault(full, {"file": path.name, "fields": []})
-                        messages[full]["fields"].append(
-                            {"name": fname, "type": ftype, "repeated": ftype == "repeated"}
-                        )
+                        field = {"name": fname, "type": ftype, "repeated": ftype == "repeated", "comment": ""}
+                        messages[full]["fields"].append(field)
+                        fields_by_line.setdefault(line_index, []).append(field)
                         break
+
+        pending, pending_type, last_was_comment = [], None, False
+        for line_index, code_line in enumerate(code_lines):
+            comment = line_comments[line_index]
+            line_fields = fields_by_line.get(line_index, [])
+            prior_pending = list(pending)
+            if not code_line.strip():
+                if comment:
+                    pending = pending + [comment] if last_was_comment else [comment]
+                    last_was_comment = True
+                else:
+                    pending, pending_type, last_was_comment = [], None, False
+                continue
+            last_was_comment = False
+            if re.match(r"\s*(message|enum|service)\b", code_line):
+                pending, pending_type = [], None
+                continue
+            if line_fields:
+                if comment:
+                    for field in line_fields:
+                        field["comment"] = comment
+                    pending, pending_type = [], None
+                    continue
+                if prior_pending:
+                    first_type = line_fields[0]["type"]
+                    if pending_type is not None and first_type != pending_type:
+                        pending, pending_type = [], None
+                    else:
+                        pending_type = pending_type or first_type
+                        note = " ".join(prior_pending)
+                        for field in line_fields:
+                            field["comment"] = note
     return messages
 
 
@@ -258,12 +316,17 @@ def field_ref(message, field):
     return f"{message}.{field}"
 
 
-def ble_type_of(ble_messages, ref):
+def ble_field_of(ble_messages, ref):
     message, _, field = ref.rpartition(".")
     for f in ble_messages.get(message, {}).get("fields", []):
         if f["name"] == field:
-            return f["type"]
+            return f
     return None
+
+
+def ble_type_of(ble_messages, ref):
+    field = ble_field_of(ble_messages, ref)
+    return field["type"] if field else None
 
 
 def normalize_type(type_name):
@@ -420,6 +483,21 @@ def render(mapping, cloud_fields, ble_messages, docs):
             note = row_by_cloud.get(cloud, {}).get("note", "")
             w(f"| `{cloud}` | {ctype} | `{ble_ref}` | {btype} | {note} |")
         w("")
+    precision_rows, seen = [], set()
+    for row in (r for g in mapping["cross_map"] for r in g["rows"] if r.get("ble")):
+        field = ble_field_of(ble_messages, row["ble"])
+        note = ble_precision_note(field["comment"]) if field else ""
+        if note and row["ble"] not in seen:
+            seen.add(row["ble"])
+            precision_rows.append((row["ble"], field["type"], note))
+    if precision_rows:
+        w("Precision annotations Tesla documents in the BLE proto comments for mapped fields:")
+        w("")
+        w("| BLE field | BLE type | Annotation |")
+        w("|---|---|---|")
+        for ref, btype, note in precision_rows:
+            w(f"| `{ref}` | {btype} | {note} |")
+        w("")
 
     for group in mapping["cross_map"]:
         w(f"## {group['title']}")
@@ -436,7 +514,11 @@ def render(mapping, cloud_fields, ble_messages, docs):
             json_eq = (info.get("json") or "—").replace("|", "/")
             if row.get("ble"):
                 ble = f"`{row['ble']}`"
-                btype = ble_type_of(ble_messages, row["ble"]) or "—"
+                field = ble_field_of(ble_messages, row["ble"])
+                btype = field["type"] if field else "—"
+                annotation = ble_precision_note(field["comment"]) if field else ""
+                if annotation:
+                    btype = f"{btype} ({annotation})"
             else:
                 ble, btype = "—", "—"
             w(f"| `{cloud}` | {ctype} | {json_eq} | {ble} | {btype} | {row.get('note', '')} |")
@@ -509,10 +591,11 @@ def render(mapping, cloud_fields, ble_messages, docs):
         fields = ble_messages[message]["fields"]
         w(f"<details><summary>{message} — {len(fields)} fields</summary>")
         w("")
-        w("| Field | Type |")
-        w("|---|---|")
+        w("| Field | Type | Proto comment |")
+        w("|---|---|---|")
         for f in fields:
-            w(f"| `{f['name']}` | {f['type']} |")
+            comment = f.get("comment", "").replace("|", "/")
+            w(f"| `{f['name']}` | {f['type']} | {comment} |")
         w("</details>")
         w("")
 

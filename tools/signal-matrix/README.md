@@ -34,9 +34,11 @@ The generated doc labels every mapped row with the cloud logical type (from Tesl
 Available Data table) and the exact BLE proto type, and auto-lists where the same value
 is typed differently (e.g. `BatteryLevel` is `real` on cloud with sub-percent values like
 `40.982`, but BLE `battery_level` is `int32` whole percent; `charger_power` is `real` kW
-on cloud vs `int32` whole kW on BLE). It also documents Tesla's dynamic wire format:
-legacy telemetry fields (< 179) usually arrive as string-encoded numbers, field 179+ are
-always typed.
+on cloud vs `int32` whole kW on BLE). Precision annotations in the BLE proto comments
+(`// 2 decimals`, `// 1 decimal`, `// seconds / datetime`) are extracted and shown in the
+cross-map, the differences table, and the BLE catalog. It also documents Tesla's dynamic
+wire format: legacy telemetry fields (< 179) usually arrive as string-encoded numbers,
+field 179+ are always typed.
 
 ## Tesla's docs table (types + `vehicle_data` JSON equivalents)
 

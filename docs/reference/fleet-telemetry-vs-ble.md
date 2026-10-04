@@ -27,6 +27,8 @@ The cloud side is **dynamic at the wire level**: Fleet Telemetry wraps readings 
 
 The BLE side is **strongly typed protobuf** with fixed types per field: precision is predictable but can be coarser (see the differences table below).
 
+Tesla documents BLE precision in the proto comments (`battery_range // 2 decimals`, `charge_energy_added // 1 decimal`, `scheduled_charging_start_time // seconds / datetime`); those annotations are extracted automatically and shown below and in the BLE catalog.
+
 Update model also differs: telemetry pushes on change with a configurable minimum interval (500 ms floor, per-signal `interval_seconds`); BLE is strictly request/response polling with no subscription primitive.
 
 The `vehicle_data` JSON column is reproduced from Tesla's published table and may contain vendor errors (e.g. `TpmsPressureRr` lists `tpms_pressure_fr`).
@@ -68,15 +70,25 @@ Where the same physical value is typed differently on each transport:
 | `Location` | Location | `LocationState.latitude` | float | BLE also has `longitude` |
 | `GpsHeading` | real | `LocationState.heading` | uint32 |  |
 
+Precision annotations Tesla documents in the BLE proto comments for mapped fields:
+
+| BLE field | BLE type | Annotation |
+|---|---|---|
+| `ChargeState.battery_range` | float | 2 decimals |
+| `ChargeState.est_battery_range` | float | 2 decimals |
+| `ChargeState.ideal_battery_range` | float | 2 decimals |
+| `ChargeState.charge_energy_added` | float | 1 decimal |
+| `ChargeState.scheduled_charging_start_time` | uint64 | seconds / datetime |
+
 ## Battery & charging — BLE readable
 
 | Cloud signal | Cloud type | Fleet API `vehicle_data` JSON | BLE equivalent | BLE type | Notes |
 |---|---|---|---|---|---|
 | `Soc` | real | charge_state.usable_battery_level | `ChargeState.usable_battery_level` | int32 | Usable SOC per Tesla docs (`charge_state.usable_battery_level`); cloud real vs BLE int32 whole percent |
 | `BatteryLevel` | real | charge_state.battery_level | `ChargeState.battery_level` | int32 | Displayed SOC (`charge_state.battery_level`); cloud real with sub-percent values observed (e.g. 40.982) vs BLE int32 whole percent |
-| `RatedRange` | real | charge_state.battery_range | `ChargeState.battery_range` | float | Rated miles |
-| `EstBatteryRange` | real | charge_state.est_battery_range | `ChargeState.est_battery_range` | float |  |
-| `IdealBatteryRange` | real | — | `ChargeState.ideal_battery_range` | float |  |
+| `RatedRange` | real | charge_state.battery_range | `ChargeState.battery_range` | float (2 decimals) | Rated miles |
+| `EstBatteryRange` | real | charge_state.est_battery_range | `ChargeState.est_battery_range` | float (2 decimals) |  |
+| `IdealBatteryRange` | real | — | `ChargeState.ideal_battery_range` | float (2 decimals) |  |
 | `ChargeLimitSoc` | integer | charge_state.charge_limit_soc | `ChargeState.charge_limit_soc` | int32 |  |
 | `DetailedChargeState` | DetailedChargeStateValue enum | — | `ChargeState.charging_state` | ChargingState | Disconnected / Charging / Complete / Calibrating … |
 | `ChargeState` | string | — | `ChargeState.charging_state` | ChargingState | Generic signal; overlaps DetailedChargeState |
@@ -93,14 +105,14 @@ Where the same physical value is typed differently on each transport:
 | `ChargerPhases` | integer | charge_state.charger_phases | `ChargeState.charger_phases` | int32 |  |
 | `ACChargingPower` | real | charge_state.charger_power | `ChargeState.charger_power` | int32 | Cloud real kW; BLE int32 whole kW, no AC/DC split |
 | `DCChargingPower` | real | charge_state.charger_power | `ChargeState.charger_power` | int32 | Cloud real kW; BLE int32 whole kW (`fast_charger_present` disambiguates) |
-| `ACChargingEnergyIn` | real | — | `ChargeState.charge_energy_added` | float | BLE does not split AC/DC energy |
-| `DCChargingEnergyIn` | real | charge_state.charge_energy_added | `ChargeState.charge_energy_added` | float | Charger-measured vs battery-measured distinction is lost over BLE |
+| `ACChargingEnergyIn` | real | — | `ChargeState.charge_energy_added` | float (1 decimal) | BLE does not split AC/DC energy |
+| `DCChargingEnergyIn` | real | charge_state.charge_energy_added | `ChargeState.charge_energy_added` | float (1 decimal) | Charger-measured vs battery-measured distinction is lost over BLE |
 | `ChargingCableType` | CableType enum | charge_state.conn_charge_cable | `ChargeState.conn_charge_cable` | CableType |  |
 | `ChargePortDoorOpen` | boolean | charge_state.charge_port_door_open | `ChargeState.charge_port_door_open` | bool |  |
 | `ChargePortLatch` | ChargePortLatchValue enum | charge_state.charge_port_latch | `ChargeState.charge_port_latch` | ChargePortLatchState |  |
 | `ChargePort` | ChargePortValue enum | vehicle_config.charge_port_type | `ChargeState.charge_port_color` | ChargePortColor_E | Port color/LED state; enum mapping may differ |
 | `ChargePortColdWeatherMode` | boolean | charge_state.charge_port_cold_weather_mode | `ChargeState.charge_port_cold_weather_mode` | bool |  |
-| `ScheduledChargingStartTime` | timestamp | charge_state.scheduled_charging_start_time | `ChargeState.scheduled_charging_start_time` | uint64 |  |
+| `ScheduledChargingStartTime` | timestamp | charge_state.scheduled_charging_start_time | `ChargeState.scheduled_charging_start_time` | uint64 (seconds / datetime) |  |
 | `ScheduledChargingPending` | boolean | charge_state.scheduled_charging_pending | `ChargeState.scheduled_charging_pending` | bool |  |
 | `ScheduledChargingMode` | ScheduledChargingModeValue enum | charge_state.scheduled_charging_mode | `ChargeState.scheduled_charging_mode` | ScheduledChargingMode | Off / StartAt / DepartBy |
 | `ScheduledDepartureTime` | — | — | `ChargeState.scheduled_departure_time` | google.protobuf.Timestamp |  |
@@ -726,341 +738,341 @@ Signals that exist in the pinned Fleet Telemetry protos but not yet in developer
 
 <details><summary>ChargeState — 75 fields</summary>
 
-| Field | Type |
-|---|---|
-| `charging_state` | ChargingState |
-| `fast_charger_type` | ChargerType |
-| `fast_charger_brand` | ChargerBrand |
-| `charge_limit_soc` | int32 |
-| `charge_limit_soc_std` | int32 |
-| `charge_limit_soc_min` | int32 |
-| `charge_limit_soc_max` | int32 |
-| `max_range_charge_counter` | int32 |
-| `fast_charger_present` | bool |
-| `battery_range` | float |
-| `est_battery_range` | float |
-| `ideal_battery_range` | float |
-| `battery_level` | int32 |
-| `usable_battery_level` | int32 |
-| `charge_energy_added` | float |
-| `charge_miles_added_rated` | float |
-| `charge_miles_added_ideal` | float |
-| `charger_voltage` | int32 |
-| `charger_pilot_current` | int32 |
-| `charger_actual_current` | int32 |
-| `charger_power` | int32 |
-| `minutes_to_full_charge` | int32 |
-| `minutes_to_charge_limit` | int32 |
-| `trip_charging` | bool |
-| `charge_rate_mph` | int32 |
-| `charge_port_door_open` | bool |
-| `conn_charge_cable` | CableType |
-| `scheduled_charging_start_time` | uint64 |
-| `scheduled_charging_pending` | bool |
-| `scheduled_departure_time` | google.protobuf.Timestamp |
-| `user_charge_enable_request` | bool |
-| `charge_enable_request` | bool |
-| `charger_phases` | int32 |
-| `charge_port_latch` | ChargePortLatchState |
-| `charge_port_cold_weather_mode` | bool |
-| `charge_current_request` | int32 |
-| `charge_current_request_max` | int32 |
-| `managed_charging_active` | bool |
-| `managed_charging_user_canceled` | bool |
-| `managed_charging_start_time` | uint64 |
-| `timestamp` | google.protobuf.Timestamp |
-| `preconditioning_times` | PreconditioningTimes |
-| `off_peak_charging_times` | OffPeakChargingTimes |
-| `off_peak_hours_end_time` | uint32 |
-| `scheduled_charging_mode` | ScheduledChargingMode |
-| `charging_amps` | int32 |
-| `scheduled_charging_start_time_minutes` | uint32 |
-| `scheduled_departure_time_minutes` | uint32 |
-| `preconditioning_enabled` | bool |
-| `scheduled_charging_start_time_app` | sint32 |
-| `supercharger_session_trip_planner` | bool |
-| `charge_port_color` | ChargePortColor_E |
-| `charge_rate_mph_float` | float |
-| `charge_limit_reason` | ChargeLimitReason |
-| `managed_charging_state` | ManagedChargingState |
-| `charge_cable_unlatched` | bool |
-| `outlet_state` | OutletState |
-| `power_feed_state` | PowerFeedState |
-| `outlet_soc_limit` | int32 |
-| `power_feed_soc_limit` | int32 |
-| `outlet_time_remaining` | int64 |
-| `power_feed_time_remaining` | int64 |
-| `powershare_feature_allowed` | bool |
-| `powershare_feature_enabled` | bool |
-| `powershare_request` | bool |
-| `powershare_type` | PowershareType |
-| `powershare_status` | PowershareStatus |
-| `powershare_stop_reason` | PowershareStopReason |
-| `powershare_instantaneous_load_kw` | float |
-| `powershare_vehicle_energy_left_hr` | int32 |
-| `powershare_soc_limit` | int32 |
-| `one_time_soc_limit` | int32 |
-| `home_location` | LatLong |
-| `work_location` | LatLong |
-| `outlet_max_timer_minutes` | int32 |
+| Field | Type | Proto comment |
+|---|---|---|
+| `charging_state` | ChargingState |  |
+| `fast_charger_type` | ChargerType |  |
+| `fast_charger_brand` | ChargerBrand |  |
+| `charge_limit_soc` | int32 |  |
+| `charge_limit_soc_std` | int32 |  |
+| `charge_limit_soc_min` | int32 |  |
+| `charge_limit_soc_max` | int32 |  |
+| `max_range_charge_counter` | int32 |  |
+| `fast_charger_present` | bool |  |
+| `battery_range` | float | 2 decimals |
+| `est_battery_range` | float | 2 decimals |
+| `ideal_battery_range` | float | 2 decimals |
+| `battery_level` | int32 |  |
+| `usable_battery_level` | int32 |  |
+| `charge_energy_added` | float | 1 decimal |
+| `charge_miles_added_rated` | float | 1 decimal |
+| `charge_miles_added_ideal` | float | 1 decimal |
+| `charger_voltage` | int32 |  |
+| `charger_pilot_current` | int32 |  |
+| `charger_actual_current` | int32 |  |
+| `charger_power` | int32 |  |
+| `minutes_to_full_charge` | int32 |  |
+| `minutes_to_charge_limit` | int32 |  |
+| `trip_charging` | bool |  |
+| `charge_rate_mph` | int32 |  |
+| `charge_port_door_open` | bool |  |
+| `conn_charge_cable` | CableType |  |
+| `scheduled_charging_start_time` | uint64 | seconds / datetime |
+| `scheduled_charging_pending` | bool |  |
+| `scheduled_departure_time` | google.protobuf.Timestamp |  |
+| `user_charge_enable_request` | bool |  |
+| `charge_enable_request` | bool |  |
+| `charger_phases` | int32 |  |
+| `charge_port_latch` | ChargePortLatchState |  |
+| `charge_port_cold_weather_mode` | bool |  |
+| `charge_current_request` | int32 |  |
+| `charge_current_request_max` | int32 |  |
+| `managed_charging_active` | bool |  |
+| `managed_charging_user_canceled` | bool |  |
+| `managed_charging_start_time` | uint64 |  |
+| `timestamp` | google.protobuf.Timestamp |  |
+| `preconditioning_times` | PreconditioningTimes |  |
+| `off_peak_charging_times` | OffPeakChargingTimes |  |
+| `off_peak_hours_end_time` | uint32 |  |
+| `scheduled_charging_mode` | ScheduledChargingMode |  |
+| `charging_amps` | int32 |  |
+| `scheduled_charging_start_time_minutes` | uint32 |  |
+| `scheduled_departure_time_minutes` | uint32 |  |
+| `preconditioning_enabled` | bool |  |
+| `scheduled_charging_start_time_app` | sint32 |  |
+| `supercharger_session_trip_planner` | bool |  |
+| `charge_port_color` | ChargePortColor_E |  |
+| `charge_rate_mph_float` | float |  |
+| `charge_limit_reason` | ChargeLimitReason |  |
+| `managed_charging_state` | ManagedChargingState |  |
+| `charge_cable_unlatched` | bool |  |
+| `outlet_state` | OutletState |  |
+| `power_feed_state` | PowerFeedState |  |
+| `outlet_soc_limit` | int32 |  |
+| `power_feed_soc_limit` | int32 |  |
+| `outlet_time_remaining` | int64 |  |
+| `power_feed_time_remaining` | int64 |  |
+| `powershare_feature_allowed` | bool |  |
+| `powershare_feature_enabled` | bool |  |
+| `powershare_request` | bool |  |
+| `powershare_type` | PowershareType |  |
+| `powershare_status` | PowershareStatus |  |
+| `powershare_stop_reason` | PowershareStopReason |  |
+| `powershare_instantaneous_load_kw` | float |  |
+| `powershare_vehicle_energy_left_hr` | int32 |  |
+| `powershare_soc_limit` | int32 |  |
+| `one_time_soc_limit` | int32 |  |
+| `home_location` | LatLong |  |
+| `work_location` | LatLong |  |
+| `outlet_max_timer_minutes` | int32 |  |
 </details>
 
 <details><summary>ClimateState — 46 fields</summary>
 
-| Field | Type |
-|---|---|
-| `inside_temp_celsius` | float |
-| `outside_temp_celsius` | float |
-| `driver_temp_setting` | float |
-| `passenger_temp_setting` | float |
-| `left_temp_direction` | int32 |
-| `right_temp_direction` | int32 |
-| `is_front_defroster_on` | bool |
-| `is_rear_defroster_on` | bool |
-| `fan_status` | int32 |
-| `is_climate_on` | bool |
-| `min_avail_temp_celsius` | float |
-| `max_avail_temp_celsius` | float |
-| `seat_heater_left` | int32 |
-| `seat_heater_right` | int32 |
-| `seat_heater_rear_left` | int32 |
-| `seat_heater_rear_right` | int32 |
-| `seat_heater_rear_center` | int32 |
-| `seat_heater_rear_right_back` | int32 |
-| `seat_heater_rear_left_back` | int32 |
-| `seat_heater_third_row_right` | int32 |
-| `seat_heater_third_row_left` | int32 |
-| `battery_heater` | bool |
-| `battery_heater_no_power` | bool |
-| `steering_wheel_heater` | bool |
-| `wiper_blade_heater` | bool |
-| `side_mirror_heaters` | bool |
-| `is_preconditioning` | bool |
-| `remote_heater_control_enabled` | bool |
-| `climate_keeper_mode` | ClimateKeeperMode |
-| `timestamp` | google.protobuf.Timestamp |
-| `bioweapon_mode_on` | bool |
-| `defrost_mode` | DefrostMode |
-| `is_auto_conditioning_on` | bool |
-| `auto_seat_climate_left` | bool |
-| `auto_seat_climate_right` | bool |
-| `seat_fan_front_left` | int32 |
-| `seat_fan_front_right` | int32 |
-| `allow_cabin_overheat_protection` | bool |
-| `supports_fan_only_cabin_overheat_protection` | bool |
-| `cabin_overheat_protection` | CabinOverheatProtection_E |
-| `cabin_overheat_protection_actively_cooling` | bool |
-| `cop_activation_temperature` | CopActivationTemp |
-| `auto_steering_wheel_heat` | bool |
-| `steering_wheel_heat_level` | StwHeatLevel |
-| `hvac_auto_request` | HvacAutoRequest |
-| `cop_not_running_reason` | COPNotRunningReason |
+| Field | Type | Proto comment |
+|---|---|---|
+| `inside_temp_celsius` | float |  |
+| `outside_temp_celsius` | float |  |
+| `driver_temp_setting` | float |  |
+| `passenger_temp_setting` | float |  |
+| `left_temp_direction` | int32 |  |
+| `right_temp_direction` | int32 |  |
+| `is_front_defroster_on` | bool |  |
+| `is_rear_defroster_on` | bool |  |
+| `fan_status` | int32 |  |
+| `is_climate_on` | bool |  |
+| `min_avail_temp_celsius` | float |  |
+| `max_avail_temp_celsius` | float |  |
+| `seat_heater_left` | int32 | not set when no seat heaters installed. Values in 'SeatHeaterLevel_E'. |
+| `seat_heater_right` | int32 | not set when no seat heaters installed. Values in 'SeatHeaterLevel_E'. |
+| `seat_heater_rear_left` | int32 | not set when no rear seat heaters installed. Values in 'SeatHeaterLevel_E'. |
+| `seat_heater_rear_right` | int32 | not set when no rear seat heaters installed. Values in 'SeatHeaterLevel_E'. |
+| `seat_heater_rear_center` | int32 | not set when no rear center seat heaters installed. Values in 'SeatHeaterLevel_E'. |
+| `seat_heater_rear_right_back` | int32 | not set for non-executive rear seat heaters. Values in 'SeatHeaterLevel_E'. |
+| `seat_heater_rear_left_back` | int32 | not set for non-executive rear seat heaters. Values in 'SeatHeaterLevel_E'. |
+| `seat_heater_third_row_right` | int32 | not set when no third row seat heaters installed. Values in 'SeatHeaterLevel_E'. |
+| `seat_heater_third_row_left` | int32 | not set when no third row seat heaters installed. Values in 'SeatHeaterLevel_E'. |
+| `battery_heater` | bool |  |
+| `battery_heater_no_power` | bool |  |
+| `steering_wheel_heater` | bool | not set when no steering wheel heater installed. |
+| `wiper_blade_heater` | bool |  |
+| `side_mirror_heaters` | bool |  |
+| `is_preconditioning` | bool |  |
+| `remote_heater_control_enabled` | bool |  |
+| `climate_keeper_mode` | ClimateKeeperMode |  |
+| `timestamp` | google.protobuf.Timestamp |  |
+| `bioweapon_mode_on` | bool | only set in cars with HEPA filter |
+| `defrost_mode` | DefrostMode |  |
+| `is_auto_conditioning_on` | bool |  |
+| `auto_seat_climate_left` | bool |  |
+| `auto_seat_climate_right` | bool |  |
+| `seat_fan_front_left` | int32 | Values in 'SeatCoolingLevel_E'. |
+| `seat_fan_front_right` | int32 | Values in 'SeatCoolingLevel_E'. |
+| `allow_cabin_overheat_protection` | bool |  |
+| `supports_fan_only_cabin_overheat_protection` | bool |  |
+| `cabin_overheat_protection` | CabinOverheatProtection_E |  |
+| `cabin_overheat_protection_actively_cooling` | bool |  |
+| `cop_activation_temperature` | CopActivationTemp |  |
+| `auto_steering_wheel_heat` | bool |  |
+| `steering_wheel_heat_level` | StwHeatLevel |  |
+| `hvac_auto_request` | HvacAutoRequest |  |
+| `cop_not_running_reason` | COPNotRunningReason |  |
 </details>
 
 <details><summary>DriveState — 14 fields</summary>
 
-| Field | Type |
-|---|---|
-| `shift_state` | ShiftState |
-| `speed` | uint32 |
-| `power` | int32 |
-| `timestamp` | google.protobuf.Timestamp |
-| `odometer_in_hundredths_of_a_mile` | int32 |
-| `speed_float` | float |
-| `active_route_destination` | string |
-| `active_route_minutes_to_arrival` | float |
-| `active_route_miles_to_arrival` | float |
-| `active_route_traffic_minutes_delay` | float |
-| `active_route_energy_at_arrival` | float |
-| `last_route_update` | uint32 |
-| `last_traffic_update` | google.protobuf.Timestamp |
-| `active_route_coordinates` | LatLong |
+| Field | Type | Proto comment |
+|---|---|---|
+| `shift_state` | ShiftState |  |
+| `speed` | uint32 |  |
+| `power` | int32 |  |
+| `timestamp` | google.protobuf.Timestamp |  |
+| `odometer_in_hundredths_of_a_mile` | int32 |  |
+| `speed_float` | float |  |
+| `active_route_destination` | string |  |
+| `active_route_minutes_to_arrival` | float |  |
+| `active_route_miles_to_arrival` | float |  |
+| `active_route_traffic_minutes_delay` | float |  |
+| `active_route_energy_at_arrival` | float |  |
+| `last_route_update` | uint32 |  |
+| `last_traffic_update` | google.protobuf.Timestamp |  |
+| `active_route_coordinates` | LatLong |  |
 </details>
 
 <details><summary>ClosuresState — 25 fields</summary>
 
-| Field | Type |
-|---|---|
-| `door_open_driver_front` | bool |
-| `door_open_driver_rear` | bool |
-| `door_open_passenger_front` | bool |
-| `door_open_passenger_rear` | bool |
-| `door_open_trunk_front` | bool |
-| `door_open_trunk_rear` | bool |
-| `window_open_driver_front` | bool |
-| `window_open_passenger_front` | bool |
-| `window_open_driver_rear` | bool |
-| `window_open_passenger_rear` | bool |
-| `sun_roof_state` | SunRoofState |
-| `sun_roof_percent_open` | int32 |
-| `locked` | bool |
-| `is_user_present` | bool |
-| `center_display_state` | DisplayState |
-| `remote_start` | bool |
-| `valet_mode` | bool |
-| `valet_pin_needed` | bool |
-| `sentry_mode_state` | SentryModeState |
-| `sentry_mode_available` | bool |
-| `speed_limit_mode` | SpeedLimitMode |
-| `tonneau_state` | VCSEC.ClosureState_E |
-| `tonneau_percent_open` | uint32 |
-| `tonneau_in_motion` | bool |
-| `timestamp` | google.protobuf.Timestamp |
+| Field | Type | Proto comment |
+|---|---|---|
+| `door_open_driver_front` | bool |  |
+| `door_open_driver_rear` | bool |  |
+| `door_open_passenger_front` | bool |  |
+| `door_open_passenger_rear` | bool |  |
+| `door_open_trunk_front` | bool |  |
+| `door_open_trunk_rear` | bool |  |
+| `window_open_driver_front` | bool |  |
+| `window_open_passenger_front` | bool |  |
+| `window_open_driver_rear` | bool |  |
+| `window_open_passenger_rear` | bool |  |
+| `sun_roof_state` | SunRoofState | only set when sunroof installed |
+| `sun_roof_percent_open` | int32 | only set when sunroof installed |
+| `locked` | bool |  |
+| `is_user_present` | bool |  |
+| `center_display_state` | DisplayState |  |
+| `remote_start` | bool | `true` when remote start is active. |
+| `valet_mode` | bool | `true` when remote start is active. |
+| `valet_pin_needed` | bool | `true` when remote start is active. |
+| `sentry_mode_state` | SentryModeState | only set when sentry mode supported |
+| `sentry_mode_available` | bool | only set when sentry mode supported |
+| `speed_limit_mode` | SpeedLimitMode | only set when speed limit mode supported |
+| `tonneau_state` | VCSEC.ClosureState_E |  |
+| `tonneau_percent_open` | uint32 |  |
+| `tonneau_in_motion` | bool |  |
+| `timestamp` | google.protobuf.Timestamp |  |
 </details>
 
 <details><summary>LocationState — 20 fields</summary>
 
-| Field | Type |
-|---|---|
-| `latitude` | float |
-| `longitude` | float |
-| `heading` | uint32 |
-| `gps_as_of` | uint64 |
-| `native_location_supported` | bool |
-| `native_latitude` | float |
-| `native_longitude` | float |
-| `native_type` | GPSCoordinateType |
-| `corrected_latitude` | float |
-| `corrected_longitude` | float |
-| `timestamp` | google.protobuf.Timestamp |
-| `homelink_nearby` | bool |
-| `location_name` | string |
-| `geo_latitude` | float |
-| `geo_longitude` | float |
-| `geo_heading` | float |
-| `geo_elevation` | float |
-| `geo_accuracy` | float |
-| `estimated_gps_valid` | bool |
-| `estimated_to_raw_distance` | float |
+| Field | Type | Proto comment |
+|---|---|---|
+| `latitude` | float |  |
+| `longitude` | float |  |
+| `heading` | uint32 |  |
+| `gps_as_of` | uint64 |  |
+| `native_location_supported` | bool |  |
+| `native_latitude` | float |  |
+| `native_longitude` | float |  |
+| `native_type` | GPSCoordinateType |  |
+| `corrected_latitude` | float | only for China cars |
+| `corrected_longitude` | float | only for China cars |
+| `timestamp` | google.protobuf.Timestamp |  |
+| `homelink_nearby` | bool | only set when homelink supported |
+| `location_name` | string | contains a non-precise location name |
+| `geo_latitude` | float | raw GPS coordinates |
+| `geo_longitude` | float |  |
+| `geo_heading` | float |  |
+| `geo_elevation` | float |  |
+| `geo_accuracy` | float |  |
+| `estimated_gps_valid` | bool |  |
+| `estimated_to_raw_distance` | float | the distance between the estimated and raw coordinates in meters |
 </details>
 
 <details><summary>TirePressureState — 19 fields</summary>
 
-| Field | Type |
-|---|---|
-| `timestamp` | google.protobuf.Timestamp |
-| `tpms_pressure_fl` | float |
-| `tpms_pressure_fr` | float |
-| `tpms_pressure_rl` | float |
-| `tpms_pressure_rr` | float |
-| `tpms_last_seen_pressure_time_fl` | google.protobuf.Timestamp |
-| `tpms_last_seen_pressure_time_fr` | google.protobuf.Timestamp |
-| `tpms_last_seen_pressure_time_rl` | google.protobuf.Timestamp |
-| `tpms_last_seen_pressure_time_rr` | google.protobuf.Timestamp |
-| `tpms_hard_warning_fl` | bool |
-| `tpms_hard_warning_fr` | bool |
-| `tpms_hard_warning_rl` | bool |
-| `tpms_hard_warning_rr` | bool |
-| `tpms_soft_warning_fl` | bool |
-| `tpms_soft_warning_fr` | bool |
-| `tpms_soft_warning_rl` | bool |
-| `tpms_soft_warning_rr` | bool |
-| `tpms_rcp_front_value` | float |
-| `tpms_rcp_rear_value` | float |
+| Field | Type | Proto comment |
+|---|---|---|
+| `timestamp` | google.protobuf.Timestamp | tpms pressure values in bar |
+| `tpms_pressure_fl` | float |  |
+| `tpms_pressure_fr` | float |  |
+| `tpms_pressure_rl` | float |  |
+| `tpms_pressure_rr` | float |  |
+| `tpms_last_seen_pressure_time_fl` | google.protobuf.Timestamp |  |
+| `tpms_last_seen_pressure_time_fr` | google.protobuf.Timestamp |  |
+| `tpms_last_seen_pressure_time_rl` | google.protobuf.Timestamp |  |
+| `tpms_last_seen_pressure_time_rr` | google.protobuf.Timestamp |  |
+| `tpms_hard_warning_fl` | bool |  |
+| `tpms_hard_warning_fr` | bool |  |
+| `tpms_hard_warning_rl` | bool |  |
+| `tpms_hard_warning_rr` | bool |  |
+| `tpms_soft_warning_fl` | bool |  |
+| `tpms_soft_warning_fr` | bool |  |
+| `tpms_soft_warning_rl` | bool |  |
+| `tpms_soft_warning_rr` | bool |  |
+| `tpms_rcp_front_value` | float | rcp values in bar |
+| `tpms_rcp_rear_value` | float | rcp values in bar |
 </details>
 
 <details><summary>MediaState — 9 fields</summary>
 
-| Field | Type |
-|---|---|
-| `timestamp` | google.protobuf.Timestamp |
-| `remote_control_enabled` | bool |
-| `now_playing_artist` | string |
-| `now_playing_title` | string |
-| `audio_volume` | float |
-| `audio_volume_increment` | float |
-| `audio_volume_max` | float |
-| `now_playing_source` | MediaSourceType |
-| `media_playback_status` | MediaPlaybackStatus |
+| Field | Type | Proto comment |
+|---|---|---|
+| `timestamp` | google.protobuf.Timestamp |  |
+| `remote_control_enabled` | bool |  |
+| `now_playing_artist` | string |  |
+| `now_playing_title` | string |  |
+| `audio_volume` | float |  |
+| `audio_volume_increment` | float |  |
+| `audio_volume_max` | float |  |
+| `now_playing_source` | MediaSourceType |  |
+| `media_playback_status` | MediaPlaybackStatus |  |
 </details>
 
 <details><summary>MediaDetailState — 7 fields</summary>
 
-| Field | Type |
-|---|---|
-| `timestamp` | google.protobuf.Timestamp |
-| `now_playing_duration` | int32 |
-| `now_playing_elapsed` | int32 |
-| `now_playing_source_string` | string |
-| `now_playing_album` | string |
-| `now_playing_station` | string |
-| `a2dp_source_name` | string |
+| Field | Type | Proto comment |
+|---|---|---|
+| `timestamp` | google.protobuf.Timestamp |  |
+| `now_playing_duration` | int32 |  |
+| `now_playing_elapsed` | int32 |  |
+| `now_playing_source_string` | string |  |
+| `now_playing_album` | string |  |
+| `now_playing_station` | string |  |
+| `a2dp_source_name` | string |  |
 </details>
 
 <details><summary>SoftwareUpdateState — 8 fields</summary>
 
-| Field | Type |
-|---|---|
-| `status` | SoftwareUpdateStatus |
-| `scheduled_time_ms` | uint64 |
-| `warning_time_remaining_ms` | uint64 |
-| `expected_duration_sec` | uint32 |
-| `download_perc` | uint32 |
-| `install_perc` | uint32 |
-| `version` | string |
-| `timestamp` | google.protobuf.Timestamp |
+| Field | Type | Proto comment |
+|---|---|---|
+| `status` | SoftwareUpdateStatus |  |
+| `scheduled_time_ms` | uint64 |  |
+| `warning_time_remaining_ms` | uint64 |  |
+| `expected_duration_sec` | uint32 |  |
+| `download_perc` | uint32 |  |
+| `install_perc` | uint32 |  |
+| `version` | string |  |
+| `timestamp` | google.protobuf.Timestamp |  |
 </details>
 
 <details><summary>ParentalControlsState — 4 fields</summary>
 
-| Field | Type |
-|---|---|
-| `timestamp` | google.protobuf.Timestamp |
-| `parental_controls_active` | bool |
-| `parental_controls_pin_set` | bool |
-| `parental_controls_settings` | ParentalControlsSettings |
+| Field | Type | Proto comment |
+|---|---|---|
+| `timestamp` | google.protobuf.Timestamp |  |
+| `parental_controls_active` | bool |  |
+| `parental_controls_pin_set` | bool |  |
+| `parental_controls_settings` | ParentalControlsSettings |  |
 </details>
 
 <details><summary>VehicleState — 1 fields</summary>
 
-| Field | Type |
-|---|---|
-| `guestMode` | GuestMode |
+| Field | Type | Proto comment |
+|---|---|---|
+| `guestMode` | GuestMode |  |
 </details>
 
 <details><summary>ChargeScheduleState — 7 fields</summary>
 
-| Field | Type |
-|---|---|
-| `charge_schedules` | ChargeSchedule |
-| `charge_schedule_window` | ChargeSchedule |
-| `charge_buffer` | int32 |
-| `max_num_charge_schedules` | uint32 |
-| `next_schedule` | bool |
-| `show_schedule_complete_state` | bool |
-| `timestamp` | google.protobuf.Timestamp |
+| Field | Type | Proto comment |
+|---|---|---|
+| `charge_schedules` | ChargeSchedule |  |
+| `charge_schedule_window` | ChargeSchedule |  |
+| `charge_buffer` | int32 |  |
+| `max_num_charge_schedules` | uint32 |  |
+| `next_schedule` | bool |  |
+| `show_schedule_complete_state` | bool |  |
+| `timestamp` | google.protobuf.Timestamp |  |
 </details>
 
 <details><summary>PreconditioningScheduleState — 5 fields</summary>
 
-| Field | Type |
-|---|---|
-| `precondition_schedules` | PreconditionSchedule |
-| `preconditioning_schedule_window` | PreconditionSchedule |
-| `max_num_precondition_schedules` | uint32 |
-| `next_schedule` | bool |
-| `timestamp` | google.protobuf.Timestamp |
+| Field | Type | Proto comment |
+|---|---|---|
+| `precondition_schedules` | PreconditionSchedule |  |
+| `preconditioning_schedule_window` | PreconditionSchedule |  |
+| `max_num_precondition_schedules` | uint32 |  |
+| `next_schedule` | bool |  |
+| `timestamp` | google.protobuf.Timestamp |  |
 </details>
 
 <details><summary>ManagedChargingState — 4 fields</summary>
 
-| Field | Type |
-|---|---|
-| `charge_on_solar_state` | ChargeOnSolarState |
-| `charge_on_solar_gateway_din` | string |
-| `tesla_electric_asset_id` | string |
-| `minutes_to_lower_limit` | int32 |
+| Field | Type | Proto comment |
+|---|---|---|
+| `charge_on_solar_state` | ChargeOnSolarState |  |
+| `charge_on_solar_gateway_din` | string |  |
+| `tesla_electric_asset_id` | string |  |
+| `minutes_to_lower_limit` | int32 |  |
 </details>
 
 <details><summary>VehicleStatus — 5 fields</summary>
 
-| Field | Type |
-|---|---|
-| `closureStatuses` | ClosureStatuses |
-| `vehicleLockState` | VehicleLockState_E |
-| `vehicleSleepStatus` | VehicleSleepStatus_E |
-| `userPresence` | UserPresence_E |
-| `detailedClosureStatus` | DetailedClosureStatus |
+| Field | Type | Proto comment |
+|---|---|---|
+| `closureStatuses` | ClosureStatuses |  |
+| `vehicleLockState` | VehicleLockState_E |  |
+| `vehicleSleepStatus` | VehicleSleepStatus_E |  |
+| `userPresence` | UserPresence_E |  |
+| `detailedClosureStatus` | DetailedClosureStatus |  |
 </details>
 
 ## How this stays current
