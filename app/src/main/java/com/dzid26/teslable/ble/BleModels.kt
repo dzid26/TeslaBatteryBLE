@@ -64,7 +64,13 @@ data class BleUiState(
     val selectedBleName: String? = null,
     val vinInput: String = "",
     val expectedBleName: String? = null,
-    val log: List<String> = emptyList(),
+    val log: List<LogEntry> = emptyList(),
+)
+
+/** One log line, tagged with the car it came from (null for app-wide lines). */
+data class LogEntry(
+    val vehicleId: String?,
+    val message: String,
 )
 
 /** The live connection for the selected car, if it has one. */

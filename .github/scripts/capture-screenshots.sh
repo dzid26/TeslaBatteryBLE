@@ -91,7 +91,7 @@ if [ "$focused" != true ]; then
 fi
 
 sleep 5
-adb exec-out screencap -p > "$OUT/01-overview.png"
+adb exec-out screencap -p > "$OUT/01-cars.png"
 
 # Tap a button by the text shown on screen.
 tap_text() {
@@ -117,37 +117,24 @@ if tap_text "Scan for Teslas"; then
   adb exec-out screencap -p > "$OUT/02-scanning.png"
 fi
 
-# The Car tab hosts the car identity, VIN and the history graph.
-if tap_text "Car"; then
-  sleep 3
-  adb exec-out screencap -p > "$OUT/03-car.png"
-fi
-
 # Demo builds (assembleDebug -PdemoCar=true) simulate a car. These steps are
 # skipped silently on real builds, which share this script.
-if tap_text "Connection"; then
-  sleep 2
-fi
 if tap_text "AA:BB:CC:DD:EE:01"; then
   sleep 4
-  adb exec-out screencap -p > "$OUT/04-demo-connected.png"
+  adb exec-out screencap -p > "$OUT/03-car.png"
   if tap_text "Pair key"; then
     sleep 3
-    adb exec-out screencap -p > "$OUT/05-demo-card-tap.png"
+    adb exec-out screencap -p > "$OUT/04-demo-card-tap.png"
     sleep 6
-    adb exec-out screencap -p > "$OUT/06-demo-paired.png"
-  fi
-  # Wake and Read SOC live on the Car tab.
-  if tap_text "Car"; then
-    sleep 2
+    adb exec-out screencap -p > "$OUT/05-demo-paired.png"
   fi
   if tap_text "Wake vehicle"; then
     sleep 6
-    adb exec-out screencap -p > "$OUT/07-demo-awake.png"
+    adb exec-out screencap -p > "$OUT/06-demo-awake.png"
   fi
   if tap_text "Read SOC"; then
     sleep 4
-    adb exec-out screencap -p > "$OUT/08-demo-soc.png"
+    adb exec-out screencap -p > "$OUT/07-demo-soc.png"
   fi
 fi
 

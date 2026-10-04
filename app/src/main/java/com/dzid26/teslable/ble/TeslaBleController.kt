@@ -96,6 +96,11 @@ class TeslaBleController(context: Context) {
             }
         }
         publishVehicles()
+        val saved = prefs.getString(KEY_SELECTED_VEHICLE, null)
+        if (saved != null && vehicles.containsKey(saved)) {
+            // The last car the owner opened is the default on launch.
+            selectVehicle(saved)
+        }
     }
 
     // ---------------------------------------------------------------- UI actions
@@ -155,11 +160,12 @@ class TeslaBleController(context: Context) {
         _state.update { it.copy(scanning = false, discovering = false) }
     }
 
-    fun onTeslaClicked(address: String) {
+    /** The UI opened a car: focus it, and connect it if it is not already. */
+    fun openVehicle(address: String) {
         val name = _state.value.connections[address]?.name
             ?: _state.value.devices.firstOrNull { it.address == address }?.name
             ?: return
-        selectVehicle(name)
+        selectVehicle(name, persist = true)
         val link = links[name]
         when (link?.phase) {
             ConnectionPhase.READY -> {
@@ -188,9 +194,6 @@ class TeslaBleController(context: Context) {
         if (!hasBlePermissions(appContext)) return
         if (_state.value.scanning) return
         val ordered = orderedVehicles()
-        if (selectedBleName == null) {
-            ordered.firstOrNull()?.let { selectVehicle(it.bleName) }
-        }
         var active = links.values.count { it.phase in ACTIVE_PHASES }
         for (vehicle in ordered) {
             if (active >= MAX_ACTIVE_LINKS) break
@@ -356,10 +359,6 @@ class TeslaBleController(context: Context) {
     private fun autoConnect() {
         if (!_state.value.trackingEnabled) return
         val state = _state.value
-        if (selectedBleName == null) {
-            state.devices.firstOrNull { vehicles.containsKey(it.name) }
-                ?.let { selectVehicle(it.name) }
-        }
         var active = links.values.count { it.phase in ACTIVE_PHASES }
         val now = System.currentTimeMillis()
         for (device in state.devices) {
@@ -454,8 +453,11 @@ class TeslaBleController(context: Context) {
     private fun linkForAddress(address: String): VehicleLink? =
         links.values.firstOrNull { it.address == address }
 
-    private fun selectVehicle(name: String) {
+    private fun selectVehicle(name: String, persist: Boolean = false) {
         selectedBleName = name
+        if (persist) {
+            prefs.edit().putString(KEY_SELECTED_VEHICLE, name).apply()
+        }
         val vehicle = vehicles[name]
         _state.update {
             it.copy(
@@ -508,7 +510,11 @@ class TeslaBleController(context: Context) {
     }
 
     private fun log(message: String) {
-        _state.update { it.copy(log = (it.log + message).takeLast(LOG_MAX_LINES)) }
+        appendLog(null, message)
+    }
+
+    private fun appendLog(vehicleId: String?, message: String) {
+        _state.update { it.copy(log = (it.log + LogEntry(vehicleId, message)).takeLast(LOG_MAX_LINES)) }
     }
 
     // ------------------------------------------------------------- per-vehicle link
@@ -631,6 +637,10 @@ class TeslaBleController(context: Context) {
         fun gattName(): String? = _state.value.connections[address]?.gattDeviceName
 
         fun vin(): String = vehicles[bleName]?.vin.orEmpty()
+
+        private fun log(message: String) {
+            this@TeslaBleController.appendLog(bleName, message)
+        }
 
         fun connect() {
             if (address.isEmpty()) return
@@ -1180,6 +1190,7 @@ class TeslaBleController(context: Context) {
         const val MAX_ACTIVE_LINKS = 3
         const val PREFS = "teslable"
         const val KEY_TRACKING_ENABLED = "tracking_enabled"
+        const val KEY_SELECTED_VEHICLE = "selected_vehicle"
         val ACTIVE_PHASES = setOf(
             ConnectionPhase.CONNECTING,
             ConnectionPhase.CONNECTED,

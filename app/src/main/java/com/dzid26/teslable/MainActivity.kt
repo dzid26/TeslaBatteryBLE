@@ -32,7 +32,7 @@ import com.dzid26.teslable.ble.PairingPhase
 import com.dzid26.teslable.ble.hasBlePermissions
 import com.dzid26.teslable.ble.isLocationEnabled
 import com.dzid26.teslable.ble.requiredBlePermissions
-import com.dzid26.teslable.ui.ScannerScreen
+import com.dzid26.teslable.ui.MainScreen
 import com.dzid26.teslable.ui.TeslaBleTheme
 
 class MainActivity : ComponentActivity() {
@@ -121,7 +121,7 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                ScannerScreen(
+                MainScreen(
                     state = state,
                     history = batteryHistory,
                     permissionsGranted = permissionsGranted,
@@ -140,10 +140,10 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                     },
-                    onVinChange = controller::setVinInput,
                     onToggleTracking = controller::setTrackingEnabled,
-                    onConnect = controller::onTeslaClicked,
+                    onOpenVehicle = controller::openVehicle,
                     onPairKey = controller::pairKey,
+                    onVinChange = controller::setVinInput,
                     onWake = { controller.wakeVehicle() },
                     onReadSoc = { controller.requestChargeState() },
                 )
