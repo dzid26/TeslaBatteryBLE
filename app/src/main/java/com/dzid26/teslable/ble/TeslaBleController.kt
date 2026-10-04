@@ -193,7 +193,9 @@ class TeslaBleController(context: Context) {
                 stopScan()
             }
 
-            ConnectionPhase.FAILED, ConnectionPhase.DISCONNECTED, null -> connect(address)
+            ConnectionPhase.FAILED, ConnectionPhase.DISCONNECTED, ConnectionPhase.IDLE, null ->
+                connect(address)
+
             else -> Unit
         }
     }
