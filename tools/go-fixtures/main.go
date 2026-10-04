@@ -15,21 +15,21 @@ import (
 
 const vin = "5YJ3E1EA7KF000001"
 
-func deterministicKey(seed byte) authentication.ECDHPrivateKey {
-	buf := make([]byte, 1024)
-	for i := range buf {
-		buf[i] = seed + byte(i)
+func fixedKey(start byte) authentication.ECDHPrivateKey {
+	scalar := make([]byte, 32)
+	for i := range scalar {
+		scalar[i] = start + byte(i)
 	}
-	key, err := authentication.NewECDHPrivateKey(bytes.NewReader(buf))
-	if err != nil {
-		panic(err)
+	key := authentication.UnmarshalECDHPrivateKey(scalar)
+	if key == nil {
+		panic("invalid scalar")
 	}
 	return key
 }
 
 func main() {
-	client := deterministicKey(1)
-	vehicle := deterministicKey(2)
+	client := fixedKey(1)
+	vehicle := fixedKey(0x21)
 
 	challenge := make([]byte, 16)
 	for i := range challenge {

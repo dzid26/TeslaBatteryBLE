@@ -57,14 +57,14 @@ class GoVectorTest {
             "04515c3d6eb9e396b904d3feca7f54fdcd0cc1e997bf375dca515ad0a6c3b4035f4536be3a50f318fbf9a5475902a221502bef" +
                 "0d57e08c53b2cc0a56f17d9f9354"
         const val SESSION_INFO =
-            "082912410483981c490124c7d05d29c922a815e8fd3fc430904f4dc9e9a7e10fe5daa988f0da828754c10366449cafb32b95d2" +
-                "65986d199411b91321c6ff068c812d23c5dc1a105a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a25393000003007"
+            "08291241041f140146bfb1b251f84f4ddbe0d4cdcfd77afd984a9520e35794021f8312bb9eec995a08b1fa7704df3dcc0b50a966" +
+                "5263fb7711f95f9f8a449c5096e47c892b1a105a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a25393000003007"
         const val CHALLENGE = "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf"
         const val SESSION_INFO_TAG =
-            "7a9624811f1725e5821aad8841f320f8467c26a230b5fe8498478d3c1aead850"
+            "9e3fb47bd8d3bfe60c25df12aab21376ea8cf1904e7ae3af889dc4af4d0ddf6a"
         const val RESPONSE_MESSAGE =
-            "3a02080352141c676e3b3c7b0b4f4fc8ff6176ee425fa9c876236a244a220a0c80eb1da6bfff15d92c14dea410091a10351dc3" +
-                "a5c9cfdafb5921753718304a40"
+            "3a020803521409fda9e8ff551d1fb01580f7a8dc201a7835eac46a244a220a0c71365034adfcd04b8929bfee10091a10ef51b" +
+                "93e1728545a9b3a39dfba3047a7"
         const val RESPONSE_REQUEST_ID = "1111111111111111111111111111111111"
         const val RESPONSE_PLAINTEXT = "6368617267652d73746174652d66697874757265"
     }

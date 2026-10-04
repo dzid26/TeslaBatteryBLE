@@ -50,13 +50,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Clone vehicle-command
+        run: git clone --depth 1 https://github.com/teslamotors/vehicle-command.git /tmp/vehicle-command
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.23'
-
-      - name: Clone vehicle-command
-        run: git clone --depth 1 https://github.com/teslamotors/vehicle-command.git /tmp/vehicle-command
+          go-version-file: /tmp/vehicle-command/go.mod
 
       - name: Generate fixtures from the Go runtime
         run: |
