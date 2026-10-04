@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
 <resources>
     <style name="Theme.TeslaBatteryBLE" parent="android:Theme.Material.NoActionBar">
         <item name="android:windowBackground">@android:color/black</item>

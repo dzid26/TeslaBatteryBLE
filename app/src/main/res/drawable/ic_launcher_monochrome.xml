@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Battery body ring: outer minus inner -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M38,36 a8,8 0 0 1 8,-8 h16 a8,8 0 0 1 8,8 v40 a8,8 0 0 1 -8,8 h-16 a8,8 0 0 1 -8,-8 z M46,38 a4,4 0 0 1 4,-4 h8 a4,4 0 0 1 4,4 v36 a4,4 0 0 1 -4,4 h-8 a4,4 0 0 1 -4,-4 z" />
+    <!-- Terminal -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M48,20 h12 v8 h-12 z" />
+    <!-- Bolt -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M59,32 L43,56 H52 L49,76 L65,52 H56 Z" />
+</vector>

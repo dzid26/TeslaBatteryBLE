@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: AGPL-3.0-only
 # Capture screenshots of the app on a booted device or emulator.
 #
 # Usage: capture-screenshots.sh <apk> <output-dir> [package] [activity]

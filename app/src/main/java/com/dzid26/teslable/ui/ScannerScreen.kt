@@ -364,12 +364,29 @@ private fun CarHeader(
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp)) {
-            Text(display.title, style = MaterialTheme.typography.titleMedium)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = display.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.weight(1f),
+                )
+                display.rssi?.let { rssi ->
+                    Text(
+                        text = "RSSI $rssi dBm",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = if (rssi <= WEAK_RSSI_DBM) {
+                            MaterialTheme.colorScheme.error
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    )
+                }
+            }
             connection?.address?.let { address ->
                 Text(address, style = MaterialTheme.typography.bodySmall)
             }
             Text(
-                text = display.status,
+                text = display.stateText,
                 style = MaterialTheme.typography.titleSmall,
                 color = if (connection?.status?.asleep == false) {
                     MaterialTheme.colorScheme.primary
@@ -422,17 +439,31 @@ private fun DeviceRow(
         Column(Modifier.padding(12.dp)) {
             val display = connectionDisplay(connection, device, showHints = true)
             val isMatch = expectedName != null && expectedName.equals(device.name, ignoreCase = true)
-            Text(
-                text = if (isMatch) "${display.title}  (VIN match)" else display.title,
-                style = MaterialTheme.typography.titleMedium,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = if (isMatch) "${display.title}  (VIN match)" else display.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.weight(1f),
+                )
+                display.rssi?.let { rssi ->
+                    Text(
+                        text = "RSSI $rssi dBm",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = if (rssi <= WEAK_RSSI_DBM) {
+                            MaterialTheme.colorScheme.error
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    )
+                }
+            }
             Text(
                 text = device.address,
                 style = MaterialTheme.typography.bodySmall,
             )
             if (connection != null) {
                 Text(
-                    text = display.status,
+                    text = display.stateText,
                     style = MaterialTheme.typography.titleSmall,
                     color = when {
                         connection.phase == ConnectionPhase.FAILED ->
@@ -625,6 +656,7 @@ private fun HistoryRange.label(): String = when (this) {
 }
 
 private const val VIN_LENGTH = 17
+private const val WEAK_RSSI_DBM = -90
 
 private val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 private val dateTimeFormatter = DateTimeFormatter.ofPattern("dd MMM HH:mm")

@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Battery charge level -->
+    <path
+        android:fillColor="#22C55E"
+        android:pathData="M42,48 H66 V80 H42 Z" />
+    <!-- Battery body outline -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#E6EDF7"
+        android:strokeWidth="4"
+        android:pathData="M38,36 a8,8 0 0 1 8,-8 h16 a8,8 0 0 1 8,8 v40 a8,8 0 0 1 -8,8 h-16 a8,8 0 0 1 -8,-8 z" />
+    <!-- Terminal -->
+    <path
+        android:fillColor="#E6EDF7"
+        android:pathData="M48,20 h12 v8 h-12 z" />
+    <!-- Bolt -->
+    <path
+        android:fillColor="#E6EDF7"
+        android:pathData="M59,32 L43,56 H52 L49,76 L65,52 H56 Z" />
+</vector>

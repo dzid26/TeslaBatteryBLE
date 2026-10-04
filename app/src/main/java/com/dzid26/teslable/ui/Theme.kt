@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 package com.dzid26.teslable.ui
 
 import androidx.compose.foundation.isSystemInDarkTheme
