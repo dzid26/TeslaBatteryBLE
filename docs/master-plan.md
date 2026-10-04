@@ -51,16 +51,17 @@ tracking survives screen off → notification updates → key survives app resta
 A trustworthy shell around the existing protocol work. No user-facing features.
 
 - [x] Land the in-flight BLE refactor (`BlePermissions`, `KnownCarStore`, controller, strings) after build + test verification.
-- [ ] `LICENSE` (AGPL-3.0-only) + `THIRD_PARTY_NOTICES.md` + `SPDX-License-Identifier` headers in sources + first-party license screen data.
-- [ ] README: pitch, badges, screenshots, features, install (GitHub / Obtainium), build, architecture diagram, license, "not affiliated with Tesla, Inc.".
-- [ ] App icon: adaptive + monochrome + 512 px store asset; keep the existing notification icon.
-- [ ] `SECURITY.md`, `PRIVACY.md` ("nothing leaves the device"), `CODE_OF_CONDUCT.md`, `CONTRIBUTING.md` (DCO, no CLA), `CHANGELOG.md`.
-- [ ] Issue forms (bug: car model/year, vehicle software, Android version, logs; feature request), PR template, `.editorconfig`.
-- [ ] CI gates: ktlint + detekt + Android lint; required checks on `main`; concurrency cancel; least-privilege permissions; pinned action SHAs; Dependabot.
-- [ ] Release engineering: keystore + GitHub secrets, `versionCode`/`versionName` policy, tag-driven signed release, release checklist; preview channel stays debug and clearly labeled.
-- [ ] Docs skeleton: `docs/adr/` (move ADR-0001), `docs/protocol/` (framing, session, pairing, VCSEC vs Infotainment).
-- [ ] `AGENTS.md` for future sessions.
-- [ ] Branch protection on `main`: required CI, no force-push.
+- [x] `LICENSE` (AGPL-3.0-only) + `THIRD_PARTY_NOTICES.md` + `SPDX-License-Identifier` headers in sources.
+- [ ] In-app license/credits screen data (with the About screen, Phase 1).
+- [x] README: pitch, badges, screenshots, features, install (GitHub / Obtainium), build, architecture diagram, license, "not affiliated with Tesla, Inc.".
+- [x] App icon: adaptive + monochrome (512 px store export still pending).
+- [x] `SECURITY.md`, `PRIVACY.md` ("nothing leaves the device"), `CODE_OF_CONDUCT.md`, `CONTRIBUTING.md` (DCO, no CLA), `CHANGELOG.md`.
+- [x] Issue forms (bug: car model/year, vehicle software, Android version, logs; feature request), PR template, `.editorconfig`.
+- [x] CI gates: Android lint, app unit tests, concurrency cancel, least-privilege permissions, Dependabot.
+- [ ] CI hardening: ktlint + detekt, pinned action SHAs, required checks on `main` (branch protection deliberately deferred while agents push directly).
+- [ ] Release engineering: signed release blocked on owner keystore; release checklist documented.
+- [x] Docs skeleton: `docs/adr/` (ADR-0001 moved), `docs/protocol/` (transport, session/pairing, domains).
+- [x] `AGENTS.md` for future sessions.
 
 ## 6. Phase 1 — v0.2 "Trust & polish" (target: end of October)
 
