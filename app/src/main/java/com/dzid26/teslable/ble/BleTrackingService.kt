@@ -25,18 +25,24 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 
 /**
- * Foreground service that keeps the Tesla BLE connection alive in the background.
+ * Foreground service that keeps the Tesla BLE connections alive in the
+ * background.
  *
  * The GATT connections and polling live in [TeslaBleController] (shared through
  * [BleControllerHolder]); this service promotes the process to foreground so
- * Android does not kill it while the screen is off, and mirrors the controller
- * state into an ongoing notification. ADR-0001 milestone 5.
+ * Android does not kill it while the screen is off, and mirrors each tracked
+ * car into its own ongoing notification. With one car the foreground
+ * notification is that car's; with several it becomes a summary and each car
+ * gets its own grouped notification with its own Wake action. ADR-0001
+ * milestone 5.
  */
 class BleTrackingService : Service() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var foregroundStarted = false
-    private var lastModel: NotificationModel? = null
+    private var lastSummary: NotificationModel? = null
+    private val lastCarModels = mutableMapOf<String, NotificationModel>()
+    private val postedCarIds = mutableMapOf<String, Int>()
 
     override fun onCreate() {
         super.onCreate()
@@ -44,34 +50,17 @@ class BleTrackingService : Service() {
         createChannel()
         val controller = BleControllerHolder.get(this)
         scope.launch {
-            controller.state.collect { state ->
-                val model = modelFor(state)
-                if (!foregroundStarted || !shouldPost(lastModel, model)) return@collect
-                lastModel = model
-                postNotification(model)
-            }
+            controller.state.collect { state -> publish(modelsFor(state)) }
         }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val controller = BleControllerHolder.get(this)
         if (intent?.action == ACTION_WAKE) {
-            controller.wakeVehicle()
+            controller.wakeVehicle(intent.getStringExtra(EXTRA_BLE_NAME))
         }
-        val model = modelFor(controller.state.value)
-        lastModel = model
-        ServiceCompat.startForeground(
-            this,
-            NOTIFICATION_ID,
-            buildNotification(model),
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
-            } else {
-                0
-            },
-        )
-        foregroundStarted = true
-        // START_STICKY may restart us after a process kill; find the paired car again.
+        publish(modelsFor(controller.state.value))
+        // START_STICKY may restart us after a process kill; find the cars again.
         controller.ensureConnected()
         return START_STICKY
     }
@@ -84,32 +73,103 @@ class BleTrackingService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    private fun postNotification(model: NotificationModel) {
-        val manager = NotificationManagerCompat.from(this)
-        if (manager.areNotificationsEnabled()) {
-            manager.notify(NOTIFICATION_ID, buildNotification(model))
+    /** One model per tracked car, in the controller's (last-seen) order. */
+    private fun modelsFor(state: BleUiState): List<NotificationModel> =
+        state.vehicles.mapNotNull { vehicle ->
+            val connection = state.connections[vehicle.address] ?: return@mapNotNull null
+            if (connection.phase == ConnectionPhase.IDLE) return@mapNotNull null
+            val advert = state.devices.firstOrNull { it.address == vehicle.address }
+            val display = connectionDisplay(connection, advert, vehicle = vehicle)
+            NotificationModel(
+                bleName = vehicle.bleName,
+                title = display.title,
+                status = display.status,
+                stateText = display.stateText,
+                rssi = display.rssi,
+                showWake = connection.status?.asleep == true &&
+                    connection.sessions.contains("DOMAIN_VEHICLE_SECURITY"),
+            )
         }
-    }
 
-    private fun modelFor(state: BleUiState): NotificationModel {
-        val connection = state.selectedConnection()
-            ?: state.connections.values.firstOrNull { it.phase == ConnectionPhase.READY }
-            ?: state.connections.values.firstOrNull()
-        val advert = state.devices.firstOrNull { it.address == connection?.address }
-        val vehicle = state.vehicles.firstOrNull { it.bleName == connection?.name }
-        val display = connectionDisplay(connection, advert, vehicle = vehicle)
-        return NotificationModel(
-            title = display.title,
-            status = display.status,
-            stateText = display.stateText,
-            rssi = display.rssi,
-            showWake = connection?.status?.asleep == true &&
-                connection.sessions.contains("DOMAIN_VEHICLE_SECURITY"),
-        )
+    private fun publish(models: List<NotificationModel>) {
+        val summary = summaryModel(models)
+        if (!foregroundStarted) {
+            ServiceCompat.startForeground(
+                this,
+                NOTIFICATION_ID,
+                buildNotification(summary, groupSummary = models.size > 1),
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
+                } else {
+                    0
+                },
+            )
+            foregroundStarted = true
+            lastSummary = summary
+        } else if (shouldPost(lastSummary, summary)) {
+            lastSummary = summary
+            post(NOTIFICATION_ID, buildNotification(summary, groupSummary = models.size > 1))
+        }
+        syncCarNotifications(models)
     }
 
     /**
-     * The UI polls RSSI fast; the notification only re-posts when the state
+     * With one car the foreground notification is that car's; with several it
+     * is a summary and every car gets a grouped notification of its own.
+     */
+    private fun summaryModel(models: List<NotificationModel>): NotificationModel = when {
+        models.size == 1 -> models.first()
+
+        models.isEmpty() -> NotificationModel(
+            bleName = null,
+            title = getString(R.string.app_name),
+            status = "No car connected",
+            stateText = "No car connected",
+            rssi = null,
+            showWake = false,
+        )
+
+        else -> NotificationModel(
+            bleName = null,
+            title = getString(R.string.app_name),
+            status = "Tracking ${models.size} cars",
+            stateText = "Tracking ${models.size} cars",
+            rssi = null,
+            showWake = false,
+        )
+    }
+
+    private fun syncCarNotifications(models: List<NotificationModel>) {
+        val wanted: Map<String, NotificationModel> = if (models.size > 1) {
+            models.mapNotNull { model -> model.bleName?.let { it to model } }.toMap()
+        } else {
+            emptyMap()
+        }
+        // Cancel cars that went away (or collapsed back into the summary).
+        for ((bleName, id) in postedCarIds.toMap()) {
+            if (!wanted.containsKey(bleName)) {
+                NotificationManagerCompat.from(this).cancel(id)
+                postedCarIds.remove(bleName)
+                lastCarModels.remove(bleName)
+            }
+        }
+        for ((bleName, model) in wanted) {
+            if (!shouldPost(lastCarModels[bleName], model)) continue
+            lastCarModels[bleName] = model
+            val id = postedCarIds.getOrPut(bleName) { carNotificationId(bleName) }
+            post(id, buildNotification(model, groupSummary = false))
+        }
+    }
+
+    private fun post(id: Int, notification: Notification) {
+        val manager = NotificationManagerCompat.from(this)
+        if (manager.areNotificationsEnabled()) {
+            manager.notify(id, notification)
+        }
+    }
+
+    /**
+     * The UI polls RSSI fast; a notification only re-posts when the state
      * changes or the signal moves enough to matter.
      */
     private fun shouldPost(previous: NotificationModel?, current: NotificationModel): Boolean {
@@ -126,7 +186,7 @@ class BleTrackingService : Service() {
         return kotlin.math.abs(newRssi - oldRssi) >= RSSI_NOTIFICATION_STEP
     }
 
-    private fun buildNotification(model: NotificationModel): Notification {
+    private fun buildNotification(model: NotificationModel, groupSummary: Boolean): Notification {
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_tracking)
             .setContentTitle(model.title)
@@ -138,11 +198,15 @@ class BleTrackingService : Service() {
             .setShowWhen(false)
             .setCategory(NotificationCompat.CATEGORY_STATUS)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-        if (model.showWake) {
+            .setGroup(GROUP_KEY)
+        if (groupSummary) {
+            builder.setGroupSummary(true)
+        }
+        if (model.showWake && model.bleName != null) {
             builder.addAction(
                 R.drawable.ic_stat_tracking,
                 getString(R.string.tracking_wake),
-                wakeIntent(),
+                wakeIntent(model.bleName),
             )
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -162,11 +226,13 @@ class BleTrackingService : Service() {
         )
     }
 
-    private fun wakeIntent(): PendingIntent {
-        val intent = Intent(this, BleTrackingService::class.java).setAction(ACTION_WAKE)
+    private fun wakeIntent(bleName: String): PendingIntent {
+        val intent = Intent(this, BleTrackingService::class.java)
+            .setAction(ACTION_WAKE)
+            .putExtra(EXTRA_BLE_NAME, bleName)
         return PendingIntent.getService(
             this,
-            REQUEST_WAKE,
+            bleName.hashCode(),
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
@@ -187,6 +253,7 @@ class BleTrackingService : Service() {
     }
 
     private data class NotificationModel(
+        val bleName: String?,
         val title: String,
         val status: String,
         val stateText: String,
@@ -194,13 +261,18 @@ class BleTrackingService : Service() {
         val showWake: Boolean,
     )
 
+    private fun carNotificationId(bleName: String): Int =
+        CAR_NOTIFICATION_BASE + (bleName.hashCode() and 0xFFFF)
+
     companion object {
         private const val ACTION_START = "com.dzid26.teslable.action.START_TRACKING"
         private const val ACTION_WAKE = "com.dzid26.teslable.action.WAKE_VEHICLE"
+        private const val EXTRA_BLE_NAME = "com.dzid26.teslable.extra.BLE_NAME"
         private const val CHANNEL_ID = "tracking"
+        private const val GROUP_KEY = "com.dzid26.teslable.cars"
         private const val NOTIFICATION_ID = 1
+        private const val CAR_NOTIFICATION_BASE = 1000
         private const val REQUEST_OPEN_APP = 0
-        private const val REQUEST_WAKE = 1
         private const val RSSI_NOTIFICATION_STEP = 5
 
         /** True while the foreground service is running (same process). */
