@@ -52,7 +52,7 @@ fun ScannerScreen(
             }
             if (!locationServicesEnabled) {
                 Text(
-                    text = "Location services are off. Many phones return no BLE scan results until they are enabled.",
+                    text = "Location services are off. BLE scans return no results until it is enabled.",
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.bodySmall,
                 )
@@ -74,19 +74,21 @@ fun ScannerScreen(
             }
             Spacer(Modifier.height(12.dp))
 
-            Button(onClick = onToggleScan, enabled = permissionsGranted) {
+            Button(onClick = onToggleScan) {
                 Text(if (state.scanning) "Stop scan" else "Scan for Teslas")
             }
             Spacer(Modifier.height(12.dp))
 
-            Text(
-                text = if (state.devices.isEmpty()) {
-                    "No Tesla advertisements seen yet"
-                } else {
-                    "${state.devices.size} Tesla(s) found"
-                },
-                style = MaterialTheme.typography.bodyMedium,
-            )
+            val statusText = when {
+                state.scanning ->
+                    "Scanning: ${state.advertisementsSeen} BLE advertisements seen, ${state.devices.size} Tesla(s)"
+
+                state.advertisementsSeen > 0 ->
+                    "Scan stopped: ${state.advertisementsSeen} BLE advertisements seen, ${state.devices.size} Tesla(s)"
+
+                else -> "No scan yet"
+            }
+            Text(text = statusText, style = MaterialTheme.typography.bodyMedium)
             Spacer(Modifier.height(8.dp))
 
             LazyColumn(
@@ -100,6 +102,18 @@ fun ScannerScreen(
                         device = device,
                         expectedName = state.expectedBleName,
                         onClick = { onConnect(device) },
+                    )
+                }
+            }
+
+            if (state.log.isNotEmpty()) {
+                Spacer(Modifier.height(8.dp))
+                Text("Log", style = MaterialTheme.typography.labelLarge)
+                state.log.takeLast(5).forEach { line ->
+                    Text(
+                        text = line,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontFamily = FontFamily.Monospace,
                     )
                 }
             }
@@ -168,17 +182,6 @@ private fun ConnectionPanel(
             if (state.phase != ConnectionPhase.IDLE && state.phase != ConnectionPhase.DISCONNECTED) {
                 Button(onClick = onDisconnect, modifier = Modifier.padding(top = 8.dp)) {
                     Text("Disconnect")
-                }
-            }
-            if (state.log.isNotEmpty()) {
-                Spacer(Modifier.height(8.dp))
-                Text("Log", style = MaterialTheme.typography.labelLarge)
-                state.log.takeLast(6).forEach { line ->
-                    Text(
-                        text = line,
-                        style = MaterialTheme.typography.bodySmall,
-                        fontFamily = FontFamily.Monospace,
-                    )
                 }
             }
         }

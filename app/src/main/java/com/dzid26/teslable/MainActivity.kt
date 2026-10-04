@@ -1,11 +1,15 @@
 package com.dzid26.teslable
 
 import android.Manifest
+import android.app.Activity
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.location.LocationManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -17,6 +21,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.dzid26.teslable.ble.TeslaBleController
 import com.dzid26.teslable.ui.ScannerScreen
@@ -37,6 +42,7 @@ class MainActivity : ComponentActivity() {
                 val state by controller.state.collectAsState()
                 var permissionsGranted by remember { mutableStateOf(hasBlePermissions(context)) }
                 var locationEnabled by remember { mutableStateOf(isLocationEnabled(context)) }
+                var requestedOnce by remember { mutableStateOf(false) }
 
                 val permissionLauncher = rememberLauncherForActivityResult(
                     ActivityResultContracts.RequestMultiplePermissions()
@@ -48,23 +54,40 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
+                val requestPermissions: () -> Unit = {
+                    val activity = context as? Activity
+                    val deniedForever = requestedOnce && activity != null &&
+                        requiredBlePermissions().none {
+                            ActivityCompat.shouldShowRequestPermissionRationale(activity, it)
+                        }
+                    if (deniedForever) {
+                        context.startActivity(
+                            Intent(
+                                Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                Uri.fromParts("package", context.packageName, null),
+                            ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        )
+                    } else {
+                        requestedOnce = true
+                        permissionLauncher.launch(requiredBlePermissions().toTypedArray())
+                    }
+                }
+
                 ScannerScreen(
                     state = state,
                     permissionsGranted = permissionsGranted,
                     locationServicesEnabled = locationEnabled,
-                    onRequestPermissions = {
-                        permissionLauncher.launch(requiredBlePermissions().toTypedArray())
-                    },
+                    onRequestPermissions = requestPermissions,
                     onToggleScan = {
                         if (state.scanning) {
                             controller.stopScan()
                         } else {
                             permissionsGranted = hasBlePermissions(context)
                             locationEnabled = isLocationEnabled(context)
-                            if (!permissionsGranted) {
-                                permissionLauncher.launch(requiredBlePermissions().toTypedArray())
-                            } else {
+                            if (permissionsGranted) {
                                 controller.startScan()
+                            } else {
+                                requestPermissions()
                             }
                         }
                     },
@@ -79,7 +102,11 @@ class MainActivity : ComponentActivity() {
 
 private fun requiredBlePermissions(): List<String> =
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-        listOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT)
+        listOf(
+            Manifest.permission.BLUETOOTH_SCAN,
+            Manifest.permission.BLUETOOTH_CONNECT,
+            Manifest.permission.ACCESS_FINE_LOCATION,
+        )
     } else {
         listOf(Manifest.permission.ACCESS_FINE_LOCATION)
     }

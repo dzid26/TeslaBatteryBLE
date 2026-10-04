@@ -18,6 +18,7 @@ class TeslaBleController(context: Context) {
     private val scanner = TeslaScanner(
         context = appContext,
         onDevices = { devices -> _state.update { it.copy(devices = devices) } },
+        onAdvertisementSeen = { count -> _state.update { it.copy(advertisementsSeen = count) } },
         onLog = ::log,
     )
 
@@ -55,7 +56,14 @@ class TeslaBleController(context: Context) {
     }
 
     fun startScan() {
-        _state.update { it.copy(scanning = true, devices = emptyList(), log = emptyList()) }
+        _state.update {
+            it.copy(
+                scanning = true,
+                advertisementsSeen = 0,
+                devices = emptyList(),
+                log = emptyList(),
+            )
+        }
         scanner.start()
     }
 

@@ -26,6 +26,7 @@ enum class ConnectionPhase {
 
 data class BleUiState(
     val scanning: Boolean = false,
+    val advertisementsSeen: Int = 0,
     val devices: List<TeslaAdvert> = emptyList(),
     val vinInput: String = "",
     val expectedBleName: String? = null,
