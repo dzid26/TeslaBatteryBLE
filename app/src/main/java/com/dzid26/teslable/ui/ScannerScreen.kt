@@ -55,6 +55,7 @@ import com.dzid26.teslable.ble.TeslaAdvert
 import com.dzid26.teslable.ble.TeslaConnection
 import com.dzid26.teslable.ble.chargingStateText
 import com.dzid26.teslable.ble.connectionDisplay
+import com.dzid26.teslable.ble.selectedConnection
 import com.dzid26.teslable.ble.sessionNames
 import com.dzid26.teslable.ble.vehicleStatusText
 import com.dzid26.teslable.core.history.BatterySample
@@ -197,21 +198,23 @@ private fun ConnectionTab(
         Text(text = statusText, style = MaterialTheme.typography.bodyMedium)
         Spacer(Modifier.height(8.dp))
 
-        if (state.pairingPhase != PairingPhase.IDLE) {
+        val selectedConnection = state.selectedConnection()
+        val pairing = selectedConnection?.pairing ?: PairingPhase.IDLE
+        if (pairing != PairingPhase.IDLE) {
             Text(
-                text = when (state.pairingPhase) {
+                text = when (pairing) {
                     PairingPhase.SENDING -> "Sending pairing request..."
                     PairingPhase.WAITING_FOR_CARD ->
                         "Tap your NFC card on the center console and confirm on the car screen."
 
                     PairingPhase.OK ->
-                        "Key paired: ${state.pairingKeyId} — rename the Phone Key in Controls > Locks."
+                        "Key paired: ${selectedConnection?.pairingKeyId} — rename the Phone Key in Controls > Locks."
 
                     PairingPhase.ERROR -> "Pairing failed"
                     PairingPhase.IDLE -> ""
                 },
                 style = MaterialTheme.typography.bodySmall,
-                color = when (state.pairingPhase) {
+                color = when (pairing) {
                     PairingPhase.OK -> MaterialTheme.colorScheme.primary
                     PairingPhase.ERROR -> MaterialTheme.colorScheme.error
                     else -> MaterialTheme.colorScheme.onSurfaceVariant
@@ -230,13 +233,12 @@ private fun ConnectionTab(
                 val connection = state.connections[device.address]
                 val paired = connection?.keySlot != null ||
                     connection?.sessions?.isNotEmpty() == true ||
-                    (device.address == state.selectedAddress &&
-                        state.pairingPhase == PairingPhase.OK)
+                    connection?.pairing == PairingPhase.OK
                 DeviceRow(
                     device = device,
                     connection = connection,
                     expectedName = state.expectedBleName,
-                    isSelected = device.address == state.selectedAddress,
+                    isSelected = device.name == state.selectedBleName,
                     showPair = state.explicitScan && connection != null && !paired,
                     onClick = { onConnect(device.address) },
                     onPair = {
@@ -283,14 +285,14 @@ private fun CarTab(
     onWake: () -> Unit,
     onReadSoc: () -> Unit,
 ) {
-    val selectedConnection = state.selectedAddress?.let { state.connections[it] }
+    val selectedConnection = state.selectedConnection()
     val selectedAdvert = selectedConnection?.let { connection ->
         state.devices.firstOrNull { it.address == connection.address }
             ?: TeslaAdvert(connection.name, connection.address, connection.rssi)
     }
     val selectedSessions = selectedConnection?.sessions ?: emptyList()
     // History is per vehicle: only the selected car's samples belong in the graph.
-    val selectedVehicle = state.vehicles.firstOrNull { it.bleName == selectedConnection?.name }
+    val selectedVehicle = state.vehicles.firstOrNull { it.bleName == state.selectedBleName }
     val vehicleHistory = if (selectedVehicle == null) {
         emptyList()
     } else {

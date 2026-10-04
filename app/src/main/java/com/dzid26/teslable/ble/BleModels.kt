@@ -23,6 +23,9 @@ data class TeslaConnection(
     val keySlot: Int? = null,
     val sessions: List<String> = emptyList(),
     val charge: TeslaCommands.Charge? = null,
+    /** Pairing flow state for this car; idle unless a Pair is in flight. */
+    val pairing: PairingPhase = PairingPhase.IDLE,
+    val pairingKeyId: String? = null,
 )
 
 data class GattServiceInfo(
@@ -57,13 +60,20 @@ data class BleUiState(
     val connections: Map<String, TeslaConnection> = emptyMap(),
     /** Known cars, most recently seen first. */
     val vehicles: List<Vehicle> = emptyList(),
-    val selectedAddress: String? = null,
+    /** The car the UI is focused on, by advertised name (stable across address changes). */
+    val selectedBleName: String? = null,
     val vinInput: String = "",
     val expectedBleName: String? = null,
-    val pairingPhase: PairingPhase = PairingPhase.IDLE,
-    val pairingKeyId: String? = null,
     val log: List<String> = emptyList(),
 )
+
+/** The live connection for the selected car, if it has one. */
+fun BleUiState.selectedConnection(): TeslaConnection? {
+    val address = vehicles.firstOrNull { it.bleName == selectedBleName }?.address
+        ?: devices.firstOrNull { it.name == selectedBleName }?.address
+        ?: return null
+    return connections[address]
+}
 
 /** The title and status line both the app list and the notification show for a car. */
 data class ConnectionDisplay(

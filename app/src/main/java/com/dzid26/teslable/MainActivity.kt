@@ -104,15 +104,14 @@ class MainActivity : ComponentActivity() {
 
                 // Once a car with an enrolled key is connected, hand off to the
                 // foreground service so BLE keeps running with the app backgrounded.
-                val selectedConnection = state.selectedAddress?.let { state.connections[it] }
-                val trackingNeeded = state.trackingEnabled &&
-                    selectedConnection != null &&
-                    selectedConnection.phase == ConnectionPhase.READY &&
-                    (
-                        state.pairingPhase == PairingPhase.OK ||
-                            selectedConnection.keySlot != null ||
-                            selectedConnection.sessions.isNotEmpty()
-                        )
+                val trackingNeeded = state.trackingEnabled && state.connections.values.any { connection ->
+                    connection.phase == ConnectionPhase.READY &&
+                        (
+                            connection.pairing == PairingPhase.OK ||
+                                connection.keySlot != null ||
+                                connection.sessions.isNotEmpty()
+                            )
+                }
                 LaunchedEffect(trackingNeeded) {
                     if (!trackingNeeded || BleTrackingService.isRunning) return@LaunchedEffect
                     if (!hasNotificationPermission(context)) {
@@ -145,8 +144,8 @@ class MainActivity : ComponentActivity() {
                     onToggleTracking = controller::setTrackingEnabled,
                     onConnect = controller::onTeslaClicked,
                     onPairKey = controller::pairKey,
-                    onWake = controller::wakeVehicle,
-                    onReadSoc = controller::requestChargeState,
+                    onWake = { controller.wakeVehicle() },
+                    onReadSoc = { controller.requestChargeState() },
                 )
             }
         }

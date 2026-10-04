@@ -92,11 +92,12 @@ class BleTrackingService : Service() {
     }
 
     private fun modelFor(state: BleUiState): NotificationModel {
-        val connection = state.selectedAddress?.let { state.connections[it] }
+        val connection = state.selectedConnection()
             ?: state.connections.values.firstOrNull { it.phase == ConnectionPhase.READY }
             ?: state.connections.values.firstOrNull()
         val advert = state.devices.firstOrNull { it.address == connection?.address }
-        val display = connectionDisplay(connection, advert)
+        val vehicle = state.vehicles.firstOrNull { it.bleName == connection?.name }
+        val display = connectionDisplay(connection, advert, vehicle = vehicle)
         return NotificationModel(
             title = display.title,
             status = display.status,
