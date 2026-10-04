@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 [versions]
-agp = "8.7.3"
+agp = "9.4.1"
 kotlin = "2.1.0"
 coreKtx = "1.15.0"
 activityCompose = "1.9.3"
