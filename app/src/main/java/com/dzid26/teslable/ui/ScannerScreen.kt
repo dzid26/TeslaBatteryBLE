@@ -138,6 +138,9 @@ fun ScannerScreen(
                 state.scanning ->
                     "Scanning: ${state.devices.size} Tesla(s), $connectedCount connected"
 
+                state.discovering ->
+                    "Looking for your paired car..."
+
                 state.devices.isNotEmpty() ->
                     "Scan stopped: ${state.devices.size} Tesla(s), $connectedCount connected"
 

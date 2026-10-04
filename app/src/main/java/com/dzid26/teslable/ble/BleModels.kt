@@ -49,6 +49,8 @@ enum class PairingPhase {
 
 data class BleUiState(
     val scanning: Boolean = false,
+    val discovering: Boolean = false,
+    val explicitScan: Boolean = false,
     val trackingEnabled: Boolean = true,
     val devices: List<TeslaAdvert> = emptyList(),
     val connections: Map<String, TeslaConnection> = emptyMap(),

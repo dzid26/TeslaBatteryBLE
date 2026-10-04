@@ -52,6 +52,8 @@ class TeslaBleController(context: Context) {
     private var reconnectAttempts = 0
     private var wakeRefreshAttempts = 0
     private var readChargeAfterWake = false
+    private val decryptFailures = mutableMapOf<String, Int>()
+    private var lastRehandshakeMs = 0L
 
     private val wakeRefresh = object : Runnable {
         override fun run() {
@@ -69,9 +71,10 @@ class TeslaBleController(context: Context) {
     private val reconnect = object : Runnable {
         override fun run() {
             val address = _state.value.selectedAddress ?: return
+            if (!_state.value.trackingEnabled) return
             val phase = _state.value.connections[address]?.phase
             if (phase == ConnectionPhase.READY || phase == ConnectionPhase.CONNECTING) return
-            log("${nameFor(address)}: reconnecting")
+            log("${nameFor(address)}: reconnecting (attempt ${reconnectAttempts + 1})")
             connect(address)
         }
     }
@@ -99,15 +102,29 @@ class TeslaBleController(context: Context) {
         }
     }
 
+    /** Retries with capped backoff while tracking is on, so a weak link recovers. */
     private fun scheduleReconnect(address: String) {
         if (_state.value.selectedAddress != address) return
-        if (reconnectAttempts >= RECONNECT_MAX_ATTEMPTS) {
-            log("${nameFor(address)}: reconnect stopped after $reconnectAttempts attempts")
-            return
-        }
+        if (!_state.value.trackingEnabled) return
         reconnectAttempts++
+        if (reconnectAttempts >= DISCOVERY_AFTER_ATTEMPTS) {
+            // Direct connects keep failing; rediscover in case the car stopped
+            // advertising or came back at a new address.
+            startDiscovery()
+        }
+        val delay = (RECONNECT_DELAY_MS * reconnectAttempts)
+            .coerceAtMost(RECONNECT_MAX_DELAY_MS)
         handler.removeCallbacks(reconnect)
-        handler.postDelayed(reconnect, RECONNECT_DELAY_MS)
+        handler.postDelayed(reconnect, delay)
+    }
+
+    /** Finds the paired car without taking over the scan button (reconnection). */
+    private fun startDiscovery() {
+        if (!_state.value.trackingEnabled) return
+        if (_state.value.scanning || _state.value.discovering) return
+        if (!hasBlePermissions(appContext)) return
+        _state.update { it.copy(discovering = true, explicitScan = false) }
+        scanner.start()
     }
 
     private val sessionRetry = object : Runnable {
@@ -204,11 +221,14 @@ class TeslaBleController(context: Context) {
         pendingCommands.clear()
         chargeAfterSession = false
         readChargeAfterWake = false
+        decryptFailures.clear()
         sessionRetryAttempts = 0
         reconnectAttempts = 0
         _state.update {
             it.copy(
                 scanning = true,
+                discovering = false,
+                explicitScan = true,
                 devices = emptyList(),
                 connections = emptyMap(),
                 selectedAddress = null,
@@ -221,7 +241,7 @@ class TeslaBleController(context: Context) {
 
     fun stopScan() {
         scanner.stop()
-        _state.update { it.copy(scanning = false) }
+        _state.update { it.copy(scanning = false, discovering = false) }
     }
 
     fun onTeslaClicked(address: String) {
@@ -245,15 +265,24 @@ class TeslaBleController(context: Context) {
     }
 
     /**
-     * Reconnects to a remembered car when nothing is connected: starts a scan so
-     * the paired car is discovered and auto-connected again.
+     * Reconnects to a remembered car when nothing is connected. Direct connect
+     * first; discovery takes over if the car stopped advertising or moved to a
+     * new address. The scan button stays a manual "find new cars" action.
      */
     fun ensureConnected() {
         if (!_state.value.trackingEnabled) return
-        if (knownCars.isEmpty() || !hasBlePermissions(appContext)) return
-        if (_state.value.scanning) return
-        if (_state.value.connections.values.any { it.phase in ACTIVE_PHASES }) return
-        startScan()
+        if (!hasBlePermissions(appContext)) return
+        val state = _state.value
+        if (state.scanning) return
+        if (state.connections.values.any { it.phase in ACTIVE_PHASES }) return
+        val known = knownCars.values.firstOrNull { it.address == state.selectedAddress }
+            ?: knownCars.values.firstOrNull()
+            ?: return
+        if (state.selectedAddress != known.address) {
+            _state.update { it.copy(selectedAddress = known.address) }
+        }
+        log("${known.gattName ?: known.name}: reconnecting to paired car")
+        connect(known.address)
     }
 
     fun pairKey(address: String) {
@@ -311,6 +340,7 @@ class TeslaBleController(context: Context) {
         pendingCommands.clear()
         chargeAfterSession = false
         readChargeAfterWake = false
+        decryptFailures.clear()
         sessionRetryAttempts = 0
         reconnectAttempts = 0
         wakeRefreshAttempts = 0
@@ -318,6 +348,8 @@ class TeslaBleController(context: Context) {
         _state.update {
             it.copy(
                 scanning = false,
+                discovering = false,
+                explicitScan = false,
                 devices = emptyList(),
                 connections = emptyMap(),
                 selectedAddress = null,
@@ -790,9 +822,24 @@ class TeslaBleController(context: Context) {
         val session = sessions[pending.address]?.get(pending.domain) ?: return true
         val plaintext = session.decrypt(message, pending.requestId, pending.window)
         if (plaintext == null) {
+            val failures = (decryptFailures[pending.address] ?: 0) + 1
+            decryptFailures[pending.address] = failures
             log("${nameFor(pending.address)}: response decryption failed (${pending.kind.name.lowercase()})")
+            if (failures >= 2) {
+                // The car may have rotated its session (reboot, deep sleep); handshake
+                // again, but at most once a minute so a broken link cannot loop.
+                val now = System.currentTimeMillis()
+                if (now - lastRehandshakeMs > REHANDSHAKE_COOLDOWN_MS) {
+                    lastRehandshakeMs = now
+                    decryptFailures.remove(pending.address)
+                    log("${nameFor(pending.address)}: re-handshaking after repeated decryption failures")
+                    sessions[pending.address]?.remove(pending.domain)
+                    startSession(pending.address)
+                }
+            }
             return true
         }
+        decryptFailures.remove(pending.address)
         when (pending.kind) {
             CommandKind.WAKE -> {
                 val status = runCatching { TeslaVcsec.parseCommandStatus(plaintext) }.getOrNull()
@@ -857,8 +904,10 @@ class TeslaBleController(context: Context) {
         const val SESSION_RETRY_MS = 3000L
         const val SESSION_MAX_ATTEMPTS = 20
         const val POLL_MS = 10_000L
+        const val REHANDSHAKE_COOLDOWN_MS = 60_000L
         const val RECONNECT_DELAY_MS = 5000L
-        const val RECONNECT_MAX_ATTEMPTS = 12
+        const val RECONNECT_MAX_DELAY_MS = 60_000L
+        const val DISCOVERY_AFTER_ATTEMPTS = 3
         const val WAKE_REFRESH_MS = 5000L
         const val WAKE_REFRESH_MAX_ATTEMPTS = 6
         const val PREFS = "teslable"
