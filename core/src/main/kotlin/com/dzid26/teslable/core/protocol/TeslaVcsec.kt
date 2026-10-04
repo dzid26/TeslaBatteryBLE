@@ -10,6 +10,7 @@ import com.tesla.generated.vcsec.UnsignedMessage
 import com.tesla.generated.vcsec.UserPresence_E
 import com.tesla.generated.vcsec.VehicleLockState_E
 import com.tesla.generated.vcsec.VehicleSleepStatus_E
+import com.tesla.generated.vcsec.WhitelistEntryInfo
 import com.tesla.generated.vcsec.WhitelistInfo
 import okio.ByteString.Companion.toByteString
 import java.security.SecureRandom
@@ -31,6 +32,12 @@ object TeslaVcsec {
     fun buildWhitelistInfoRequest(): ByteArray =
         buildInformationRequest(InformationRequestType.INFORMATION_REQUEST_TYPE_GET_WHITELIST_INFO)
 
+    fun buildWhitelistEntryRequest(slot: Int): ByteArray =
+        buildInformationRequest(
+            InformationRequestType.INFORMATION_REQUEST_TYPE_GET_WHITELIST_ENTRY_INFO,
+            slot,
+        )
+
     fun parseStatusResponse(bytes: ByteArray): Status? {
         val message = RoutableMessage.ADAPTER.decode(bytes)
         val payload = message.protobuf_message_as_bytes ?: return null
@@ -48,10 +55,20 @@ object TeslaVcsec {
         return FromVCSECMessage.ADAPTER.decode(payload).whitelistInfo
     }
 
-    private fun buildInformationRequest(type: InformationRequestType): ByteArray {
+    fun parseWhitelistEntryResponse(bytes: ByteArray): WhitelistEntryInfo? {
+        val message = RoutableMessage.ADAPTER.decode(bytes)
+        val payload = message.protobuf_message_as_bytes ?: return null
+        return FromVCSECMessage.ADAPTER.decode(payload).whitelistEntryInfo
+    }
+
+    private fun buildInformationRequest(
+        type: InformationRequestType,
+        slot: Int? = null,
+    ): ByteArray {
         val payload = UnsignedMessage(
             VCSEC_InformationRequest = InformationRequest(
                 informationRequestType = type,
+                slot = slot,
             ),
         ).encode()
         return RoutableMessage(

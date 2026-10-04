@@ -5,6 +5,8 @@ import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import com.tesla.generated.vcsec.WhitelistEntryInfo
+import com.tesla.generated.vcsec.WhitelistInfo
 import com.dzid26.teslable.core.TeslaNames
 import com.dzid26.teslable.core.protocol.TeslaPairing
 import com.dzid26.teslable.core.protocol.TeslaVcsec
@@ -23,6 +25,7 @@ class TeslaBleController(context: Context) {
     private val clients = mutableMapOf<String, TeslaGattClient>()
     private val failedAddresses = mutableSetOf<String>()
     private val handler = Handler(Looper.getMainLooper())
+    private var keySlotQueue: List<Int> = emptyList()
 
     private val pairingTimeout = Runnable {
         if (_state.value.pairingPhase == PairingPhase.SENDING) {
@@ -66,6 +69,7 @@ class TeslaBleController(context: Context) {
         clients.clear()
         failedAddresses.clear()
         handler.removeCallbacks(whitelistPoll)
+        keySlotQueue = emptyList()
         _state.update {
             it.copy(
                 scanning = true,
@@ -87,7 +91,11 @@ class TeslaBleController(context: Context) {
     fun onTeslaClicked(address: String) {
         _state.update { it.copy(selectedAddress = address) }
         when (_state.value.connections[address]?.phase) {
-            ConnectionPhase.READY -> requestVcsecStatus(address)
+            ConnectionPhase.READY -> {
+                requestVcsecStatus(address)
+                requestKeySlot(address)
+            }
+
             ConnectionPhase.FAILED, ConnectionPhase.DISCONNECTED, null -> connect(address)
             else -> Unit
         }
@@ -123,6 +131,7 @@ class TeslaBleController(context: Context) {
         clients.clear()
         handler.removeCallbacks(pairingTimeout)
         handler.removeCallbacks(whitelistPoll)
+        keySlotQueue = emptyList()
     }
 
     @SuppressLint("MissingPermission")
@@ -186,6 +195,7 @@ class TeslaBleController(context: Context) {
             updateConnection(address) { it.copy(phase = phase) }
             if (phase == ConnectionPhase.READY && _state.value.selectedAddress == address) {
                 requestVcsecStatus(address)
+                requestKeySlot(address)
             }
         }
 
@@ -217,17 +227,13 @@ class TeslaBleController(context: Context) {
 
             val whitelist = runCatching { TeslaVcsec.parseWhitelistInfoResponse(message) }.getOrNull()
             if (whitelist != null) {
-                val keyId = _state.value.pairingKeyId
-                val enrolled = keyId != null && whitelist.whitelistEntries.any {
-                    it.publicKeySHA1.toByteArray().copyOf(keyId.length / 2).toHex() == keyId
-                }
-                if (enrolled) {
-                    handler.removeCallbacks(whitelistPoll)
-                    _state.update { it.copy(pairingPhase = PairingPhase.OK) }
-                    log("${nameFor(address)}: key enrolled (${whitelist.numberOfEntries} keys)")
-                } else if (whitelistPollAttempts == 1) {
-                    log("${nameFor(address)}: whitelist has ${whitelist.numberOfEntries} keys")
-                }
+                handleWhitelistInfo(address, whitelist)
+                return
+            }
+
+            val entry = runCatching { TeslaVcsec.parseWhitelistEntryResponse(message) }.getOrNull()
+            if (entry != null) {
+                handleWhitelistEntry(address, entry)
                 return
             }
 
@@ -255,6 +261,70 @@ class TeslaBleController(context: Context) {
             log("${nameFor(address)}: failed to send VCSEC status request")
         }
     }
+
+    private fun handleWhitelistInfo(address: String, whitelist: WhitelistInfo) {
+        val stored = keyStore.load()
+        val keyId = stored?.keyId?.toHex()
+        val enrolled = stored != null && whitelist.whitelistEntries.any {
+            it.publicKeySHA1.toByteArray().copyOf(stored.keyId.size).contentEquals(stored.keyId)
+        }
+        if (stored != null && enrolled && keyId != null) {
+            val wasEnrolled = _state.value.pairingPhase == PairingPhase.OK
+            handler.removeCallbacks(whitelistPoll)
+            _state.update { it.copy(pairingPhase = PairingPhase.OK, pairingKeyId = keyId) }
+            if (!wasEnrolled) {
+                log("${nameFor(address)}: key enrolled (${whitelist.numberOfEntries} keys)")
+            }
+            val index = whitelist.whitelistEntries.indexOfFirst {
+                it.publicKeySHA1.toByteArray().copyOf(stored.keyId.size).contentEquals(stored.keyId)
+            }
+            val slots = occupiedSlots(whitelist.slotMask)
+            keySlotQueue = if (index in slots.indices) {
+                listOf(slots[index]) + slots.filterIndexed { i, _ -> i != index }
+            } else {
+                slots
+            }
+            requestNextKeySlot(address)
+        } else if (whitelistPollAttempts == 1) {
+            log("${nameFor(address)}: whitelist has ${whitelist.numberOfEntries} keys")
+        }
+    }
+
+    private fun handleWhitelistEntry(address: String, entry: WhitelistEntryInfo) {
+        val stored = keyStore.load()
+        val matches = stored != null && (
+            entry.publicKey?.PublicKeyRaw?.toByteArray()?.contentEquals(stored.publicKeyRaw) == true ||
+                entry.keyId?.publicKeySHA1?.toByteArray()
+                    ?.copyOf(stored.keyId.size)
+                    ?.contentEquals(stored.keyId) == true
+            )
+        if (matches) {
+            keySlotQueue = emptyList()
+            updateConnection(address) { it.copy(keySlot = entry.slot) }
+            log("${nameFor(address)}: key slot ${entry.slot}")
+        } else {
+            requestNextKeySlot(address)
+        }
+    }
+
+    private fun requestKeySlot(address: String) {
+        if (_state.value.connections[address]?.keySlot != null) return
+        if (keyStore.load() == null) return
+        clients[address]?.send(TeslaVcsec.buildWhitelistInfoRequest())
+    }
+
+    private fun requestNextKeySlot(address: String) {
+        val slot = keySlotQueue.firstOrNull()
+        if (slot == null) {
+            log("${nameFor(address)}: could not locate our key slot")
+            return
+        }
+        keySlotQueue = keySlotQueue.drop(1)
+        clients[address]?.send(TeslaVcsec.buildWhitelistEntryRequest(slot))
+    }
+
+    private fun occupiedSlots(slotMask: Int): List<Int> =
+        (0 until Int.SIZE_BITS).filter { (slotMask ushr it) and 1 == 1 }
 
     private fun updateConnection(address: String, transform: (TeslaConnection) -> TeslaConnection) {
         _state.update { state ->

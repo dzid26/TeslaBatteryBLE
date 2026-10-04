@@ -16,14 +16,16 @@ class PairingKeyStore(context: Context) {
 
     private val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
+    fun load(): TeslaKeyPair? = loadInternal()
+
     fun loadOrCreate(): TeslaKeyPair {
-        load()?.let { return it }
+        loadInternal()?.let { return it }
         val keyPair = TeslaKeys.generate()
         save(keyPair)
         return keyPair
     }
 
-    private fun load(): TeslaKeyPair? {
+    private fun loadInternal(): TeslaKeyPair? {
         val iv = prefs.getString(KEY_IV, null) ?: return null
         val encrypted = prefs.getString(KEY_PRIVATE, null) ?: return null
         val publicKey = prefs.getString(KEY_PUBLIC, null) ?: return null

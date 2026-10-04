@@ -205,6 +205,12 @@ private fun DeviceRow(
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
+            connection?.keySlot?.let { slot ->
+                Text(
+                    text = "key slot: $slot",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
         }
     }
 }

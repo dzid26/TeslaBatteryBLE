@@ -10,6 +10,7 @@ import com.tesla.generated.vcsec.UserPresence_E
 import com.tesla.generated.vcsec.VehicleLockState_E
 import com.tesla.generated.vcsec.VehicleSleepStatus_E
 import com.tesla.generated.vcsec.VehicleStatus
+import com.tesla.generated.vcsec.WhitelistEntryInfo
 import com.tesla.generated.vcsec.WhitelistInfo
 import okio.ByteString.Companion.toByteString
 import org.junit.Assert.assertArrayEquals
@@ -89,5 +90,34 @@ class TeslaVcsecTest {
         assertNotNull(info)
         assertEquals(1, info!!.numberOfEntries)
         assertArrayEquals(keyId, info.whitelistEntries.first().publicKeySHA1.toByteArray())
+    }
+
+    @Test
+    fun `whitelist entry request carries the slot`() {
+        val request = RoutableMessage.ADAPTER.decode(TeslaVcsec.buildWhitelistEntryRequest(8))
+        val payload = UnsignedMessage.ADAPTER.decode(request.protobuf_message_as_bytes!!)
+        val info = payload.VCSEC_InformationRequest
+        assertEquals(
+            InformationRequestType.INFORMATION_REQUEST_TYPE_GET_WHITELIST_ENTRY_INFO,
+            info?.informationRequestType,
+        )
+        assertEquals(8, info?.slot)
+    }
+
+    @Test
+    fun `parses whitelist entry responses`() {
+        val keyId = byteArrayOf(9, 9, 9, 9)
+        val payload = FromVCSECMessage(
+            whitelistEntryInfo = WhitelistEntryInfo(
+                keyId = KeyIdentifier(publicKeySHA1 = keyId.toByteString()),
+                slot = 8,
+            ),
+        ).encode()
+        val response = RoutableMessage(protobuf_message_as_bytes = payload.toByteString()).encode()
+
+        val info = TeslaVcsec.parseWhitelistEntryResponse(response)
+        assertNotNull(info)
+        assertEquals(8, info!!.slot)
+        assertArrayEquals(keyId, info.keyId?.publicKeySHA1?.toByteArray())
     }
 }

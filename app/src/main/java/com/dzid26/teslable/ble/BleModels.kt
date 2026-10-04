@@ -17,6 +17,7 @@ data class TeslaConnection(
     val services: List<GattServiceInfo> = emptyList(),
     val mtu: Int? = null,
     val status: TeslaVcsec.Status? = null,
+    val keySlot: Int? = null,
 )
 
 data class GattServiceInfo(
