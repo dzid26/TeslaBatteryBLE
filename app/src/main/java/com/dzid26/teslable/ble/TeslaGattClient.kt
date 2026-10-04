@@ -27,6 +27,7 @@ class TeslaGattClient(
         fun onMtu(mtu: Int)
         fun onMessage(message: ByteArray)
         fun onLog(message: String)
+        fun onRssi(rssi: Int) {}
     }
 
     private var gatt: BluetoothGatt? = null
@@ -78,6 +79,11 @@ class TeslaGattClient(
         writeQueue.addAll(BleFramer.encode(payload, chunkSize))
         processWriteQueue()
         return true
+    }
+
+    @SuppressLint("MissingPermission")
+    fun readRssi() {
+        gatt?.readRemoteRssi()
     }
 
     private fun processWriteQueue() {
@@ -256,6 +262,12 @@ class TeslaGattClient(
             handler.removeCallbacks(writeTimeout)
             writeInProgress = false
             processWriteQueue()
+        }
+
+        override fun onReadRemoteRssi(gatt: BluetoothGatt, rssi: Int, status: Int) {
+            if (status == BluetoothGatt.GATT_SUCCESS) {
+                listener.onRssi(rssi)
+            }
         }
     }
 

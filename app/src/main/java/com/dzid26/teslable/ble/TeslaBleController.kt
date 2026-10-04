@@ -93,6 +93,7 @@ class TeslaBleController(context: Context) {
                 chargeAfterSession = true
                 startSession(address)
             }
+            clients[address]?.readRssi()
             requestVcsecStatus(address)
             handler.postDelayed(this, POLL_MS)
         }
@@ -350,6 +351,7 @@ class TeslaBleController(context: Context) {
                         gattDeviceName = existing?.gattDeviceName,
                         services = existing?.services ?: emptyList(),
                         mtu = existing?.mtu,
+                        rssi = existing?.rssi,
                         status = existing?.status,
                         keySlot = existing?.keySlot,
                         sessions = existing?.sessions ?: emptyList(),
@@ -385,9 +387,13 @@ class TeslaBleController(context: Context) {
                     connections[device.address] = TeslaConnection(
                         address = device.address,
                         name = device.name,
+                        rssi = device.rssi,
                     )
-                } else if (existing.name != device.name) {
-                    connections[device.address] = existing.copy(name = device.name)
+                } else if (existing.name != device.name || existing.rssi != device.rssi) {
+                    connections[device.address] = existing.copy(
+                        name = device.name,
+                        rssi = device.rssi,
+                    )
                 }
             }
             state.copy(
@@ -480,6 +486,10 @@ class TeslaBleController(context: Context) {
 
         override fun onMtu(mtu: Int) {
             updateConnection(address) { it.copy(mtu = mtu) }
+        }
+
+        override fun onRssi(rssi: Int) {
+            updateConnection(address) { it.copy(rssi = rssi) }
         }
 
         override fun onMessage(message: ByteArray) {

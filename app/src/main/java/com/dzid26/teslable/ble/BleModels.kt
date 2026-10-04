@@ -17,6 +17,7 @@ data class TeslaConnection(
     val gattDeviceName: String? = null,
     val services: List<GattServiceInfo> = emptyList(),
     val mtu: Int? = null,
+    val rssi: Int? = null,
     val status: TeslaVcsec.Status? = null,
     val keySlot: Int? = null,
     val sessions: List<String> = emptyList(),
@@ -83,9 +84,10 @@ fun connectionDisplay(
 ): ConnectionDisplay {
     val title = connection?.gattDeviceName ?: connection?.name ?: advert?.name ?: "Tesla"
     val state = connectionStateText(connection, showHints)
+    val rssi = connection?.rssi ?: advert?.rssi
     return ConnectionDisplay(
         title = title,
-        status = advert?.let { "$state · RSSI ${it.rssi} dBm" } ?: state,
+        status = rssi?.let { "$state · RSSI $it dBm" } ?: state,
     )
 }
 
