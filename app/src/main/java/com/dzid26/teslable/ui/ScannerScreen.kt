@@ -214,6 +214,13 @@ private fun DeviceRow(
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
+            if (connection != null && connection.sessions.isNotEmpty()) {
+                Text(
+                    text = "sessions: ${connection.sessions.joinToString()}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
         }
     }
 }

@@ -5,6 +5,11 @@ import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import com.dzid26.teslable.core.protocol.TeslaCrypto
+import com.dzid26.teslable.core.protocol.TeslaSession
+import com.dzid26.teslable.core.protocol.TeslaSessionRequests
+import com.tesla.generated.universalmessage.Domain
+import com.tesla.generated.universalmessage.RoutableMessage
 import com.tesla.generated.vcsec.WhitelistEntryInfo
 import com.tesla.generated.vcsec.WhitelistInfo
 import com.dzid26.teslable.core.TeslaNames
@@ -18,6 +23,7 @@ import kotlinx.coroutines.flow.update
 class TeslaBleController(context: Context) {
 
     private val appContext = context.applicationContext
+    private val prefs = appContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
     private val _state = MutableStateFlow(BleUiState())
     val state: StateFlow<BleUiState> = _state.asStateFlow()
 
@@ -26,6 +32,11 @@ class TeslaBleController(context: Context) {
     private val failedAddresses = mutableSetOf<String>()
     private val handler = Handler(Looper.getMainLooper())
     private var keySlotQueue: List<Int> = emptyList()
+    private val clientAddress = TeslaCrypto.randomBytes(16)
+    private val sessions = mutableMapOf<String, MutableMap<Domain, TeslaSession>>()
+    private val pendingSessions = mutableMapOf<String, PendingSession>()
+
+    private data class PendingSession(val address: String, val domain: Domain)
 
     private val pairingTimeout = Runnable {
         if (_state.value.pairingPhase == PairingPhase.SENDING) {
@@ -55,11 +66,21 @@ class TeslaBleController(context: Context) {
         onLog = ::log,
     )
 
+    init {
+        val savedVin = prefs.getString(KEY_VIN, "").orEmpty()
+        if (savedVin.isNotEmpty()) {
+            setVinInput(savedVin)
+        }
+    }
+
     fun setVinInput(input: String) {
         val expected = if (input.length == VIN_LENGTH) {
             runCatching { TeslaNames.bleName(input) }.getOrNull()
         } else {
             null
+        }
+        if (expected != null) {
+            prefs.edit().putString(KEY_VIN, input).apply()
         }
         _state.update { it.copy(vinInput = input, expectedBleName = expected) }
     }
@@ -70,6 +91,8 @@ class TeslaBleController(context: Context) {
         failedAddresses.clear()
         handler.removeCallbacks(whitelistPoll)
         keySlotQueue = emptyList()
+        sessions.clear()
+        pendingSessions.clear()
         _state.update {
             it.copy(
                 scanning = true,
@@ -94,6 +117,7 @@ class TeslaBleController(context: Context) {
             ConnectionPhase.READY -> {
                 requestVcsecStatus(address)
                 requestKeySlot(address)
+                startSession(address)
             }
 
             ConnectionPhase.FAILED, ConnectionPhase.DISCONNECTED, null -> connect(address)
@@ -196,6 +220,7 @@ class TeslaBleController(context: Context) {
             if (phase == ConnectionPhase.READY && _state.value.selectedAddress == address) {
                 requestVcsecStatus(address)
                 requestKeySlot(address)
+                startSession(address)
                 stopScan()
             }
         }
@@ -213,6 +238,8 @@ class TeslaBleController(context: Context) {
         }
 
         override fun onMessage(message: ByteArray) {
+            if (handleSessionInfo(address, message)) return
+
             val pairing = runCatching { TeslaPairing.parseAddKeyResponse(message) }.getOrNull()
             if (pairing != null) {
                 handler.removeCallbacks(pairingTimeout)
@@ -261,6 +288,78 @@ class TeslaBleController(context: Context) {
         if (clients[address]?.send(request) != true) {
             log("${nameFor(address)}: failed to send VCSEC status request")
         }
+    }
+
+    private fun startSession(address: String) {
+        val keyPair = keyStore.load()
+        if (keyPair == null) {
+            log("${nameFor(address)}: no pairing key yet")
+            return
+        }
+        val vin = _state.value.vinInput
+        if (vin.length != VIN_LENGTH) {
+            log("${nameFor(address)}: enter your VIN to establish a session")
+            return
+        }
+        for (domain in SESSION_DOMAINS) {
+            val uuid = TeslaCrypto.randomBytes(16)
+            val routing = if (domain == Domain.DOMAIN_VEHICLE_SECURITY) {
+                TeslaCrypto.randomBytes(16)
+            } else {
+                clientAddress
+            }
+            pendingSessions[uuid.toHex()] = PendingSession(address, domain)
+            val request = TeslaSessionRequests.buildSessionInfoRequest(
+                domain = domain,
+                publicKeyRaw = keyPair.publicKeyRaw,
+                routingAddress = routing,
+                uuid = uuid,
+            )
+            log("${nameFor(address)}: session request ${domain.name}")
+            if (clients[address]?.send(request) != true) {
+                log("${nameFor(address)}: failed to send session request")
+            }
+        }
+    }
+
+    private fun handleSessionInfo(address: String, bytes: ByteArray): Boolean {
+        val message = runCatching { RoutableMessage.ADAPTER.decode(bytes) }.getOrNull()
+            ?: return false
+        val encodedInfo = message.session_info?.toByteArray() ?: return false
+        val challenge = message.request_uuid.toByteArray()
+        val pending = pendingSessions.remove(challenge.toHex()) ?: return false
+        val tag = message.signature_data?.session_info_tag?.tag?.toByteArray()
+        if (tag == null) {
+            log("${nameFor(address)}: session info missing tag")
+            return true
+        }
+        val keyPair = keyStore.load()
+        val vin = _state.value.vinInput
+        val session = if (keyPair != null && vin.length == VIN_LENGTH) {
+            TeslaSession.import(
+                privateKeyPkcs8 = keyPair.privateKeyPkcs8,
+                publicKeyRaw = keyPair.publicKeyRaw,
+                vin = vin,
+                challenge = challenge,
+                encodedInfo = encodedInfo,
+                tag = tag,
+            )
+        } else {
+            null
+        }
+        if (session == null) {
+            log("${nameFor(address)}: session verification failed (${pending.domain.name})")
+            return true
+        }
+        sessions.getOrPut(address) { mutableMapOf() }[pending.domain] = session
+        updateConnection(address) {
+            it.copy(
+                sessions = sessions[address]?.keys?.map { domain -> domain.name }?.sorted()
+                    ?: emptyList(),
+            )
+        }
+        log("${nameFor(address)}: session established (${pending.domain.name})")
+        return true
     }
 
     private fun handleWhitelistInfo(address: String, whitelist: WhitelistInfo) {
@@ -355,5 +454,11 @@ class TeslaBleController(context: Context) {
         const val PAIRING_TIMEOUT_MS = 5000L
         const val WHITELIST_POLL_MS = 2000L
         const val WHITELIST_MAX_ATTEMPTS = 30
+        const val PREFS = "teslable"
+        const val KEY_VIN = "vin"
+        val SESSION_DOMAINS = listOf(
+            Domain.DOMAIN_VEHICLE_SECURITY,
+            Domain.DOMAIN_INFOTAINMENT,
+        )
     }
 }
