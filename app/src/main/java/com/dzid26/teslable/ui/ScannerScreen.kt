@@ -9,10 +9,13 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -25,6 +28,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -208,15 +212,22 @@ fun ScannerScreen(
                     )
                 }
                 item { BatteryHistoryCard(history) }
-                if (state.log.isNotEmpty()) {
-                    item {
-                        Text(
-                            text = "Log",
-                            style = MaterialTheme.typography.labelLarge,
-                            modifier = Modifier.padding(top = 8.dp),
-                        )
-                    }
-                    items(state.log.takeLast(100)) { line ->
+            }
+
+            if (state.log.isNotEmpty()) {
+                Spacer(Modifier.height(8.dp))
+                Text("Log", style = MaterialTheme.typography.labelLarge)
+                val logScroll = rememberScrollState()
+                LaunchedEffect(logScroll.maxValue) {
+                    logScroll.scrollTo(logScroll.maxValue)
+                }
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 150.dp)
+                        .verticalScroll(logScroll),
+                ) {
+                    state.log.takeLast(100).forEach { line ->
                         Text(
                             text = line,
                             style = MaterialTheme.typography.bodySmall,
