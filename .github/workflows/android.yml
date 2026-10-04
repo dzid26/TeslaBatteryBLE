@@ -73,10 +73,10 @@ jobs:
         uses: ReactiveCircus/android-emulator-runner@v2
         with:
           api-level: 30
-          target: aosp_atd
+          target: google_apis
           arch: x86_64
           profile: pixel_2
-          emulator-boot-timeout: 300
+          emulator-boot-timeout: 420
           disable-animations: true
           script: bash .github/scripts/capture-screenshots.sh dist/app-debug.apk screenshots
 

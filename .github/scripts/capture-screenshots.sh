@@ -12,11 +12,32 @@ ACTIVITY="${4:-$PKG/.MainActivity}"
 mkdir -p "$OUT"
 
 adb wait-for-device
+
+# The emulator script starts as soon as the device is online, which can still
+# be inside the boot animation; wait for the system to finish booting.
+for _ in $(seq 1 60); do
+  if [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; then
+    break
+  fi
+  sleep 5
+done
+
+# Keep the screen on and make sure it is awake. `screencap` returns a black
+# frame while the emulator display is asleep.
+adb shell svc power stayon true || true
+for _ in $(seq 1 30); do
+  if adb shell dumpsys power 2>/dev/null | grep -q 'mWakefulness=Awake'; then
+    break
+  fi
+  adb shell input keyevent KEYCODE_WAKEUP || true
+  sleep 2
+done
+adb shell input keyevent KEYCODE_WAKEUP || true
+adb shell wm dismiss-keyguard || true
+
 adb install -r "$APK"
 
 # Grant the permissions the app asks for so no dialogs cover the UI.
-adb shell input keyevent KEYCODE_WAKEUP || true
-adb shell wm dismiss-keyguard || true
 for permission in \
   BLUETOOTH_SCAN \
   BLUETOOTH_CONNECT \
@@ -26,7 +47,22 @@ for permission in \
 done
 adb shell cmd location set-location-enabled true || true
 
+# Bring the app to the foreground and wait until its window has focus.
 adb shell am start -W -n "$ACTIVITY" > /dev/null
+focused=false
+for _ in $(seq 1 30); do
+  if adb shell dumpsys window 2>/dev/null | grep -E 'mCurrentFocus|mFocusedApp' | grep -q "$PKG"; then
+    focused=true
+    break
+  fi
+  sleep 2
+  adb shell am start -n "$ACTIVITY" > /dev/null 2>&1 || true
+done
+if [ "$focused" != true ]; then
+  echo "app never reached the foreground; skipping screenshots" >&2
+  exit 1
+fi
+
 sleep 5
 adb exec-out screencap -p > "$OUT/01-overview.png"
 
