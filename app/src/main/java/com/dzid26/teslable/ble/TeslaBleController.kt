@@ -160,13 +160,30 @@ class TeslaBleController(context: Context) {
         _state.update { it.copy(scanning = false, discovering = false) }
     }
 
-    /** The UI opened a car: focus it, and connect it if it is not already. */
+    /** The UI opened a car by its current address. */
     fun openVehicle(address: String) {
         val name = _state.value.connections[address]?.name
             ?: _state.value.devices.firstOrNull { it.address == address }?.name
+            ?: vehicles.values.firstOrNull { it.address == address }?.bleName
             ?: return
-        selectVehicle(name, persist = true)
-        val link = links[name]
+        openVehicle(name, address)
+    }
+
+    /** A notification tap asked for a specific car, by its stable advertised name. */
+    fun openVehicleByBleName(bleName: String) {
+        val vehicle = vehicles[bleName] ?: return
+        openVehicle(bleName, vehicle.address)
+    }
+
+    /** Clears the one-shot notification open request once the UI showed it. */
+    fun consumeOpenVehicleRequest() {
+        _state.update { it.copy(openVehicleRequest = null) }
+    }
+
+    private fun openVehicle(bleName: String, address: String) {
+        selectVehicle(bleName, persist = true)
+        _state.update { it.copy(openVehicleRequest = bleName) }
+        val link = links[bleName]
         when (link?.phase) {
             ConnectionPhase.READY -> {
                 link.requestStatus()
@@ -179,7 +196,7 @@ class TeslaBleController(context: Context) {
 
             ConnectionPhase.CONNECTING -> Unit
 
-            else -> ensureLink(name, address).connect()
+            else -> ensureLink(bleName, address).connect()
         }
     }
 

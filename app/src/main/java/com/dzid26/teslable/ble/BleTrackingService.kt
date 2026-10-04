@@ -191,7 +191,7 @@ class BleTrackingService : Service() {
             .setSmallIcon(R.drawable.ic_stat_tracking)
             .setContentTitle(model.title)
             .setContentText(model.status)
-            .setContentIntent(openAppIntent())
+            .setContentIntent(openAppIntent(model.bleName))
             .setOngoing(true)
             .setSilent(true)
             .setOnlyAlertOnce(true)
@@ -215,12 +215,16 @@ class BleTrackingService : Service() {
         return builder.build()
     }
 
-    private fun openAppIntent(): PendingIntent {
+    /** Tapping a car's notification opens that car; the summary opens the app. */
+    private fun openAppIntent(bleName: String?): PendingIntent {
         val intent = Intent(this, MainActivity::class.java)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        if (bleName != null) {
+            intent.putExtra(EXTRA_BLE_NAME, bleName)
+        }
         return PendingIntent.getActivity(
             this,
-            REQUEST_OPEN_APP,
+            bleName?.hashCode() ?: REQUEST_OPEN_APP,
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
@@ -267,7 +271,9 @@ class BleTrackingService : Service() {
     companion object {
         private const val ACTION_START = "com.dzid26.teslable.action.START_TRACKING"
         private const val ACTION_WAKE = "com.dzid26.teslable.action.WAKE_VEHICLE"
-        private const val EXTRA_BLE_NAME = "com.dzid26.teslable.extra.BLE_NAME"
+
+        /** Extra carrying a car's advertised name for notification taps/wakes. */
+        const val EXTRA_BLE_NAME = "com.dzid26.teslable.extra.BLE_NAME"
         private const val CHANNEL_ID = "tracking"
         private const val GROUP_KEY = "com.dzid26.teslable.cars"
         private const val NOTIFICATION_ID = 1

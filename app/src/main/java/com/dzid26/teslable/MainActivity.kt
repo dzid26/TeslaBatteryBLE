@@ -29,6 +29,7 @@ import com.dzid26.teslable.ble.BleControllerHolder
 import com.dzid26.teslable.ble.BleTrackingService
 import com.dzid26.teslable.ble.ConnectionPhase
 import com.dzid26.teslable.ble.PairingPhase
+import com.dzid26.teslable.ble.TeslaBleController
 import com.dzid26.teslable.ble.hasBlePermissions
 import com.dzid26.teslable.ble.isLocationEnabled
 import com.dzid26.teslable.ble.requiredBlePermissions
@@ -37,15 +38,18 @@ import com.dzid26.teslable.ui.TeslaBleTheme
 
 class MainActivity : ComponentActivity() {
 
+    private lateinit var controller: TeslaBleController
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        controller = BleControllerHolder.get(this)
+        // A notification tap can ask for a specific car before the UI exists.
+        intent?.getStringExtra(BleTrackingService.EXTRA_BLE_NAME)
+            ?.let(controller::openVehicleByBleName)
         setContent {
             TeslaBleTheme {
                 val context = LocalContext.current
-                // Shared with BleTrackingService so the BLE connection survives
-                // Activity destruction while background tracking is active.
-                val controller = remember { BleControllerHolder.get(context) }
 
                 // Reconnect to a paired car automatically when the app opens.
                 LaunchedEffect(Unit) {
@@ -142,6 +146,7 @@ class MainActivity : ComponentActivity() {
                     },
                     onToggleTracking = controller::setTrackingEnabled,
                     onOpenVehicle = controller::openVehicle,
+                    onOpenRequestConsumed = controller::consumeOpenVehicleRequest,
                     onPairKey = controller::pairKey,
                     onVinChange = controller::setVinInput,
                     onWake = { controller.wakeVehicle() },
@@ -149,6 +154,13 @@ class MainActivity : ComponentActivity() {
                 )
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        intent.getStringExtra(BleTrackingService.EXTRA_BLE_NAME)
+            ?.let(controller::openVehicleByBleName)
     }
 }
 

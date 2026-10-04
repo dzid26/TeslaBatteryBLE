@@ -62,6 +62,8 @@ data class BleUiState(
     val vehicles: List<Vehicle> = emptyList(),
     /** The car the UI is focused on, by advertised name (stable across address changes). */
     val selectedBleName: String? = null,
+    /** Set when a notification tap asks the UI to open a specific car. */
+    val openVehicleRequest: String? = null,
     val vinInput: String = "",
     val expectedBleName: String? = null,
     val log: List<LogEntry> = emptyList(),

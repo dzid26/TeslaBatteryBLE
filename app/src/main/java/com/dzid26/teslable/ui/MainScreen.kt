@@ -88,6 +88,7 @@ fun MainScreen(
     onToggleScan: () -> Unit,
     onToggleTracking: (Boolean) -> Unit,
     onOpenVehicle: (String) -> Unit,
+    onOpenRequestConsumed: () -> Unit,
     onPairKey: (String) -> Unit,
     onVinChange: (String) -> Unit,
     onWake: () -> Unit,
@@ -100,6 +101,14 @@ fun MainScreen(
             initialised = true
             // The controller already restored the last opened car from disk.
             viewingBleName = state.selectedBleName
+        }
+    }
+    // A notification tap (or any external open request) switches to that car.
+    LaunchedEffect(state.openVehicleRequest) {
+        val requested = state.openVehicleRequest
+        if (requested != null) {
+            viewingBleName = requested
+            onOpenRequestConsumed()
         }
     }
 
