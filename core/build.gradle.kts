@@ -1,5 +1,6 @@
 plugins {
     alias(libs.plugins.kotlin.jvm)
+    alias(libs.plugins.wire)
 }
 
 java {
@@ -14,5 +15,14 @@ kotlin {
 }
 
 dependencies {
+    implementation(libs.wire.runtime)
     testImplementation(libs.junit)
+}
+
+wire {
+    sourcePath {
+        srcDir("src/main/proto")
+    }
+    kotlin {
+    }
 }

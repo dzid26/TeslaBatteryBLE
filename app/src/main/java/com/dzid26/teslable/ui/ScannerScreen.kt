@@ -163,6 +163,13 @@ private fun DeviceRow(
                     },
                 )
             }
+            connection?.status?.let { status ->
+                Text(
+                    text = "locked=${status.locked}  asleep=${status.asleep}  " +
+                        "userPresent=${status.userPresent}",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
         }
     }
 }

@@ -1,5 +1,6 @@
 package com.dzid26.teslable.ble
 
+import com.dzid26.teslable.core.protocol.TeslaVcsec
 import java.util.UUID
 
 data class TeslaAdvert(
@@ -16,6 +17,7 @@ data class TeslaConnection(
     val gattDeviceName: String? = null,
     val services: List<GattServiceInfo> = emptyList(),
     val mtu: Int? = null,
+    val status: TeslaVcsec.Status? = null,
 )
 
 data class GattServiceInfo(

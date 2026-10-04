@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.bluetooth.BluetoothManager
 import android.content.Context
 import com.dzid26.teslable.core.TeslaNames
+import com.dzid26.teslable.core.protocol.TeslaVcsec
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -17,6 +18,7 @@ class TeslaBleController(context: Context) {
 
     private val clients = mutableMapOf<String, TeslaGattClient>()
     private val failedAddresses = mutableSetOf<String>()
+    private val statusRequested = mutableSetOf<String>()
 
     private val scanner = TeslaScanner(
         context = appContext,
@@ -38,6 +40,7 @@ class TeslaBleController(context: Context) {
         clients.values.forEach { it.close() }
         clients.clear()
         failedAddresses.clear()
+        statusRequested.clear()
         _state.update {
             it.copy(
                 scanning = true,
@@ -87,6 +90,7 @@ class TeslaBleController(context: Context) {
         scanner.stop()
         clients.values.forEach { it.close() }
         clients.clear()
+        statusRequested.clear()
     }
 
     private fun onDevicesFound(devices: List<TeslaAdvert>) {
@@ -120,6 +124,9 @@ class TeslaBleController(context: Context) {
                 clients.remove(address)?.close()
             }
             updateConnection(address) { it.copy(phase = phase) }
+            if (phase == ConnectionPhase.READY) {
+                requestVcsecStatus(address)
+            }
         }
 
         override fun onServices(services: List<GattServiceInfo>) {
@@ -135,11 +142,29 @@ class TeslaBleController(context: Context) {
         }
 
         override fun onMessage(message: ByteArray) {
-            log("${nameFor(address)}: RX ${message.size} bytes ${message.toHex()}")
+            val status = runCatching { TeslaVcsec.parseStatusResponse(message) }.getOrNull()
+            if (status != null) {
+                updateConnection(address) { it.copy(status = status) }
+                log(
+                    "${nameFor(address)}: VCSEC status locked=${status.locked} " +
+                        "asleep=${status.asleep} userPresent=${status.userPresent}"
+                )
+            } else {
+                log("${nameFor(address)}: RX ${message.size} bytes ${message.toHex()}")
+            }
         }
 
         override fun onLog(message: String) {
             log("${nameFor(address)}: $message")
+        }
+    }
+
+    private fun requestVcsecStatus(address: String) {
+        if (!statusRequested.add(address)) return
+        val request = TeslaVcsec.buildStatusRequest()
+        log("${nameFor(address)}: TX ${request.size} bytes ${request.toHex()}")
+        if (clients[address]?.send(request) != true) {
+            log("${nameFor(address)}: failed to send VCSEC status request")
         }
     }
 
