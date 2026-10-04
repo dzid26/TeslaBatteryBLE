@@ -94,8 +94,7 @@ class MainActivity : ComponentActivity() {
                         }
                     },
                     onVinChange = controller::setVinInput,
-                    onConnect = { advert -> controller.connect(advert.address) },
-                    onDisconnect = controller::disconnect,
+                    onConnect = controller::connect,
                 )
             }
         }

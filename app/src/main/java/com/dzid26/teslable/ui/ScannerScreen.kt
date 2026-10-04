@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import com.dzid26.teslable.ble.BleUiState
 import com.dzid26.teslable.ble.ConnectionPhase
 import com.dzid26.teslable.ble.TeslaAdvert
+import com.dzid26.teslable.ble.TeslaConnection
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -35,8 +36,7 @@ fun ScannerScreen(
     onRequestPermissions: () -> Unit,
     onToggleScan: () -> Unit,
     onVinChange: (String) -> Unit,
-    onConnect: (TeslaAdvert) -> Unit,
-    onDisconnect: () -> Unit,
+    onConnect: (String) -> Unit,
 ) {
     Scaffold(
         topBar = { TopAppBar(title = { Text("TeslaBatteryBLE") }) },
@@ -82,12 +82,15 @@ fun ScannerScreen(
             }
             Spacer(Modifier.height(12.dp))
 
+            val connectedCount = state.connections.values.count { it.phase == ConnectionPhase.READY }
             val statusText = when {
                 state.scanning ->
-                    "Scanning: ${state.advertisementsSeen} BLE advertisements seen, ${state.devices.size} Tesla(s)"
+                    "Scanning: ${state.advertisementsSeen} advertisements, " +
+                        "${state.devices.size} Tesla(s), $connectedCount connected"
 
                 state.advertisementsSeen > 0 ->
-                    "Scan stopped: ${state.advertisementsSeen} BLE advertisements seen, ${state.devices.size} Tesla(s)"
+                    "Scan stopped: ${state.advertisementsSeen} advertisements, " +
+                        "${state.devices.size} Tesla(s), $connectedCount connected"
 
                 else -> "No scan yet"
             }
@@ -103,8 +106,9 @@ fun ScannerScreen(
                 items(state.devices, key = { it.address }) { device ->
                     DeviceRow(
                         device = device,
+                        connection = state.connections[device.address],
                         expectedName = state.expectedBleName,
-                        onClick = { onConnect(device) },
+                        onClick = { onConnect(device.address) },
                     )
                 }
             }
@@ -120,8 +124,6 @@ fun ScannerScreen(
                     )
                 }
             }
-
-            ConnectionPanel(state = state, onDisconnect = onDisconnect)
         }
     }
 }
@@ -129,6 +131,7 @@ fun ScannerScreen(
 @Composable
 private fun DeviceRow(
     device: TeslaAdvert,
+    connection: TeslaConnection?,
     expectedName: String?,
     onClick: () -> Unit,
 ) {
@@ -138,55 +141,48 @@ private fun DeviceRow(
             .clickable(onClick = onClick),
     ) {
         Column(Modifier.padding(12.dp)) {
-            val isMatch = expectedName != null && expectedName.equals(device.name, ignoreCase = true)
+            val advertisedName = connection?.name ?: device.name
+            val displayName = connection?.gattDeviceName ?: advertisedName
+            val isMatch = expectedName != null && expectedName.equals(advertisedName, ignoreCase = true)
             Text(
-                text = if (isMatch) "${device.name}  (VIN match)" else device.name,
+                text = if (isMatch) "$displayName  (VIN match)" else displayName,
                 style = MaterialTheme.typography.titleMedium,
             )
             Text(
                 text = "${device.address}   RSSI ${device.rssi} dBm   connectable=${device.connectable}",
                 style = MaterialTheme.typography.bodySmall,
             )
+            if (connection != null) {
+                Text(
+                    text = connectionSummary(connection),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = when (connection.phase) {
+                        ConnectionPhase.FAILED -> MaterialTheme.colorScheme.error
+                        ConnectionPhase.READY -> MaterialTheme.colorScheme.primary
+                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                )
+            }
         }
     }
 }
 
-@Composable
-private fun ConnectionPanel(
-    state: BleUiState,
-    onDisconnect: () -> Unit,
-) {
-    val showPanel = state.phase != ConnectionPhase.IDLE || state.connectedAddress != null
-    if (!showPanel) return
+private fun connectionSummary(connection: TeslaConnection): String = when (connection.phase) {
+    ConnectionPhase.IDLE -> "not connected"
 
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 8.dp),
-    ) {
-        Column(Modifier.padding(12.dp)) {
-            Text("Connection", style = MaterialTheme.typography.titleMedium)
-            Text("phase: ${state.phase}", style = MaterialTheme.typography.bodySmall)
-            state.connectedAdvertisedName?.let {
-                Text("advertised name: $it", style = MaterialTheme.typography.bodySmall)
-            }
-            state.gattDeviceName?.let {
-                Text("GATT device name: $it", style = MaterialTheme.typography.bodySmall)
-            }
-            state.mtu?.let {
-                Text("MTU: $it", style = MaterialTheme.typography.bodySmall)
-            }
-            state.services.forEach { service ->
-                Text("service ${service.uuid}", style = MaterialTheme.typography.bodySmall)
-                service.characteristicUuids.forEach { characteristic ->
-                    Text("   char $characteristic", style = MaterialTheme.typography.bodySmall)
-                }
-            }
-            if (state.phase != ConnectionPhase.IDLE && state.phase != ConnectionPhase.DISCONNECTED) {
-                Button(onClick = onDisconnect, modifier = Modifier.padding(top = 8.dp)) {
-                    Text("Disconnect")
-                }
-            }
-        }
+    ConnectionPhase.CONNECTING -> "connecting..."
+
+    ConnectionPhase.CONNECTED -> "connected, discovering services..."
+
+    ConnectionPhase.DISCOVERING -> "discovering services..."
+
+    ConnectionPhase.READY -> buildString {
+        append("connected")
+        connection.mtu?.let { append(" | MTU $it") }
+        append(" | ${connection.services.size} services")
     }
+
+    ConnectionPhase.FAILED -> "connection failed - tap to retry"
+
+    ConnectionPhase.DISCONNECTED -> "disconnected - tap to reconnect"
 }

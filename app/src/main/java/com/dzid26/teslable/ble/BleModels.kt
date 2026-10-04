@@ -9,6 +9,15 @@ data class TeslaAdvert(
     val connectable: Boolean,
 )
 
+data class TeslaConnection(
+    val address: String,
+    val name: String,
+    val phase: ConnectionPhase = ConnectionPhase.IDLE,
+    val gattDeviceName: String? = null,
+    val services: List<GattServiceInfo> = emptyList(),
+    val mtu: Int? = null,
+)
+
 data class GattServiceInfo(
     val uuid: UUID,
     val characteristicUuids: List<UUID>,
@@ -28,13 +37,8 @@ data class BleUiState(
     val scanning: Boolean = false,
     val advertisementsSeen: Int = 0,
     val devices: List<TeslaAdvert> = emptyList(),
+    val connections: Map<String, TeslaConnection> = emptyMap(),
     val vinInput: String = "",
     val expectedBleName: String? = null,
-    val phase: ConnectionPhase = ConnectionPhase.IDLE,
-    val connectedAddress: String? = null,
-    val connectedAdvertisedName: String? = null,
-    val gattDeviceName: String? = null,
-    val services: List<GattServiceInfo> = emptyList(),
-    val mtu: Int? = null,
     val log: List<String> = emptyList(),
 )

@@ -134,7 +134,11 @@ class TeslaGattClient(
     }
 
     private fun handleDeviceName(value: ByteArray?) {
-        listener.onGattDeviceName(value?.toString(Charsets.UTF_8)?.trim())
+        val name = value?.toString(Charsets.UTF_8)?.trim()
+        if (!name.isNullOrEmpty()) {
+            listener.onLog("Device name: $name")
+        }
+        listener.onGattDeviceName(name)
         listener.onPhase(ConnectionPhase.READY)
     }
 
