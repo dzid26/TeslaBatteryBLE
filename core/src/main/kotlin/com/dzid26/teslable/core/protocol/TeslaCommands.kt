@@ -3,6 +3,7 @@ package com.dzid26.teslable.core.protocol
 import com.tesla.generated.carserver.server.Action
 import com.tesla.generated.carserver.server.GetChargeState
 import com.tesla.generated.carserver.server.GetVehicleData
+import com.tesla.generated.carserver.server.Response
 import com.tesla.generated.carserver.server.VehicleAction
 import com.tesla.generated.carserver.vehicle.VehicleData
 import com.tesla.generated.vcsec.RKEAction_E
@@ -28,7 +29,8 @@ object TeslaCommands {
         ).encode()
 
     fun parseChargeState(payload: ByteArray): Charge? {
-        val charge = VehicleData.ADAPTER.decode(payload).charge_state ?: return null
+        val data = Response.ADAPTER.decode(payload).vehicleData ?: return null
+        val charge = data.charge_state ?: return null
         return Charge(
             batteryLevel = charge.battery_level,
             chargeLimit = charge.charge_limit_soc,
@@ -48,4 +50,7 @@ object TeslaCommands {
             range = charge.battery_range,
         )
     }
+
+    fun parseActionStatus(payload: ByteArray): String? =
+        Response.ADAPTER.decode(payload).actionStatus?.result?.name
 }

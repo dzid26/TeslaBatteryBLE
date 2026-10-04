@@ -38,6 +38,22 @@ class TeslaBleController(context: Context) {
     private val pendingSessions = mutableMapOf<String, PendingSession>()
     private val pendingCommands = mutableMapOf<String, PendingCommand>()
     private var chargeAfterSession = false
+    private var sessionRetryAttempts = 0
+
+    private val sessionRetry = object : Runnable {
+        override fun run() {
+            val address = _state.value.selectedAddress ?: return
+            if (_state.value.connections[address]?.phase != ConnectionPhase.READY) return
+            val needed = SESSION_DOMAINS.filter { sessions[address]?.containsKey(it) != true }
+            if (needed.isEmpty()) return
+            if (sessionRetryAttempts++ >= SESSION_MAX_ATTEMPTS) {
+                log("${nameFor(address)}: session not established (${needed.joinToString { it.name }})")
+                return
+            }
+            sendSessionRequests(address, needed)
+            handler.postDelayed(this, SESSION_RETRY_MS)
+        }
+    }
 
     private data class PendingSession(val address: String, val domain: Domain)
 
@@ -102,11 +118,13 @@ class TeslaBleController(context: Context) {
         clients.clear()
         failedAddresses.clear()
         handler.removeCallbacks(whitelistPoll)
+        handler.removeCallbacks(sessionRetry)
         keySlotQueue = emptyList()
         sessions.clear()
         pendingSessions.clear()
         pendingCommands.clear()
         chargeAfterSession = false
+        sessionRetryAttempts = 0
         _state.update {
             it.copy(
                 scanning = true,
@@ -170,6 +188,7 @@ class TeslaBleController(context: Context) {
         clients.clear()
         handler.removeCallbacks(pairingTimeout)
         handler.removeCallbacks(whitelistPoll)
+        handler.removeCallbacks(sessionRetry)
         keySlotQueue = emptyList()
     }
 
@@ -317,7 +336,18 @@ class TeslaBleController(context: Context) {
             log("${nameFor(address)}: enter your VIN to establish a session")
             return
         }
-        for (domain in SESSION_DOMAINS) {
+        sessionRetryAttempts = 0
+        sendSessionRequests(
+            address,
+            SESSION_DOMAINS.filter { sessions[address]?.containsKey(it) != true },
+        )
+        handler.removeCallbacks(sessionRetry)
+        handler.postDelayed(sessionRetry, SESSION_RETRY_MS)
+    }
+
+    private fun sendSessionRequests(address: String, domains: List<Domain>) {
+        val keyPair = keyStore.load() ?: return
+        for (domain in domains) {
             val uuid = TeslaCrypto.randomBytes(16)
             val routing = if (domain == Domain.DOMAIN_VEHICLE_SECURITY) {
                 TeslaCrypto.randomBytes(16)
@@ -375,6 +405,9 @@ class TeslaBleController(context: Context) {
             )
         }
         log("${nameFor(address)}: session established (${pending.domain.name})")
+        if (SESSION_DOMAINS.all { sessions[address]?.containsKey(it) == true }) {
+            handler.removeCallbacks(sessionRetry)
+        }
         if (pending.domain == Domain.DOMAIN_INFOTAINMENT && chargeAfterSession) {
             chargeAfterSession = false
             requestChargeState()
@@ -530,7 +563,11 @@ class TeslaBleController(context: Context) {
                     )
                     charge.batteryLevel?.let { BleTrackingService.updateBatteryPercent(it) }
                 } else {
-                    log("${nameFor(pending.address)}: charge response missing data")
+                    val status = runCatching { TeslaCommands.parseActionStatus(plaintext) }.getOrNull()
+                    log(
+                        "${nameFor(pending.address)}: charge response missing data" +
+                            (status?.let { " ($it)" } ?: "")
+                    )
                 }
             }
         }
@@ -566,6 +603,8 @@ class TeslaBleController(context: Context) {
         const val WHITELIST_POLL_MS = 2000L
         const val WHITELIST_MAX_ATTEMPTS = 30
         const val COMMAND_EXPIRES_SECONDS = 5
+        const val SESSION_RETRY_MS = 3000L
+        const val SESSION_MAX_ATTEMPTS = 20
         const val PREFS = "teslable"
         const val KEY_VIN = "vin"
         val SESSION_DOMAINS = listOf(
