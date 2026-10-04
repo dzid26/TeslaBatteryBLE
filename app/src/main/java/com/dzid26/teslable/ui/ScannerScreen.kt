@@ -23,15 +23,19 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -72,6 +76,7 @@ fun ScannerScreen(
     onWake: () -> Unit,
     onReadSoc: () -> Unit,
 ) {
+    var tab by rememberSaveable { mutableIntStateOf(0) }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -95,161 +100,220 @@ fun ScannerScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
-                .padding(16.dp),
+                .padding(innerPadding),
         ) {
-            if (!permissionsGranted) {
-                Button(onClick = onRequestPermissions) {
-                    Text("Grant Bluetooth permissions")
-                }
-                Spacer(Modifier.height(8.dp))
-            }
-            if (!locationServicesEnabled) {
-                Text(
-                    text = "Location services are off. BLE scans return no results until it is enabled.",
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodySmall,
+            PrimaryTabRow(selectedTabIndex = tab) {
+                Tab(
+                    selected = tab == 0,
+                    onClick = { tab = 0 },
+                    text = { Text("Car") },
                 )
-                Spacer(Modifier.height(8.dp))
+                Tab(
+                    selected = tab == 1,
+                    onClick = { tab = 1 },
+                    text = { Text("Battery") },
+                )
             }
+            when (tab) {
+                0 -> CarTab(
+                    state = state,
+                    permissionsGranted = permissionsGranted,
+                    locationServicesEnabled = locationServicesEnabled,
+                    onRequestPermissions = onRequestPermissions,
+                    onToggleScan = onToggleScan,
+                    onVinChange = onVinChange,
+                    onConnect = onConnect,
+                    onPairKey = onPairKey,
+                    onWake = onWake,
+                    onReadSoc = onReadSoc,
+                )
 
-            OutlinedTextField(
-                value = state.vinInput,
-                onValueChange = onVinChange,
-                label = { Text("VIN (optional, highlights your car)") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
+                else -> BatteryTab(history)
+            }
+        }
+    }
+}
+
+@Composable
+private fun CarTab(
+    state: BleUiState,
+    permissionsGranted: Boolean,
+    locationServicesEnabled: Boolean,
+    onRequestPermissions: () -> Unit,
+    onToggleScan: () -> Unit,
+    onVinChange: (String) -> Unit,
+    onConnect: (String) -> Unit,
+    onPairKey: (String) -> Unit,
+    onWake: () -> Unit,
+    onReadSoc: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+    ) {
+        if (!permissionsGranted) {
+            Button(onClick = onRequestPermissions) {
+                Text("Grant Bluetooth permissions")
+            }
+            Spacer(Modifier.height(8.dp))
+        }
+        if (!locationServicesEnabled) {
+            Text(
+                text = "Location services are off. BLE scans return no results until it is enabled.",
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall,
             )
-            state.expectedBleName?.let { expected ->
-                Text(
-                    text = "Advertised name for this VIN: $expected",
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
-            Spacer(Modifier.height(12.dp))
-
-            Button(onClick = onToggleScan, enabled = state.trackingEnabled) {
-                Text(if (state.scanning) "Stop scan" else "Scan for Teslas")
-            }
-            Spacer(Modifier.height(12.dp))
-
-            val connectedCount = state.connections.values.count { it.phase == ConnectionPhase.READY }
-            val statusText = when {
-                state.scanning ->
-                    "Scanning: ${state.devices.size} Tesla(s), $connectedCount connected"
-
-                state.discovering ->
-                    "Looking for your paired car..."
-
-                state.devices.isNotEmpty() ->
-                    if (state.explicitScan) {
-                        "Scan stopped: ${state.devices.size} Tesla(s), $connectedCount connected"
-                    } else {
-                        "Your paired car"
-                    }
-
-                else -> "No scan yet"
-            }
-            Text(text = statusText, style = MaterialTheme.typography.bodyMedium)
             Spacer(Modifier.height(8.dp))
+        }
 
-            if (state.pairingPhase != PairingPhase.IDLE) {
-                Text(
-                    text = when (state.pairingPhase) {
-                        PairingPhase.SENDING -> "Sending pairing request..."
-                        PairingPhase.WAITING_FOR_CARD ->
-                            "Tap your NFC card on the center console and confirm on the car screen."
+        OutlinedTextField(
+            value = state.vinInput,
+            onValueChange = onVinChange,
+            label = { Text("VIN (optional, highlights your car)") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        state.expectedBleName?.let { expected ->
+            Text(
+                text = "Advertised name for this VIN: $expected",
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+        Spacer(Modifier.height(12.dp))
 
-                        PairingPhase.OK ->
-                            "Key paired: ${state.pairingKeyId} — rename the Phone Key in Controls > Locks."
+        Button(onClick = onToggleScan, enabled = state.trackingEnabled) {
+            Text(if (state.scanning) "Stop scan" else "Scan for Teslas")
+        }
+        Spacer(Modifier.height(12.dp))
 
-                        PairingPhase.ERROR -> "Pairing failed"
-                        PairingPhase.IDLE -> ""
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = when (state.pairingPhase) {
-                        PairingPhase.OK -> MaterialTheme.colorScheme.primary
-                        PairingPhase.ERROR -> MaterialTheme.colorScheme.error
-                        else -> MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                )
-                Spacer(Modifier.height(8.dp))
-            }
+        val connectedCount = state.connections.values.count { it.phase == ConnectionPhase.READY }
+        val statusText = when {
+            state.scanning ->
+                "Scanning: ${state.devices.size} Tesla(s), $connectedCount connected"
 
-            val selectedConnection = state.selectedAddress?.let { state.connections[it] }
-            val selectedSessions = selectedConnection?.sessions ?: emptyList()
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(
-                    onClick = onWake,
-                    enabled = selectedSessions.contains("DOMAIN_VEHICLE_SECURITY") &&
-                        selectedConnection?.status?.asleep == true,
-                ) {
-                    Text("Wake vehicle")
+            state.discovering ->
+                "Looking for your paired car..."
+
+            state.devices.isNotEmpty() ->
+                if (state.explicitScan) {
+                    "Scan stopped: ${state.devices.size} Tesla(s), $connectedCount connected"
+                } else {
+                    "Your paired car"
                 }
-                Button(
-                    onClick = onReadSoc,
-                    enabled = selectedConnection?.phase == ConnectionPhase.READY &&
-                        selectedConnection.status?.asleep == false,
-                ) {
-                    Text("Read SOC")
-                }
-            }
+
+            else -> "No scan yet"
+        }
+        Text(text = statusText, style = MaterialTheme.typography.bodyMedium)
+        Spacer(Modifier.height(8.dp))
+
+        if (state.pairingPhase != PairingPhase.IDLE) {
+            Text(
+                text = when (state.pairingPhase) {
+                    PairingPhase.SENDING -> "Sending pairing request..."
+                    PairingPhase.WAITING_FOR_CARD ->
+                        "Tap your NFC card on the center console and confirm on the car screen."
+
+                    PairingPhase.OK ->
+                        "Key paired: ${state.pairingKeyId} — rename the Phone Key in Controls > Locks."
+
+                    PairingPhase.ERROR -> "Pairing failed"
+                    PairingPhase.IDLE -> ""
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = when (state.pairingPhase) {
+                    PairingPhase.OK -> MaterialTheme.colorScheme.primary
+                    PairingPhase.ERROR -> MaterialTheme.colorScheme.error
+                    else -> MaterialTheme.colorScheme.onSurfaceVariant
+                },
+            )
             Spacer(Modifier.height(8.dp))
+        }
 
-            LazyColumn(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+        val selectedConnection = state.selectedAddress?.let { state.connections[it] }
+        val selectedSessions = selectedConnection?.sessions ?: emptyList()
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(
+                onClick = onWake,
+                enabled = selectedSessions.contains("DOMAIN_VEHICLE_SECURITY") &&
+                    selectedConnection?.status?.asleep == true,
             ) {
-                items(state.devices, key = { it.address }) { device ->
-                    val connection = state.connections[device.address]
-                    val paired = connection?.keySlot != null ||
-                        connection?.sessions?.isNotEmpty() == true ||
-                        (device.address == state.selectedAddress &&
-                            state.pairingPhase == PairingPhase.OK)
-                    DeviceRow(
-                        device = device,
-                        connection = connection,
-                        expectedName = state.expectedBleName,
-                        isSelected = device.address == state.selectedAddress,
-                        showPair = state.explicitScan && connection != null && !paired,
-                        onClick = { onConnect(device.address) },
-                        onPair = {
-                            if (connection?.phase == ConnectionPhase.READY) {
-                                onPairKey(device.address)
-                            } else {
-                                onConnect(device.address)
-                            }
-                        },
-                    )
-                }
-                item { BatteryHistoryCard(history) }
+                Text("Wake vehicle")
             }
+            Button(
+                onClick = onReadSoc,
+                enabled = selectedConnection?.phase == ConnectionPhase.READY &&
+                    selectedConnection.status?.asleep == false,
+            ) {
+                Text("Read SOC")
+            }
+        }
+        Spacer(Modifier.height(8.dp))
 
-            if (state.log.isNotEmpty()) {
-                Spacer(Modifier.height(8.dp))
-                Text("Log", style = MaterialTheme.typography.labelLarge)
-                val logScroll = rememberScrollState()
-                LaunchedEffect(logScroll.maxValue) {
-                    logScroll.scrollTo(logScroll.maxValue)
-                }
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 150.dp)
-                        .verticalScroll(logScroll),
-                ) {
-                    state.log.takeLast(100).forEach { line ->
-                        Text(
-                            text = line,
-                            style = MaterialTheme.typography.bodySmall,
-                            fontFamily = FontFamily.Monospace,
-                        )
-                    }
+        LazyColumn(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            items(state.devices, key = { it.address }) { device ->
+                val connection = state.connections[device.address]
+                val paired = connection?.keySlot != null ||
+                    connection?.sessions?.isNotEmpty() == true ||
+                    (device.address == state.selectedAddress &&
+                        state.pairingPhase == PairingPhase.OK)
+                DeviceRow(
+                    device = device,
+                    connection = connection,
+                    expectedName = state.expectedBleName,
+                    isSelected = device.address == state.selectedAddress,
+                    showPair = state.explicitScan && connection != null && !paired,
+                    onClick = { onConnect(device.address) },
+                    onPair = {
+                        if (connection?.phase == ConnectionPhase.READY) {
+                            onPairKey(device.address)
+                        } else {
+                            onConnect(device.address)
+                        }
+                    },
+                )
+            }
+        }
+
+        if (state.log.isNotEmpty()) {
+            Spacer(Modifier.height(8.dp))
+            Text("Log", style = MaterialTheme.typography.labelLarge)
+            val logScroll = rememberScrollState()
+            LaunchedEffect(logScroll.maxValue) {
+                logScroll.scrollTo(logScroll.maxValue)
+            }
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 150.dp)
+                    .verticalScroll(logScroll),
+            ) {
+                state.log.takeLast(100).forEach { line ->
+                    Text(
+                        text = line,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontFamily = FontFamily.Monospace,
+                    )
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun BatteryTab(history: List<BatterySample>) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+    ) {
+        BatteryHistoryCard(history)
     }
 }
 
@@ -515,4 +579,3 @@ private fun formatDuration(millis: Long): String {
         else -> "${minutes}m"
     }
 }
-
