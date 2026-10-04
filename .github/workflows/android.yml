@@ -5,6 +5,7 @@ on:
     branches: [ main ]
     tags: [ 'v*' ]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -44,6 +45,40 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: app/build/outputs/apk/debug/*.apk
+
+  preview:
+    name: Rolling preview release
+    needs: build
+    if: |
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download debug APK
+        uses: actions/download-artifact@v4
+        with:
+          name: teslable-debug-apk
+          path: dist
+
+      - name: Capture screenshots on emulator
+        continue-on-error: true
+        uses: ReactiveCircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: bash .github/scripts/capture-screenshots.sh dist/app-debug.apk screenshots
+
+      - name: Publish preview release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/publish-preview-release.sh
 
   go-vectors:
     runs-on: ubuntu-latest
