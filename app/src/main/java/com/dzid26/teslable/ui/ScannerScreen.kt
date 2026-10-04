@@ -28,6 +28,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -47,11 +48,15 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import com.dzid26.teslable.ble.BleUiState
+import com.dzid26.teslable.ble.ConnectionDisplay
 import com.dzid26.teslable.ble.ConnectionPhase
 import com.dzid26.teslable.ble.PairingPhase
 import com.dzid26.teslable.ble.TeslaAdvert
 import com.dzid26.teslable.ble.TeslaConnection
+import com.dzid26.teslable.ble.chargingStateText
 import com.dzid26.teslable.ble.connectionDisplay
+import com.dzid26.teslable.ble.sessionNames
+import com.dzid26.teslable.ble.vehicleStatusText
 import com.dzid26.teslable.core.history.BatterySample
 import com.dzid26.teslable.core.history.HistoryRange
 import com.dzid26.teslable.core.history.chargeStats
@@ -106,42 +111,44 @@ fun ScannerScreen(
                 Tab(
                     selected = tab == 0,
                     onClick = { tab = 0 },
-                    text = { Text("Car") },
+                    text = { Text("Connection") },
                 )
                 Tab(
                     selected = tab == 1,
                     onClick = { tab = 1 },
-                    text = { Text("Battery") },
+                    text = { Text("Car") },
                 )
             }
             when (tab) {
-                0 -> CarTab(
+                0 -> ConnectionTab(
                     state = state,
                     permissionsGranted = permissionsGranted,
                     locationServicesEnabled = locationServicesEnabled,
                     onRequestPermissions = onRequestPermissions,
                     onToggleScan = onToggleScan,
-                    onVinChange = onVinChange,
                     onConnect = onConnect,
                     onPairKey = onPairKey,
                     onWake = onWake,
                     onReadSoc = onReadSoc,
                 )
 
-                else -> BatteryTab(history)
+                else -> CarTab(
+                    state = state,
+                    history = history,
+                    onVinChange = onVinChange,
+                )
             }
         }
     }
 }
 
 @Composable
-private fun CarTab(
+private fun ConnectionTab(
     state: BleUiState,
     permissionsGranted: Boolean,
     locationServicesEnabled: Boolean,
     onRequestPermissions: () -> Unit,
     onToggleScan: () -> Unit,
-    onVinChange: (String) -> Unit,
     onConnect: (String) -> Unit,
     onPairKey: (String) -> Unit,
     onWake: () -> Unit,
@@ -166,21 +173,6 @@ private fun CarTab(
             )
             Spacer(Modifier.height(8.dp))
         }
-
-        OutlinedTextField(
-            value = state.vinInput,
-            onValueChange = onVinChange,
-            label = { Text("VIN (optional, highlights your car)") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        state.expectedBleName?.let { expected ->
-            Text(
-                text = "Advertised name for this VIN: $expected",
-                style = MaterialTheme.typography.bodySmall,
-            )
-        }
-        Spacer(Modifier.height(12.dp))
 
         Button(onClick = onToggleScan, enabled = state.trackingEnabled) {
             Text(if (state.scanning) "Stop scan" else "Scan for Teslas")
@@ -306,14 +298,92 @@ private fun CarTab(
 }
 
 @Composable
-private fun BatteryTab(history: List<BatterySample>) {
+private fun CarTab(
+    state: BleUiState,
+    history: List<BatterySample>,
+    onVinChange: (String) -> Unit,
+) {
+    val selectedConnection = state.selectedAddress?.let { state.connections[it] }
+    val selectedAdvert = selectedConnection?.let { connection ->
+        state.devices.firstOrNull { it.address == connection.address }
+            ?: TeslaAdvert(connection.name, connection.address, connection.rssi)
+    }
+    var editingVin by rememberSaveable { mutableStateOf(state.vinInput.isEmpty()) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .padding(16.dp),
     ) {
+        selectedConnection?.let { connection ->
+            CarHeader(
+                display = connectionDisplay(connection, selectedAdvert),
+                address = connection.address,
+                asleep = connection.status?.asleep,
+            )
+            Spacer(Modifier.height(16.dp))
+        }
+
+        if (editingVin) {
+            OutlinedTextField(
+                value = state.vinInput,
+                onValueChange = onVinChange,
+                label = { Text("VIN") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                trailingIcon = {
+                    if (state.vinInput.length == VIN_LENGTH) {
+                        TextButton(onClick = { editingVin = false }) {
+                            Text("Done")
+                        }
+                    }
+                },
+            )
+        } else {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("VIN", style = MaterialTheme.typography.labelSmall)
+                    Text(state.vinInput, style = MaterialTheme.typography.bodyMedium)
+                }
+                TextButton(onClick = { editingVin = true }) {
+                    Text("Edit")
+                }
+            }
+        }
+        state.expectedBleName?.let { expected ->
+            Text(
+                text = "Advertised name: $expected",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Spacer(Modifier.height(16.dp))
+
         BatteryHistoryCard(history)
+    }
+}
+
+@Composable
+private fun CarHeader(
+    display: ConnectionDisplay,
+    address: String,
+    asleep: Boolean?,
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(12.dp)) {
+            Text(display.title, style = MaterialTheme.typography.titleMedium)
+            Text(address, style = MaterialTheme.typography.bodySmall)
+            Text(
+                text = display.status,
+                style = MaterialTheme.typography.titleSmall,
+                color = if (asleep == false) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+            )
+        }
     }
 }
 
@@ -366,28 +436,27 @@ private fun DeviceRow(
             }
             connection?.status?.let { status ->
                 Text(
-                    text = "locked=${status.locked}  asleep=${status.asleep}  " +
-                        "userPresent=${status.userPresent}",
+                    text = vehicleStatusText(status),
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
             connection?.keySlot?.let { slot ->
                 Text(
-                    text = "key slot: $slot",
+                    text = "Phone key slot $slot",
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
             if (connection != null && connection.sessions.isNotEmpty()) {
                 Text(
-                    text = "sessions: ${connection.sessions.joinToString()}",
+                    text = "Sessions: ${sessionNames(connection.sessions)}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.primary,
                 )
             }
             connection?.charge?.let { charge ->
                 val details = buildList {
-                    charge.chargeLimit?.let { add("limit $it%") }
-                    charge.chargingState?.let { add("charger: $it") }
+                    charge.chargeLimit?.let { add("Charge limit $it%") }
+                    charge.chargingState?.let { add(chargingStateText(it)) }
                 }
                 if (details.isNotEmpty()) {
                     Text(
@@ -560,6 +629,8 @@ private fun HistoryRange.label(): String = when (this) {
     HistoryRange.WEEK -> "7d"
     HistoryRange.ALL -> "All"
 }
+
+private const val VIN_LENGTH = 17
 
 private val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 private val dateTimeFormatter = DateTimeFormatter.ofPattern("dd MMM HH:mm")

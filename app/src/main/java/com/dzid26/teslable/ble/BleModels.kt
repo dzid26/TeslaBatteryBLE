@@ -120,3 +120,32 @@ private fun connectionStateText(connection: TeslaConnection?, showHints: Boolean
 
     else -> "Connecting..."
 }
+
+/** "Locked · Asleep · User away" instead of raw booleans. */
+fun vehicleStatusText(status: TeslaVcsec.Status): String = listOf(
+    if (status.locked) "Locked" else "Unlocked",
+    if (status.asleep) "Asleep" else "Awake",
+    if (status.userPresent) "User present" else "User away",
+).joinToString(" · ")
+
+/** Friendly names for the per-domain secure sessions. */
+fun sessionNames(sessions: List<String>): String = sessions.joinToString(", ") { session ->
+    when {
+        session.contains("VEHICLE_SECURITY") -> "Security"
+        session.contains("INFOTAINMENT") -> "Infotainment"
+        session.contains("BROADCAST") -> "Broadcast"
+        else -> session
+    }
+}
+
+/** Friendly charging state for the charge details line. */
+fun chargingStateText(state: String): String = when (state) {
+    "Charging" -> "Charging"
+    "Complete" -> "Charging complete"
+    "Stopped" -> "Charging stopped"
+    "Disconnected" -> "Unplugged"
+    "NoPower" -> "No power"
+    "Starting" -> "Starting"
+    "Calibrating" -> "Calibrating"
+    else -> state
+}
