@@ -87,7 +87,8 @@ A trustworthy shell around the existing protocol work. No user-facing features.
 - [ ] **Battery health v1 (loose, BLE-only)**: rated-range + energy-delta capacity estimates fused with confidence + data-quality flag; session-count "Learning" gate; Service-Mode health-test result logging; habit cards (charge-limit share, AC/DC mix, deep discharges); charge taper / balancing-sawtooth detection; static reference bands from published studies. Never claim cell imbalance, pack temperatures, or month-quantified lifespan without pack-level data.
 - [ ] Notifications: charge complete, SOC thresholds, **vampire-drain alert**.
 - [ ] Widget (Glance), automation intents (Tasker), CSV/JSON export.
-- [ ] Multiple cars; share redacted diagnostics. Requirements: `docs/requirements/multi-vehicle.md` (implementation delegated).
+- [ ] Multiple cars: storage, per-vehicle links and VIN landed (ADR-0004); notifications + UI in progress. Requirements: `docs/requirements/multi-vehicle.md`.
+- [ ] Share redacted diagnostics.
 - [ ] Compatibility matrix (car models, vehicle software, Android versions).
 - [ ] FAQ / troubleshooting.
 - [ ] Coverage thresholds; property/fuzz tests; `tesla-control` interop oracle.

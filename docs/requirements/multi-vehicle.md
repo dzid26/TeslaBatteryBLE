@@ -1,7 +1,7 @@
 # Requirements: multiple vehicles and per-vehicle VINs
 
-Status: Draft for implementation (implementation will be delegated)
-Date: 2026-10-04
+Status: Implementing (storage, per-vehicle links and VIN landed 2026-10-05; notifications and UI next)
+Date: 2026-10-04 · Updated: 2026-10-05
 Related: `docs/adr/0001-battery-tracker.md` (ADR-0001), `docs/adr/0002-battery-history-storage.md`, `docs/master-plan.md`
 
 ## 1. Problem
