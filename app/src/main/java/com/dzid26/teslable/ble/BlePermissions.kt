@@ -24,5 +24,14 @@ fun hasBlePermissions(context: Context): Boolean =
         ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
     }
 
-fun isLocationEnabled(context: Context): Boolean =
-    context.getSystemService(LocationManager::class.java)?.isLocationEnabled == true
+fun isLocationEnabled(context: Context): Boolean {
+    val locationManager = context.getSystemService(LocationManager::class.java) ?: return false
+    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+        locationManager.isLocationEnabled
+    } else {
+        // LocationManager.isLocationEnabled requires API 28; on older versions
+        // "location is on" is approximated by any provider being enabled.
+        locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER) ||
+            locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
+    }
+}
