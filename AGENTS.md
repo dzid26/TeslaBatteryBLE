@@ -26,6 +26,7 @@ Master plan: `docs/master-plan.md` — read it first and update its checkboxes w
 - `core` stays multiplatform-ready: no Android, no JVM-only crypto that would block KMP.
 - New source files get `SPDX-License-Identifier: AGPL-3.0-only`.
 - User-visible changes update README/CHANGELOG; architecture decisions get an ADR in `docs/adr/`.
+- Specs, plans, and product docs never name competitor products; competitive research lives in `docs/research/` only.
 
 ## Do not
 

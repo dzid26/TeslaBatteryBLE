@@ -2,6 +2,7 @@
 
 Status: living document. The checkboxes below are the source of truth for scope.
 Created: 2026-10-04 · Maintained alongside every change (see `AGENTS.md`).
+Research: `docs/research/feature-map.md` (battery-health feature synthesis).
 
 ## 1. What this is
 
@@ -80,6 +81,7 @@ A trustworthy shell around the existing protocol work. No user-facing features.
 
 - [ ] Navigation (Home / Car / Settings / Logs) + ViewModels.
 - [x] SOC history graph + charge sessions (first cut 2026-10-04: CSV store, 6h/24h/7d/All graph, since-last-charge stats; session list + export later).
+- [ ] **Battery health v1 (loose, BLE-only)**: rated-range + energy-delta capacity estimates fused with confidence + data-quality flag; session-count "Learning" gate; Service-Mode health-test result logging; habit cards (charge-limit share, AC/DC mix, deep discharges); charge taper / balancing-sawtooth detection; static reference bands from published studies. Never claim cell imbalance, pack temperatures, or month-quantified lifespan without pack-level data.
 - [ ] Notifications: charge complete, SOC thresholds, **vampire-drain alert**.
 - [ ] Widget (Glance), automation intents (Tasker), CSV/JSON export.
 - [ ] Multiple cars; share redacted diagnostics. Requirements: `docs/requirements/multi-vehicle.md` (implementation delegated).
@@ -92,6 +94,7 @@ A trustworthy shell around the existing protocol work. No user-facing features.
 
 - [ ] `core` → KMP (jvm + apple), expect/actual crypto, Dokka.
 - [ ] Publish the library (Maven Central vs JitPack — decide then); semver + binary compatibility validator; sample CLI; library documentation.
+- [ ] **Battery health v2 (tight, optional OBD)**: BLE OBD dongle support (ELM327/STN), model harness guidance, read-only pack PIDs (nominal/full pack capacity, brick voltage min/max + CAC, pack temperatures), real imbalance card. Purely optional and fully on-device.
 - [ ] Decide monorepo vs separate library repo (default: split at publish).
 - [ ] Governance lite: MAINTAINERS, public roadmap, Discussions, good-first-issues.
 - [ ] Launch: F-Droid stable, announcements (r/TeslaLounge, TMC forums, HN), funding live.
