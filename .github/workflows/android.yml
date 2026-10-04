@@ -52,6 +52,9 @@ jobs:
     if: |
       github.ref == 'refs/heads/main' &&
       (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    concurrency:
+      group: preview-release
+      cancel-in-progress: true
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -66,12 +69,14 @@ jobs:
 
       - name: Capture screenshots on emulator
         continue-on-error: true
+        timeout-minutes: 10
         uses: ReactiveCircus/android-emulator-runner@v2
         with:
-          api-level: 34
-          target: google_apis
+          api-level: 30
+          target: aosp_atd
           arch: x86_64
-          profile: pixel_6
+          profile: pixel_2
+          emulator-boot-timeout: 300
           disable-animations: true
           script: bash .github/scripts/capture-screenshots.sh dist/app-debug.apk screenshots
 
