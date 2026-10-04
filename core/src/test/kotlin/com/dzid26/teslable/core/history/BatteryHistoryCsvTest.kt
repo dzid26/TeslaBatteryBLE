@@ -17,7 +17,7 @@ class BatteryHistoryCsvTest {
     )
 
     @Test
-    fun roundTripsCurrentFormat() {
+    fun roundTrips() {
         assertEquals(sample, BatteryHistoryCsv.parse(BatteryHistoryCsv.encode(sample)))
     }
 
@@ -34,33 +34,10 @@ class BatteryHistoryCsvTest {
     }
 
     @Test
-    fun parsesLegacyRowsWithoutVehicle() {
-        val parsed = BatteryHistoryCsv.parse("1700000000000,78,80,Charging")
-        assertEquals(
-            BatterySample(
-                timestampMillis = 1_700_000_000_000L,
-                percent = 78,
-                chargingState = "Charging",
-                chargeLimit = 80,
-                vehicleId = "",
-            ),
-            parsed,
-        )
-    }
-
-    @Test
     fun skipsHeaderAndMalformedRows() {
-        assertNull(BatteryHistoryCsv.parse(BatteryHistoryCsv.HEADER))
-        assertNull(BatteryHistoryCsv.parse("1700000000000"))
-        assertNull(BatteryHistoryCsv.parse("not-a-timestamp,78,80,Charging"))
-    }
-
-    @Test
-    fun attributeOnlyFillsRowsWithoutVehicle() {
-        val legacy = BatteryHistoryCsv.parse("1700000000000,78,80,Charging")!!
-        assertEquals("Se1f0941734830fe7C", BatteryHistoryCsv.attribute(legacy, "Se1f0941734830fe7C").vehicleId)
-        assertEquals("", BatteryHistoryCsv.attribute(legacy, null).vehicleId)
-        assertEquals(sample, BatteryHistoryCsv.attribute(sample, "Sother"))
+        assertNull(BatteryHistoryCsv.parse("vehicleId,timestampMillis,percent,chargeLimit,chargingState"))
+        assertNull(BatteryHistoryCsv.parse("Se1f0941734830fe7C,1700000000000"))
+        assertNull(BatteryHistoryCsv.parse("Se1f0941734830fe7C,not-a-timestamp,78,80,Charging"))
     }
 
     @Test

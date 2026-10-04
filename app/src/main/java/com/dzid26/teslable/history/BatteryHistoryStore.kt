@@ -21,15 +21,10 @@ import kotlinx.coroutines.sync.withLock
  * Battery history as an append-only CSV in app storage, cached in memory and
  * exposed as a [StateFlow]. One line per SOC read, tagged with the vehicle it
  * came from; repeated identical readings within a minute are skipped so polling
- * does not flood the file. Rows written before per-vehicle history existed are
- * attributed to [legacyVehicleId] while they are read, and persisted with the
- * vehicle id on the next rewrite. First cut per ADR-0002: Room/SQLite when
- * queries outgrow this.
+ * does not flood the file. First cut per ADR-0002: Room/SQLite when queries
+ * outgrow this.
  */
-class BatteryHistoryStore(
-    context: Context,
-    private val legacyVehicleId: String? = null,
-) {
+class BatteryHistoryStore(context: Context) {
 
     private val file = File(context.filesDir, FILE_NAME)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -87,7 +82,6 @@ class BatteryHistoryStore(
         return runCatching {
             file.readLines()
                 .mapNotNull(BatteryHistoryCsv::parse)
-                .map { BatteryHistoryCsv.attribute(it, legacyVehicleId) }
                 .takeLast(MAX_SAMPLES)
         }.getOrDefault(emptyList())
     }

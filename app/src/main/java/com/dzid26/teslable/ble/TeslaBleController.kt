@@ -84,8 +84,7 @@ class TeslaBleController(context: Context) {
 
     init {
         vehicleStore.load().forEach { vehicles[it.bleName] = it }
-        migrateLegacyVin()
-        historyStore = BatteryHistoryStore(appContext, legacyHistoryVehicleId())
+        historyStore = BatteryHistoryStore(appContext)
         if (!prefs.getBoolean(KEY_TRACKING_ENABLED, true)) {
             _state.update { it.copy(trackingEnabled = false) }
         }
@@ -97,28 +96,6 @@ class TeslaBleController(context: Context) {
             }
         }
         publishVehicles()
-    }
-
-    /**
-     * Moves the pre-multi-vehicle global VIN onto the car whose advertised name
-     * matches it. The old preference is kept: another release may still read it.
-     */
-    private fun migrateLegacyVin() {
-        val legacyVin = Vehicle.normalizeVin(prefs.getString(KEY_VIN, "").orEmpty())
-        if (legacyVin.length != Vehicle.VIN_LENGTH) return
-        val match = vehicles.values.firstOrNull { it.vin == null && it.acceptsVin(legacyVin) } ?: return
-        vehicles[match.bleName] = match.copy(vin = legacyVin)
-        vehicleStore.save(vehicles.values)
-    }
-
-    /**
-     * Which car the history rows written before per-vehicle storage belong to:
-     * the one matching the legacy VIN, or the only car there is.
-     */
-    private fun legacyHistoryVehicleId(): String? {
-        val legacyVin = Vehicle.normalizeVin(prefs.getString(KEY_VIN, "").orEmpty())
-        val match = vehicles.values.firstOrNull { it.vin != null && it.vin == legacyVin }
-        return match?.bleName ?: vehicles.values.singleOrNull()?.bleName
     }
 
     // ---------------------------------------------------------------- UI actions
@@ -1202,7 +1179,6 @@ class TeslaBleController(context: Context) {
         const val WAKE_REFRESH_MAX_ATTEMPTS = 6
         const val MAX_ACTIVE_LINKS = 3
         const val PREFS = "teslable"
-        const val KEY_VIN = "vin"
         const val KEY_TRACKING_ENABLED = "tracking_enabled"
         val ACTIVE_PHASES = setOf(
             ConnectionPhase.CONNECTING,
