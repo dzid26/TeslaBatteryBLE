@@ -141,7 +141,8 @@ fun ScannerScreen(
                 }
                 Button(
                     onClick = onReadSoc,
-                    enabled = selectedConnection?.phase == ConnectionPhase.READY,
+                    enabled = selectedConnection?.phase == ConnectionPhase.READY &&
+                        selectedConnection.status?.asleep == false,
                 ) {
                     Text("Read SOC")
                 }

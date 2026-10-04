@@ -40,6 +40,17 @@ class TeslaBleController(context: Context) {
     private var chargeAfterSession = false
     private var sessionRetryAttempts = 0
     private var reconnectAttempts = 0
+    private var wakeRefreshAttempts = 0
+
+    private val wakeRefresh = object : Runnable {
+        override fun run() {
+            val address = _state.value.selectedAddress ?: return
+            if (_state.value.connections[address]?.status?.asleep == false) return
+            if (wakeRefreshAttempts++ >= WAKE_REFRESH_MAX_ATTEMPTS) return
+            requestVcsecStatus(address)
+            handler.postDelayed(this, WAKE_REFRESH_MS)
+        }
+    }
 
     private val reconnect = object : Runnable {
         override fun run() {
@@ -142,6 +153,7 @@ class TeslaBleController(context: Context) {
         handler.removeCallbacks(whitelistPoll)
         handler.removeCallbacks(sessionRetry)
         handler.removeCallbacks(reconnect)
+        handler.removeCallbacks(wakeRefresh)
         keySlotQueue = emptyList()
         sessions.clear()
         pendingSessions.clear()
@@ -215,6 +227,7 @@ class TeslaBleController(context: Context) {
         handler.removeCallbacks(whitelistPoll)
         handler.removeCallbacks(sessionRetry)
         handler.removeCallbacks(reconnect)
+        handler.removeCallbacks(wakeRefresh)
         keySlotQueue = emptyList()
     }
 
@@ -344,6 +357,9 @@ class TeslaBleController(context: Context) {
 
             val status = runCatching { TeslaVcsec.parseStatusResponse(message) }.getOrNull()
             if (status != null) {
+                if (!status.asleep) {
+                    handler.removeCallbacks(wakeRefresh)
+                }
                 updateConnection(address) { it.copy(status = status) }
                 log(
                     "${nameFor(address)}: VCSEC status locked=${status.locked} " +
@@ -533,10 +549,17 @@ class TeslaBleController(context: Context) {
             payload = TeslaCommands.buildWakeRequest(),
             kind = CommandKind.WAKE,
         )
+        wakeRefreshAttempts = 0
+        handler.removeCallbacks(wakeRefresh)
+        handler.postDelayed(wakeRefresh, WAKE_REFRESH_MS)
     }
 
     fun requestChargeState() {
         val address = _state.value.selectedAddress ?: return
+        if (_state.value.connections[address]?.status?.asleep != false) {
+            log("${nameFor(address)}: car is asleep; wake it first")
+            return
+        }
         if (sessions[address]?.containsKey(Domain.DOMAIN_INFOTAINMENT) == true) {
             sendAuthenticated(
                 address = address,
@@ -649,6 +672,8 @@ class TeslaBleController(context: Context) {
         const val SESSION_MAX_ATTEMPTS = 20
         const val RECONNECT_DELAY_MS = 5000L
         const val RECONNECT_MAX_ATTEMPTS = 12
+        const val WAKE_REFRESH_MS = 5000L
+        const val WAKE_REFRESH_MAX_ATTEMPTS = 6
         const val PREFS = "teslable"
         const val KEY_VIN = "vin"
         val SESSION_DOMAINS = listOf(
