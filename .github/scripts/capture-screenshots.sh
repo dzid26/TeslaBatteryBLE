@@ -112,4 +112,10 @@ if tap_text "Scan for Teslas"; then
   adb exec-out screencap -p > "$OUT/02-scanning.png"
 fi
 
+# The Battery tab hosts the history graph and since-last-charge stats.
+if tap_text "Battery"; then
+  sleep 3
+  adb exec-out screencap -p > "$OUT/03-battery.png"
+fi
+
 ls -l "$OUT"
