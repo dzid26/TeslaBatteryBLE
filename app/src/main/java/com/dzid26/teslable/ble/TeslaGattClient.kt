@@ -18,18 +18,8 @@ import com.dzid26.teslable.core.framing.BleFramer
 
 class TeslaGattClient(
     private val context: Context,
-    private val listener: Listener,
+    private val listener: TeslaTransport.Listener,
 ) : TeslaTransport {
-
-    interface Listener {
-        fun onPhase(phase: ConnectionPhase)
-        fun onServices(services: List<GattServiceInfo>)
-        fun onGattDeviceName(name: String?)
-        fun onMtu(mtu: Int)
-        fun onMessage(message: ByteArray)
-        fun onLog(message: String)
-        fun onRssi(rssi: Int) {}
-    }
 
     private var gatt: BluetoothGatt? = null
     private var txCharacteristic: BluetoothGattCharacteristic? = null

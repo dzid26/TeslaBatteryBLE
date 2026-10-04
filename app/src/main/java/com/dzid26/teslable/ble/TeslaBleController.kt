@@ -138,7 +138,7 @@ class TeslaBleController(context: Context) {
         if (_state.value.scanning || _state.value.discovering) return
         if (!hasBlePermissions(appContext)) return
         _state.update { it.copy(discovering = true, explicitScan = false) }
-        scanner.start()
+        startScanner()
     }
 
     private val sessionRetry = object : Runnable {
@@ -196,6 +196,37 @@ class TeslaBleController(context: Context) {
         onLog = ::log,
     )
 
+    private fun demoCar(): DemoMode.Car? =
+        if (DemoMode.isEnabled(appContext)) DemoMode.car else null
+
+    private fun createTransport(
+        address: String,
+        listener: TeslaTransport.Listener,
+    ): TeslaTransport = demoCar()?.createTransport(address, listener)
+        ?: TeslaGattClient(appContext, listener)
+
+    /** Fake adverts in demo mode; the real BLE scanner otherwise. */
+    private val demoScan = object : Runnable {
+        override fun run() {
+            onDevicesFound(demoCar()?.adverts() ?: emptyList())
+            handler.postDelayed(this, DEMO_SCAN_MS)
+        }
+    }
+
+    private fun startScanner() {
+        if (demoCar() != null) {
+            handler.removeCallbacks(demoScan)
+            handler.post(demoScan)
+        } else {
+            scanner.start()
+        }
+    }
+
+    private fun stopScanner() {
+        handler.removeCallbacks(demoScan)
+        scanner.stop()
+    }
+
     init {
         knownCarStore.load().forEach { knownCars[it.name] = it }
         if (!prefs.getBoolean(KEY_TRACKING_ENABLED, true)) {
@@ -204,6 +235,9 @@ class TeslaBleController(context: Context) {
         val savedVin = prefs.getString(KEY_VIN, "").orEmpty()
         if (savedVin.isNotEmpty()) {
             setVinInput(savedVin)
+        }
+        if (DemoMode.isEnabled(appContext) && _state.value.vinInput.isEmpty()) {
+            setVinInput(DemoMode.DEMO_VIN)
         }
     }
 
@@ -231,11 +265,11 @@ class TeslaBleController(context: Context) {
                 explicitScan = true,
             )
         }
-        scanner.start()
+        startScanner()
     }
 
     fun stopScan() {
-        scanner.stop()
+        stopScanner()
         _state.update { it.copy(scanning = false, discovering = false) }
     }
 
@@ -324,7 +358,7 @@ class TeslaBleController(context: Context) {
 
     private fun disableTracking() {
         BleTrackingService.stop(appContext)
-        scanner.stop()
+        stopScanner()
         clients.values.forEach { it.close() }
         clients.clear()
         failedAddresses.clear()
@@ -383,7 +417,7 @@ class TeslaBleController(context: Context) {
                     )
             )
         }
-        val client = TeslaGattClient(appContext, listenerFor(address))
+        val client = createTransport(address, listenerFor(address))
         clients[address] = client
         client.connect(address)
     }
@@ -491,7 +525,7 @@ class TeslaBleController(context: Context) {
         log("${nameFor(address)}: remembered for reconnect")
     }
 
-    private fun listenerFor(address: String) = object : TeslaGattClient.Listener {
+    private fun listenerFor(address: String) = object : TeslaTransport.Listener {
         override fun onPhase(phase: ConnectionPhase) {
             if (phase == ConnectionPhase.FAILED || phase == ConnectionPhase.DISCONNECTED) {
                 failedAddresses.add(address)
@@ -718,6 +752,8 @@ class TeslaBleController(context: Context) {
                 log("${nameFor(address)}: key enrolled (${whitelist.numberOfEntries} keys)")
             }
             rememberCar(address)
+            // A freshly enrolled key can open sessions now.
+            startSession(address)
             val index = whitelist.whitelistEntries.indexOfFirst {
                 it.publicKeySHA1.toByteArray().copyOf(stored.keyId.size).contentEquals(stored.keyId)
             }
@@ -927,6 +963,7 @@ class TeslaBleController(context: Context) {
         const val SESSION_MAX_ATTEMPTS = 20
         const val POLL_MS = 10_000L
         const val RSSI_POLL_MS = 500L
+        const val DEMO_SCAN_MS = 2_000L
         const val REHANDSHAKE_COOLDOWN_MS = 60_000L
         const val RECONNECT_DELAY_MS = 5000L
         const val RECONNECT_MAX_DELAY_MS = 60_000L
