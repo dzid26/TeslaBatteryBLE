@@ -82,12 +82,12 @@ A trustworthy shell around the existing protocol work. No user-facing features.
 
 ## 7. Phase 2 — v0.3–0.5 "Product" (target: Nov–Dec)
 
-- [ ] Navigation (Home / Car / Settings / Logs) + ViewModels.
+- [ ] Navigation: cars list → car view landed 2026-10-05 (no tabs; last opened car restored). Settings/Logs + ViewModels later.
 - [x] SOC history graph + charge sessions (first cut 2026-10-04: CSV store, 6h/24h/7d/All graph, since-last-charge stats; session list + export later).
 - [ ] **Battery health v1 (loose, BLE-only)**: rated-range + energy-delta capacity estimates fused with confidence + data-quality flag; session-count "Learning" gate; Service-Mode health-test result logging; habit cards (charge-limit share, AC/DC mix, deep discharges); charge taper / balancing-sawtooth detection; static reference bands from published studies. Never claim cell imbalance, pack temperatures, or month-quantified lifespan without pack-level data.
 - [ ] Notifications: charge complete, SOC thresholds, **vampire-drain alert**.
 - [ ] Widget (Glance), automation intents (Tasker), CSV/JSON export.
-- [ ] Multiple cars: storage, per-vehicle links and VIN landed (ADR-0004); notifications + UI in progress. Requirements: `docs/requirements/multi-vehicle.md`.
+- [ ] Multiple cars: storage, per-vehicle links, VIN, per-car notifications and the cars/car UI landed (ADR-0004); share redacted diagnostics open. Requirements: `docs/requirements/multi-vehicle.md`.
 - [ ] Share redacted diagnostics.
 - [ ] Compatibility matrix (car models, vehicle software, Android versions).
 - [ ] FAQ / troubleshooting.

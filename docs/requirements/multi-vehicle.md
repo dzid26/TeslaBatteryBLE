@@ -1,6 +1,6 @@
 # Requirements: multiple vehicles and per-vehicle VINs
 
-Status: Implementing (storage, per-vehicle links and VIN landed 2026-10-05; notifications and UI next)
+Status: Implemented (2026-10-05): per-vehicle storage, links and VIN, per-car notifications, cars list → car view navigation. Open questions remain for later.
 Date: 2026-10-04 · Updated: 2026-10-05
 Related: `docs/adr/0001-battery-tracker.md` (ADR-0001), `docs/adr/0002-battery-history-storage.md`, `docs/master-plan.md`
 
@@ -93,18 +93,17 @@ Out of scope (unchanged unless stated):
 
 ## 7. UI
 
-- **Vehicle list** (home): one row per known vehicle with display name, the
-  four-state status (`Disconnected` / `Connected 💤` / `Connected (reading)` /
-  `Connected · NN%`), RSSI, and last seen. Newly scanned, unpaired cars appear
-  with a Pair action.
-- **Vehicle detail**: status, Wake, Read SOC, pairing state and key slot, VIN
-  editor (with the advertised-name check), and the log filtered to that
-  vehicle.
-- **Battery tab**: charts and "since last charge" stats for the selected
-  vehicle. The range selector (6h/24h/7d/All) stays.
-- The global "VIN (optional)" field is removed; the global Enable toggle and
-  permission handling stay global.
-- Selection is persisted; the app reopens on the last selected vehicle.
+- **Cars list** (root): one row per known or discovered vehicle with its name,
+  the four-state status (`Disconnected` / `Connected 💤` / `Connected (reading)` /
+  `Connected · NN%`), SOC when known, and RSSI. Newly scanned, unpaired cars
+  appear with a Pair action.
+- **Car view**: hero SOC, Wake, Read SOC, phone-key state and key slot, VIN
+  editor (with the advertised-name check), battery history and "since last
+  charge" stats, and the log filtered to that vehicle.
+- No tabs: opening a car switches from the list to its view; back is the
+  app-bar arrow plus system back. The last opened car is restored on launch.
+- The global "VIN (optional)" field is gone; the global Enable toggle and
+  permission handling stay global (on the cars list).
 
 ## 8. Notifications
 
