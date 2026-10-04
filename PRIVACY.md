@@ -11,11 +11,12 @@ anywhere.**
 - Battery and connection history (SOC samples, charge sessions) in a local database
 - App settings
 
-Uninstalling the app removes this data. Nothing is synchronized, uploaded, or shared.
-
-Android Auto Backup is disabled (`android:allowBackup="false"`) and extraction rules
-exclude all app data, so nothing is uploaded to Google Drive or transferred by the
-OS to another device.
+The app never synchronizes, uploads, or shares anything. Android's system backup
+is separate: if you have it enabled, your device may include app data (battery
+history, known cars) in cloud backup or device-to-device transfer. Key material
+is excluded from backup, and Keystore-protected keys cannot leave the device
+regardless. Uninstalling removes on-device data; a system backup copy, if any,
+is managed by your device and Google account settings.
 
 ## Permissions and why they exist
 
