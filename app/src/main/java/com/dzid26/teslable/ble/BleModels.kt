@@ -114,7 +114,8 @@ fun connectionDisplay(
     return ConnectionDisplay(
         title = title,
         stateText = connectionStateText(connection, showHints),
-        rssi = connection?.rssi ?: advert?.rssi,
+        // RSSI is a live reading; show it only while connected.
+        rssi = if (connection?.phase == ConnectionPhase.READY) connection.rssi ?: advert?.rssi else null,
     )
 }
 

@@ -14,6 +14,7 @@ class TeslaScanner(
     private val onDevices: (List<TeslaAdvert>) -> Unit,
     private val onLog: (String) -> Unit,
 ) {
+    private val appContext = context.applicationContext
     private val adapter = context.getSystemService(BluetoothManager::class.java)?.adapter
     private val found = LinkedHashMap<String, TeslaAdvert>()
 
@@ -44,6 +45,10 @@ class TeslaScanner(
 
     @SuppressLint("MissingPermission")
     fun start() {
+        if (!hasBlePermissions(appContext)) {
+            onLog("Bluetooth permissions are missing; grant them to scan")
+            return
+        }
         val bleAdapter = adapter
         if (bleAdapter == null || !bleAdapter.isEnabled) {
             onLog("Bluetooth is unavailable or turned off")
@@ -67,6 +72,7 @@ class TeslaScanner(
 
     @SuppressLint("MissingPermission")
     fun stop() {
+        if (!hasBlePermissions(appContext)) return
         adapter?.bluetoothLeScanner?.stopScan(callback)
     }
 }

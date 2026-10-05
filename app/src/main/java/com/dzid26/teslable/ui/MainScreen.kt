@@ -58,7 +58,7 @@ import com.dzid26.teslable.core.history.BatterySample
 fun MainScreen(
     state: BleUiState,
     history: List<BatterySample>,
-    permissionState: PermissionState,
+    permissionsGranted: Boolean,
     locationServicesEnabled: Boolean,
     onRequestPermissions: () -> Unit,
     onToggleScan: () -> Unit,
@@ -120,18 +120,27 @@ fun MainScreen(
     } else {
         ConnectionsScreen(
             state = state,
-            permissionState = permissionState,
+            permissionsGranted = permissionsGranted,
             locationServicesEnabled = locationServicesEnabled,
             onRequestPermissions = onRequestPermissions,
             onToggleScan = onToggleScan,
             onToggleTracking = onToggleTracking,
             onOpen = { name, rowAddress ->
-                viewingBleName = name
-                onOpenVehicle(rowAddress)
+                if (permissionsGranted) {
+                    viewingBleName = name
+                    onOpenVehicle(rowAddress)
+                } else {
+                    // Connecting without permissions would crash on Android 12+.
+                    onRequestPermissions()
+                }
             },
             onPair = { name, rowAddress, ready ->
-                viewingBleName = name
-                if (ready) onPairKey(rowAddress) else onOpenVehicle(rowAddress)
+                if (!permissionsGranted) {
+                    onRequestPermissions()
+                } else {
+                    viewingBleName = name
+                    if (ready) onPairKey(rowAddress) else onOpenVehicle(rowAddress)
+                }
             },
             onOpenSettings = onOpenSettings,
         )
@@ -182,7 +191,7 @@ private fun vehicleRows(state: BleUiState): List<VehicleRow> {
 @Composable
 private fun ConnectionsScreen(
     state: BleUiState,
-    permissionState: PermissionState,
+    permissionsGranted: Boolean,
     locationServicesEnabled: Boolean,
     onRequestPermissions: () -> Unit,
     onToggleScan: () -> Unit,
@@ -218,10 +227,15 @@ private fun ConnectionsScreen(
                     .padding(innerPadding)
                     .padding(horizontal = 16.dp),
         ) {
-            if (permissionState != PermissionState.GRANTED) {
+            if (!permissionsGranted) {
                 PermissionCard(
-                    deniedForever = permissionState == PermissionState.DENIED_FOREVER,
-                    onRequestPermissions = onRequestPermissions,
+                    title = "Allow Bluetooth access",
+                    body =
+                        "TeslaBatteryBLE finds and talks to your Tesla over Bluetooth. " +
+                            "Android also requires location permission for BLE scans; the app " +
+                            "never reads your location and nothing leaves the phone.",
+                    button = "Grant permissions",
+                    onClick = onRequestPermissions,
                 )
                 Spacer(Modifier.height(8.dp))
             }
@@ -298,27 +312,26 @@ private fun ConnectionsScreen(
     }
 }
 
-/** Explains why the app needs BLE permissions before Android's dialog. */
+/** A short, explicit prompt the wizard or a system settings screen backs up. */
 @Composable
 private fun PermissionCard(
-    deniedForever: Boolean,
-    onRequestPermissions: () -> Unit,
+    title: String,
+    body: String,
+    button: String,
+    onClick: () -> Unit,
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp)) {
-            Text("Allow Bluetooth access", style = MaterialTheme.typography.titleSmall)
+            Text(title, style = MaterialTheme.typography.titleSmall)
             Spacer(Modifier.height(4.dp))
             Text(
-                text =
-                    "TeslaBatteryBLE finds and talks to your Tesla over Bluetooth. " +
-                        "Android also requires location permission for BLE scans; the app " +
-                        "never reads your location and nothing leaves the phone.",
+                text = body,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(8.dp))
-            Button(onClick = onRequestPermissions) {
-                Text(if (deniedForever) "Open app settings" else "Grant permissions")
+            Button(onClick = onClick) {
+                Text(button)
             }
         }
     }

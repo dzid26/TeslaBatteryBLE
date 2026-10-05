@@ -8,13 +8,18 @@ All notable changes to this project are documented here. The format is based on
 
 ### Added
 
-- About card in Settings: version, source/sponsor links, privacy policy link,
-  in-app license and credits summary, and the Tesla, Inc. disclaimer
-- Permission rationale card on the cars list, with an "Open app settings"
-  fallback when Android will no longer show the permission dialog
+- About screen (Settings → About): version, links, support, licenses, and the
+  Tesla, Inc. disclaimer, as tappable rows
+- Permission wizard: one step per missing permission explaining what it is for
+  and what the user has to do, with an app-settings fallback when Android stops
+  asking; the cars list keeps a short rationale card and a location-services
+  prompt that opens system settings
 
 ### Changed
 
+- Battery history is excluded from Android backup, so a restored install never
+  shows a stale "last known" percentage; cached key slots are dropped when the
+  key is missing after a restore
 - Settings explains when Android runs backups and how to check or trigger one;
   enabling key backup nudges the system so the key is stored sooner
 - Pairing starts with a whitelist check: a key the car already has is marked
@@ -22,10 +27,16 @@ All notable changes to this project are documented here. The format is based on
 - Car view shows the last stored SOC ("Last known · …") when there is no live
   reading, instead of only a connection state
 - Unpaired car view explains the NFC-card walkthrough before pairing
+- RSSI is shown only while connected
 - Wake and command send failures are logged instead of failing silently
 - Release screenshots are captured from the simulated car automatically in CI
   and attached to each release as one `screenshot-sheet.png`; tag releases are
   always created fresh (the rolling preview is no longer converted in place)
+
+### Fixed
+
+- Crash on Android 12+ when opening a car while Bluetooth permissions were
+  missing; the connect and scan paths now stop with a readable log instead
 
 ## [0.2.0-beta.2] - 2026-10-05
 

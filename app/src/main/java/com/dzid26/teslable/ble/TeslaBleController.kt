@@ -89,6 +89,15 @@ class TeslaBleController(
 
     init {
         vehicleStore.load().forEach { vehicles[it.bleName] = it }
+        // A restored backup can carry cached key slots for a key this device
+        // does not have (device-only keys never leave the phone). Enrollment is
+        // re-verified on connect, so drop the stale cache.
+        if (keyStore.load() == null && vehicles.values.any { it.keySlot != null }) {
+            vehicles.keys.toList().forEach { name ->
+                vehicles[name]?.let { vehicles[name] = it.copy(keySlot = null) }
+            }
+            vehicleStore.save(vehicles.values)
+        }
         historyStore = BatteryHistoryStore(appContext)
         if (!prefs.getBoolean(KEY_TRACKING_ENABLED, true)) {
             _state.update { it.copy(trackingEnabled = false) }
@@ -774,6 +783,12 @@ class TeslaBleController(
         fun connect() {
             if (address.isEmpty()) return
             if (phase == ConnectionPhase.CONNECTING || phase == ConnectionPhase.READY) return
+            if (!hasBlePermissions(appContext)) {
+                // Android 12+ throws a SecurityException from connectGatt() when
+                // BLUETOOTH_CONNECT is missing; fail quietly instead.
+                log("${name()}: Bluetooth permissions are missing; grant them to connect")
+                return
+            }
             cancelCallbacks()
             transport?.close()
             transport = null

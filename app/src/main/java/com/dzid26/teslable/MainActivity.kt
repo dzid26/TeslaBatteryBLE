@@ -2,14 +2,11 @@
 package com.dzid26.teslable
 
 import android.Manifest
-import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -19,28 +16,26 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
-import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.dzid26.teslable.ble.BleControllerHolder
 import com.dzid26.teslable.ble.BleTrackingService
 import com.dzid26.teslable.ble.PairingKeyStore
 import com.dzid26.teslable.ble.TeslaBleController
-import com.dzid26.teslable.ble.hasBlePermissions
-import com.dzid26.teslable.ble.isLocationEnabled
-import com.dzid26.teslable.ble.requiredBlePermissions
 import com.dzid26.teslable.ui.AboutScreen
 import com.dzid26.teslable.ui.MainScreen
-import com.dzid26.teslable.ui.PermissionState
+import com.dzid26.teslable.ui.PermissionWizardHost
 import com.dzid26.teslable.ui.SettingsScreen
 import com.dzid26.teslable.ui.TeslaBleTheme
 
 class MainActivity : ComponentActivity() {
     private lateinit var controller: TeslaBleController
+    private var resumeCounter by mutableIntStateOf(0)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -67,37 +62,7 @@ class MainActivity : ComponentActivity() {
 
                 val state by controller.state.collectAsState()
                 val batteryHistory by controller.batteryHistory.collectAsState()
-                var permissionsGranted by remember { mutableStateOf(hasBlePermissions(context)) }
-                var permissionsDeniedForever by remember { mutableStateOf(false) }
-                var locationEnabled by remember { mutableStateOf(isLocationEnabled(context)) }
                 var screen by rememberSaveable { mutableStateOf(AppScreen.MAIN) }
-
-                val permissionLauncher =
-                    rememberLauncherForActivityResult(
-                        ActivityResultContracts.RequestMultiplePermissions(),
-                    ) { result ->
-                        permissionsGranted = result.values.all { it } && hasBlePermissions(context)
-                        permissionsDeniedForever =
-                            !permissionsGranted &&
-                            shouldOpenAppSettings(context)
-                        if (permissionsGranted) {
-                            locationEnabled = isLocationEnabled(context)
-                            controller.startScan()
-                        }
-                    }
-
-                val requestPermissions: () -> Unit = {
-                    if (permissionsDeniedForever) {
-                        context.startActivity(
-                            Intent(
-                                Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                                Uri.fromParts("package", context.packageName, null),
-                            ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-                        )
-                    } else {
-                        permissionLauncher.launch(requiredBlePermissions().toTypedArray())
-                    }
-                }
 
                 val notificationPermissionLauncher =
                     rememberLauncherForActivityResult(
@@ -121,52 +86,51 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                when (screen) {
-                    AppScreen.SETTINGS ->
-                        SettingsScreen(
-                            keyStore = remember { PairingKeyStore(context) },
-                            onClearPairingCache = controller::clearPairingCache,
-                            onOpenAbout = { screen = AppScreen.ABOUT },
-                            onBack = { screen = AppScreen.MAIN },
-                        )
+                PermissionWizardHost(
+                    refreshKey = resumeCounter,
+                    onGranted = {
+                        controller.startScan()
+                        controller.ensureConnected()
+                    },
+                ) { permissionsGranted, locationEnabled, requestPermissions ->
+                    when (screen) {
+                        AppScreen.SETTINGS ->
+                            SettingsScreen(
+                                keyStore = remember { PairingKeyStore(context) },
+                                onClearPairingCache = controller::clearPairingCache,
+                                onOpenAbout = { screen = AppScreen.ABOUT },
+                                onBack = { screen = AppScreen.MAIN },
+                            )
 
-                    AppScreen.ABOUT ->
-                        AboutScreen(onBack = { screen = AppScreen.SETTINGS })
+                        AppScreen.ABOUT ->
+                            AboutScreen(onBack = { screen = AppScreen.SETTINGS })
 
-                    AppScreen.MAIN ->
-                        MainScreen(
-                            state = state,
-                            history = batteryHistory,
-                            permissionState =
-                                when {
-                                    permissionsGranted -> PermissionState.GRANTED
-                                    permissionsDeniedForever -> PermissionState.DENIED_FOREVER
-                                    else -> PermissionState.MISSING
-                                },
-                            locationServicesEnabled = locationEnabled,
-                            onRequestPermissions = requestPermissions,
-                            onToggleScan = {
-                                if (state.scanning) {
-                                    controller.stopScan()
-                                } else {
-                                    permissionsGranted = hasBlePermissions(context)
-                                    locationEnabled = isLocationEnabled(context)
-                                    if (permissionsGranted) {
+                        AppScreen.MAIN ->
+                            MainScreen(
+                                state = state,
+                                history = batteryHistory,
+                                permissionsGranted = permissionsGranted,
+                                locationServicesEnabled = locationEnabled,
+                                onRequestPermissions = requestPermissions,
+                                onToggleScan = {
+                                    if (state.scanning) {
+                                        controller.stopScan()
+                                    } else if (permissionsGranted) {
                                         controller.startScan()
                                     } else {
                                         requestPermissions()
                                     }
-                                }
-                            },
-                            onToggleTracking = controller::setTrackingEnabled,
-                            onOpenVehicle = controller::openVehicle,
-                            onOpenRequestConsumed = controller::consumeOpenVehicleRequest,
-                            onPairKey = controller::pairKey,
-                            onVinChange = controller::setVinInput,
-                            onWake = { controller.wakeVehicle() },
-                            onReadSoc = { controller.requestChargeState() },
-                            onOpenSettings = { screen = AppScreen.SETTINGS },
-                        )
+                                },
+                                onToggleTracking = controller::setTrackingEnabled,
+                                onOpenVehicle = controller::openVehicle,
+                                onOpenRequestConsumed = controller::consumeOpenVehicleRequest,
+                                onPairKey = controller::pairKey,
+                                onVinChange = controller::setVinInput,
+                                onWake = { controller.wakeVehicle() },
+                                onReadSoc = { controller.requestChargeState() },
+                                onOpenSettings = { screen = AppScreen.SETTINGS },
+                            )
+                    }
                 }
             }
         }
@@ -182,6 +146,9 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        // Bump the composition so permission and location state refresh after
+        // the user returns from a system settings screen.
+        resumeCounter++
         // Android forbids starting a foreground service from the background;
         // retry on resume so tracking comes up after a denied attempt.
         if (!BleTrackingService.isRunning && controller.shouldTrack()) {
@@ -201,14 +168,3 @@ private fun hasNotificationPermission(context: Context): Boolean =
     Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
         ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
         PackageManager.PERMISSION_GRANTED
-
-/**
- * True when Android will no longer show the permission dialog: every required
- * permission is denied with "don't ask again", so the app must open settings.
- */
-private fun shouldOpenAppSettings(context: Context): Boolean {
-    val activity = context as? Activity ?: return false
-    return requiredBlePermissions().none {
-        ActivityCompat.shouldShowRequestPermissionRationale(activity, it)
-    }
-}

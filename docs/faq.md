@@ -76,6 +76,10 @@ NFC card tap. With it on:
   restored automatically when Android's automatic restore is on (it is by
   default); otherwise see the next question.
 
+Battery history is not part of Android backup: it stays on the device and a
+restored install starts collecting fresh readings, so the app never shows a
+stale battery percentage as if it were current.
+
 ## How do I know Android backed up my data, and how do I restore it after a manual install?
 
 Android does not tell apps when a backup last ran. The device-level last backup
