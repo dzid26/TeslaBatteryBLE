@@ -56,6 +56,10 @@ All notable changes to this project are documented here. The format is based on
 - The history chart derives the charge projection from every sample (not just
   the visible range) and captions it ("projected 85% around 21:40"); the demo
   car now charges to its limit, so the dashed target is visible in demos
+- Demo builds seed two days of realistic history (a drive, parked stretches,
+  an AC charge) with every raw field filled, and the live demo drain slows to
+  about a percent an hour, so the chart, green segments, and both projections
+  read realistically in demos and screenshots
 - The log panel moved from the car view to the cars screen, where it shows
   every car's activity
 - The notification grays out the last known percentage once its reading is
