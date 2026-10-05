@@ -6,23 +6,35 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.2.0-beta.1] - 2026-10-05
+
 ### Added
 
-- README, contribution guide, security/privacy policies, code of conduct
-- Issue forms, pull request template, Dependabot, `.editorconfig`
-- Protocol documentation under `docs/protocol/`
-- App icon (adaptive + monochrome)
-- SPDX license headers across the source tree
-- GitHub Sponsors funding config and README support section
+- Settings screen (cog in the app bar) with privacy-first vehicle-key storage:
+  device-only by default, opt-in encrypted Android backup behind a warning dialog
+  (ADR-0005)
+- Battery-health estimators in `core`: rated-range and energy-delta SoH with
+  fusion and mismatch detection
+- Landing website on GitHub Pages, F-Droid metadata, FAQ, and compatibility matrix
+- 512 px store icon, adaptive + monochrome launcher icon, and social preview
+- Protocol documentation under `docs/protocol/`, ADRs, README, contribution guide,
+  security/privacy policies, code of conduct, issue forms, and SPDX headers
+- DCO sign-off check, Dependabot, pinned GitHub Action SHAs, and funding config
 
 ### Changed
 
-- Vehicle key storage is now device-only by default (Keystore-wrapped, excluded
-  from backup) with an in-app opt-in to include it in encrypted Android backup on
-  Android 12+; older versions keep the key out of backup. Legacy Keystore-encrypted
-  keys migrate automatically (ADR-0005)
-- CI: concurrency cancellation, least-privilege permissions, Android lint and app
-  unit tests in the pipeline
+- Toolchain: Gradle 9.8, AGP 9.4.1, Kotlin 2.4.20, compileSdk/targetSdk 37,
+  androidx.core 1.19.1, Compose BOM 2026.09.00
+- CI: app unit tests, Android lint, and ktlint + detekt static analysis gates
+- Multiple vehicles: one independent BLE link per known car; reworked car view
+- Vehicle keys: default device-only; legacy Keystore-encrypted keys migrate
+  automatically
+- Preview release notes embed the deployed website screenshots instead of assets
+
+### Fixed
+
+- `isLocationEnabled` on Android 8/9 (API 26-27)
+- DCO check no longer inspects the synthetic merge commit
 
 ## [0.1.0-beta.1] - 2026-10-04
 
@@ -40,5 +52,6 @@ First public preview.
 - Simulated car in debug builds; emulator screenshots in the rolling preview release
 - CI: core tests, debug APK, Go-fixture diff against `teslamotors/vehicle-command`
 
-[Unreleased]: https://github.com/dzid26/TeslaBatteryBLE/compare/v0.1.0-beta.1...HEAD
+[Unreleased]: https://github.com/dzid26/TeslaBatteryBLE/compare/v0.2.0-beta.1...HEAD
+[0.2.0-beta.1]: https://github.com/dzid26/TeslaBatteryBLE/releases/tag/v0.2.0-beta.1
 [0.1.0-beta.1]: https://github.com/dzid26/TeslaBatteryBLE/releases/tag/v0.1.0-beta.1

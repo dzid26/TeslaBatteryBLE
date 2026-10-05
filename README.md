@@ -3,6 +3,7 @@
 **Your Tesla's battery, tracked locally over Bluetooth LE. No cloud, no account, nothing leaves the phone.**
 
 [![Android CI](https://github.com/dzid26/TeslaBatteryBLE/actions/workflows/android.yml/badge.svg)](https://github.com/dzid26/TeslaBatteryBLE/actions/workflows/android.yml)
+[![Website](https://img.shields.io/badge/website-live-brightgreen.svg)](https://dzid26.github.io/TeslaBatteryBLE/)
 [![License: AGPL-3.0-only](https://img.shields.io/badge/license-AGPL--3.0--only-blue.svg)](LICENSE)
 ![Platform: Android 8.0+](https://img.shields.io/badge/platform-Android%208.0%2B%20(API%2026)-green.svg)
 [![Status: beta](https://img.shields.io/badge/status-beta-orange.svg)](docs/master-plan.md)
