@@ -45,6 +45,9 @@ All notable changes to this project are documented here. The format is based on
 - Battery history chart: missing stretches (car asleep or out of range) draw
   as a thin line instead of looking continuous, and while charging a dashed
   line projects when the charge limit will be reached at the current rate
+- Battery readings keep the car's precise values: the car view shows range to a
+  tenth of a mile, history stats use the usable SOC instead of the rounded whole
+  percent, and history rows written before this change are dropped on load
 - Wake and command send failures are logged instead of failing silently
 - Release screenshots are captured from the simulated car automatically in CI
   and attached to each release as one `screenshot-sheet.png`; tag releases are

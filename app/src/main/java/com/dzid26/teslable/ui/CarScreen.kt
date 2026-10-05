@@ -78,10 +78,14 @@ import com.dzid26.teslable.core.history.chargeProjection
 import com.dzid26.teslable.core.history.chargeStats
 import com.dzid26.teslable.core.history.gapFlags
 import com.dzid26.teslable.core.history.within
+import com.dzid26.teslable.core.protocol.TeslaCommands
+import com.dzid26.teslable.core.reading.PreciseReading
 import kotlinx.coroutines.delay
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.util.Locale
+import kotlin.math.roundToInt
 
 // -------------------------------------------------------------------- car view
 
@@ -230,7 +234,9 @@ private fun HeroCard(
     onEditVin: () -> Unit,
 ) {
     val display = connectionDisplay(connection, advert, vehicle = vehicle)
-    val level = connection?.charge?.batteryLevel
+    val charge = connection?.charge
+    val reading = charge?.let { PreciseReading.from(it) }
+    val level = reading?.socPercent?.roundToInt()
     // With no live reading, the newest stored sample still answers "how full
     // is the car?" at a glance; the caption makes its age explicit.
     val lastKnown = history.lastOrNull()
@@ -283,20 +289,7 @@ private fun HeroCard(
                 connection?.status?.let { status ->
                     Text(vehicleStatusText(status), style = MaterialTheme.typography.bodySmall)
                 }
-                connection?.charge?.let { charge ->
-                    val details =
-                        buildList {
-                            charge.chargeLimit?.let { add("Charge limit $it%") }
-                            charge.chargingState?.let { add(chargingStateText(it)) }
-                        }
-                    if (details.isNotEmpty()) {
-                        Text(
-                            text = details.joinToString(" · "),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
+                ChargeDetails(charge)
             }
             DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                 DropdownMenuItem(
@@ -308,6 +301,26 @@ private fun HeroCard(
                 )
             }
         }
+    }
+}
+
+/** Range · charge limit · charging state, as one quiet line under the hero. */
+@Composable
+private fun ChargeDetails(charge: TeslaCommands.Charge?) {
+    if (charge == null) return
+    val reading = PreciseReading.from(charge)
+    val details =
+        buildList {
+            reading.rangeMiles?.let { add("${formatRangeMiles(it)} mi") }
+            charge.chargeLimit?.let { add("Charge limit $it%") }
+            charge.chargingState?.let { add(chargingStateText(it)) }
+        }
+    if (details.isNotEmpty()) {
+        Text(
+            text = details.joinToString(" · "),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 
@@ -371,6 +384,13 @@ private fun SocBlock(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            lastKnown.rangeMiles?.let { miles ->
+                Text(
+                    text = "${formatRangeMiles(miles)} mi",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
 
         else -> Text(text = stateText, style = MaterialTheme.typography.headlineSmall)
@@ -645,11 +665,11 @@ private fun BatteryHistoryCard(samples: List<BatterySample>) {
                 Text(
                     text =
                         "Since last charge: ${formatDuration(now - it.sinceMillis)} ago · " +
-                            "${it.currentPercent}% now · ${it.usedPercent}% used",
+                            "${formatPercent(it.currentPercent)}% now · ${formatPercent(it.usedPercent)}% used",
                     style = MaterialTheme.typography.bodySmall,
                 )
                 Text(
-                    text = "min ${it.minPercent}% · max ${it.maxPercent}%",
+                    text = "min ${formatPercent(it.minPercent)}% · max ${formatPercent(it.maxPercent)}%",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -800,4 +820,12 @@ private fun formatDuration(millis: Long): String {
         hours > 0 -> "${hours}h ${minutes % 60}m"
         else -> "${minutes}m"
     }
+}
+
+private fun formatRangeMiles(miles: Float): String = String.format(Locale.getDefault(), "%.1f", miles)
+
+/** One decimal only when it adds information: "78%" but "77.6%". */
+private fun formatPercent(value: Float): String {
+    val rounded = value.roundToInt()
+    return if (rounded.toFloat() == value) "$rounded" else String.format(Locale.getDefault(), "%.1f", value)
 }
