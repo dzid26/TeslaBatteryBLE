@@ -103,7 +103,9 @@ flowchart LR
 ```
 
 Protocol details: [`docs/protocol/`](docs/protocol/). Architecture decisions:
-[`docs/adr/`](docs/adr/).
+[`docs/adr/`](docs/adr/). Data availability:
+[`docs/reference/fleet-telemetry-vs-ble.md`](docs/reference/fleet-telemetry-vs-ble.md)
+— a live cloud-vs-BLE signal matrix of what can be read over BLE.
 
 ## Contributing
 
