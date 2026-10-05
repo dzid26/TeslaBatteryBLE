@@ -69,8 +69,12 @@ internal object DemoHistory {
                 addAll(segment(1140, 360, 84, 80, 60, "Disconnected"))
                 addAll(segment(360, 10, 80, 78, 30, "Disconnected"))
             }
+        // A segment's end and the next segment's start share a timestamp; keep
+        // the newer one so a charge session starts on its own first sample.
         return points
+            .reversed()
             .distinctBy { it.minutesAgo }
+            .reversed()
             .map { point -> sample(now, vehicleId, point) }
     }
 
