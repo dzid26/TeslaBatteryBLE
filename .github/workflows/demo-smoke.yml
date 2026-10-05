@@ -41,7 +41,12 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
+      # Mirror the Android CI capture environment: run the emulator headless.
+      # The windowed default never renders the app on CI runners, so the scan
+      # results and every screenshot were missing.
       - name: Drive the simulated car and capture screenshots
+        id: capture
+        continue-on-error: true
         uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
         with:
           api-level: 34
@@ -49,8 +54,39 @@ jobs:
           arch: x86_64
           profile: pixel_6
           emulator-boot-timeout: 420
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           disable-animations: true
           script: bash .github/scripts/capture-screenshots.sh app/build/outputs/apk/debug/app-debug.apk demo-screenshots
+
+      # Emulator flakes (GL context preemption, adb daemon) are common on CI
+      # runners; give the capture one fresh attempt like Android CI does. The
+      # assert below still fails the job when no complete set is produced.
+      - name: Retry the capture once
+        if: steps.capture.outcome == 'failure'
+        continue-on-error: true
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          emulator-boot-timeout: 420
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          disable-animations: true
+          script: rm -rf demo-screenshots && bash .github/scripts/capture-screenshots.sh app/build/outputs/apk/debug/app-debug.apk demo-screenshots
+
+      - name: Assert the screenshots
+        run: |
+          set -euo pipefail
+          missing=""
+          for name in 01-overview 02-scanning 03-car 04-history 05-settings \
+              01-overview-dark 02-scanning-dark 03-car-dark 04-history-dark 05-settings-dark; do
+            if [ ! -f "demo-screenshots/$name.png" ]; then
+              echo "missing required screenshot: $name.png"
+              missing=true
+            fi
+          done
+          [ -z "$missing" ]
 
       - name: Upload screenshots
         if: always()
@@ -58,3 +94,4 @@ jobs:
         with:
           name: demo-screenshots
           path: demo-screenshots
+          if-no-files-found: warn
