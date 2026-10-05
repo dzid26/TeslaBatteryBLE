@@ -101,7 +101,6 @@ data class ConnectionDisplay(
 fun connectionDisplay(
     connection: TeslaConnection?,
     advert: TeslaAdvert?,
-    showHints: Boolean = false,
     vehicle: Vehicle? = null,
 ): ConnectionDisplay {
     val title =
@@ -113,7 +112,7 @@ fun connectionDisplay(
             ?: "Tesla"
     return ConnectionDisplay(
         title = title,
-        stateText = connectionStateText(connection, showHints),
+        stateText = connectionStateText(connection),
         // RSSI is a live reading; show it only while connected.
         rssi = if (connection?.phase == ConnectionPhase.READY) connection.rssi ?: advert?.rssi else null,
     )
@@ -123,10 +122,7 @@ fun connectionDisplay(
  * The connection states: disconnected, connected while asleep, connected, or
  * connected with a battery percentage.
  */
-private fun connectionStateText(
-    connection: TeslaConnection?,
-    showHints: Boolean,
-): String =
+private fun connectionStateText(connection: TeslaConnection?): String =
     when {
         connection == null -> "Disconnected"
 
@@ -138,11 +134,9 @@ private fun connectionStateText(
 
         connection.phase == ConnectionPhase.READY -> "Connected"
 
-        connection.phase == ConnectionPhase.FAILED ->
-            if (showHints) "Disconnected · tap to retry" else "Disconnected"
+        connection.phase == ConnectionPhase.FAILED -> "Disconnected"
 
-        connection.phase == ConnectionPhase.DISCONNECTED ->
-            if (showHints) "Disconnected · tap to reconnect" else "Disconnected"
+        connection.phase == ConnectionPhase.DISCONNECTED -> "Disconnected"
 
         connection.phase == ConnectionPhase.IDLE -> "Disconnected"
 

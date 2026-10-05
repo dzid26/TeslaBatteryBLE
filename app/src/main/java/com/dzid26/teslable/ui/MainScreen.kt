@@ -405,7 +405,7 @@ private fun VehicleCard(
     onOpen: () -> Unit,
     onPair: () -> Unit,
 ) {
-    val display = connectionDisplay(row.connection, row.advert, showHints = true, vehicle = row.vehicle)
+    val display = connectionDisplay(row.connection, row.advert, vehicle = row.vehicle)
     val level = row.connection?.charge?.batteryLevel
     val paired =
         row.vehicle?.keySlot != null ||

@@ -38,6 +38,7 @@ All notable changes to this project are documented here. The format is based on
   reading, instead of only a connection state
 - Unpaired car view explains the NFC-card walkthrough before pairing
 - RSSI is shown only while connected
+- Disconnected cars read just "Disconnected" (the tap-to-reconnect hint is gone)
 - Cars list and car view refresh by pulling down, with a labeled Material pill
   indicator (Scan for cars / Wake car / Read battery) that swaps its icon for a
   spinner while running, replacing the Scan, Wake and Read buttons; a Stop
