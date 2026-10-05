@@ -3,7 +3,6 @@ package com.dzid26.teslable.ble
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -45,12 +44,6 @@ class VehicleTest {
     fun titlePrefersUserThenCarName() {
         assertEquals("\uD83D\uDD11 Teslak", vehicle().title)
         assertEquals("Daily driver", vehicle().copy(displayName = "Daily driver").title)
-    }
-
-    @Test
-    fun maskedVinShowsOnlyTheStart() {
-        assertEquals("5YJ3E\u2026", vehicle(vin = vin).maskedVin)
-        assertNull(vehicle().maskedVin)
     }
 
     @Test

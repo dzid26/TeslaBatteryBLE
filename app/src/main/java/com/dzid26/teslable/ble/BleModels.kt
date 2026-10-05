@@ -23,6 +23,8 @@ data class TeslaConnection(
     val keySlot: Int? = null,
     val sessions: List<String> = emptyList(),
     val charge: TeslaCommands.Charge? = null,
+    /** When [charge] was last read; null until the first charge response. */
+    val chargeAtMillis: Long? = null,
     /** Pairing flow state for this car; idle unless a Pair is in flight. */
     val pairing: PairingPhase = PairingPhase.IDLE,
     val pairingKeyId: String? = null,
@@ -65,8 +67,6 @@ data class BleUiState(
     val selectedBleName: String? = null,
     /** Set when a notification tap asks the UI to open a specific car. */
     val openVehicleRequest: String? = null,
-    val vinInput: String = "",
-    val expectedBleName: String? = null,
     val log: List<LogEntry> = emptyList(),
 )
 
@@ -84,6 +84,21 @@ fun BleUiState.selectedConnection(): TeslaConnection? {
             ?: return null
     return connections[address]
 }
+
+/**
+ * True when an enrolled car is connected, so the tracking service should run.
+ * A pure function of the UI state so Compose can observe it directly.
+ */
+fun BleUiState.shouldTrack(): Boolean =
+    trackingEnabled &&
+        connections.values.any { connection ->
+            connection.phase == ConnectionPhase.READY &&
+                (
+                    connection.pairing == PairingPhase.OK ||
+                        connection.keySlot != null ||
+                        connection.sessions.isNotEmpty()
+                )
+        }
 
 /** The title and status line both the app list and the notification show for a car. */
 data class ConnectionDisplay(

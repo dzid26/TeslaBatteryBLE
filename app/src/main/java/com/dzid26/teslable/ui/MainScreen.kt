@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 package com.dzid26.teslable.ui
 
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -22,6 +23,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -38,15 +41,18 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.dzid26.teslable.ble.BleUiState
 import com.dzid26.teslable.ble.ConnectionPhase
+import com.dzid26.teslable.ble.LogEntry
 import com.dzid26.teslable.ble.PairingPhase
 import com.dzid26.teslable.ble.TeslaAdvert
 import com.dzid26.teslable.ble.TeslaConnection
@@ -70,12 +76,13 @@ fun MainScreen(
     onOpenVehicle: (String) -> Unit,
     onOpenRequestConsumed: () -> Unit,
     onPairKey: (String) -> Unit,
-    onVinChange: (String) -> Unit,
+    onSaveVin: (String, String) -> Unit,
     onWake: () -> Unit,
     onReadSoc: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
     var viewingBleName by rememberSaveable { mutableStateOf<String?>(null) }
+    var vinTarget by rememberSaveable { mutableStateOf<String?>(null) }
     var initialised by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(Unit) {
         if (!initialised) {
@@ -110,14 +117,12 @@ fun MainScreen(
     if (bleName != null && address != null) {
         CarScreen(
             state = state,
-            bleName = bleName,
             vehicle = vehicle,
             advert = advert,
             address = address,
             history = history,
             onBack = { viewingBleName = null },
             onPair = { onPairKey(address) },
-            onVinChange = onVinChange,
             onRefresh = {
                 // One pull does the right thing for the current state: reconnect,
                 // wake the car, or read the battery.
@@ -156,9 +161,38 @@ fun MainScreen(
                     if (ready) onPairKey(rowAddress) else onOpenVehicle(rowAddress)
                 }
             },
+            onEditVin = { name -> vinTarget = name },
             onOpenSettings = onOpenSettings,
         )
     }
+
+    VinEditor(
+        state = state,
+        target = vinTarget,
+        onSaveVin = onSaveVin,
+        onDismiss = { vinTarget = null },
+    )
+}
+
+/** The cars-list VIN editor; renders nothing unless a car is being edited. */
+@Composable
+private fun VinEditor(
+    state: BleUiState,
+    target: String?,
+    onSaveVin: (String, String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    if (target == null) return
+    val vehicle = state.vehicles.firstOrNull { it.bleName == target } ?: return
+    VinDialog(
+        bleName = target,
+        initialVin = vehicle.vin ?: "",
+        onSave = { vin ->
+            onSaveVin(target, vin)
+            onDismiss()
+        },
+        onDismiss = onDismiss,
+    )
 }
 
 // ------------------------------------------------------------------ cars list
@@ -212,6 +246,7 @@ private fun ConnectionsScreen(
     onToggleTracking: (Boolean) -> Unit,
     onOpen: (String, String) -> Unit,
     onPair: (String, String, Boolean) -> Unit,
+    onEditVin: (String) -> Unit,
     onOpenSettings: () -> Unit,
 ) {
     val rows = vehicleRows(state)
@@ -314,40 +349,45 @@ private fun ConnectionsScreen(
 
                 VehicleList(
                     rows = rows,
+                    log = state.log,
                     explicitScan = state.explicitScan,
                     onOpen = onOpen,
                     onPair = onPair,
+                    onEditVin = onEditVin,
                 )
             }
         }
     }
 }
 
-/** The empty state or the car cards; split out to keep the screen readable. */
+/** The empty state or the car cards, followed by the app-wide log. */
 @Composable
 private fun VehicleList(
     rows: List<VehicleRow>,
+    log: List<LogEntry>,
     explicitScan: Boolean,
     onOpen: (String, String) -> Unit,
     onPair: (String, String, Boolean) -> Unit,
+    onEditVin: (String) -> Unit,
 ) {
     if (rows.isEmpty()) {
-        Box(
+        Column(
             modifier =
                 Modifier
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState()),
-            contentAlignment = Alignment.Center,
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("No cars yet", style = MaterialTheme.typography.titleMedium)
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    text = "Pull down to scan for your first Tesla.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+            Spacer(Modifier.height(48.dp))
+            Text("No cars yet", style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = "Pull down to scan for your first Tesla.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(24.dp))
+            LogCard(log)
         }
     } else {
         LazyColumn(
@@ -367,7 +407,11 @@ private fun VehicleList(
                             row.connection?.phase == ConnectionPhase.READY,
                         )
                     },
+                    onEditVin = { onEditVin(row.bleName) },
                 )
+            }
+            item {
+                LogCard(log)
             }
         }
     }
@@ -404,6 +448,7 @@ private fun VehicleCard(
     explicitScan: Boolean,
     onOpen: () -> Unit,
     onPair: () -> Unit,
+    onEditVin: () -> Unit,
 ) {
     val display = connectionDisplay(row.connection, row.advert, vehicle = row.vehicle)
     val level = row.connection?.charge?.batteryLevel
@@ -411,51 +456,106 @@ private fun VehicleCard(
         row.vehicle?.keySlot != null ||
             row.connection?.keySlot != null ||
             row.connection?.pairing == PairingPhase.OK
+    val vin = row.vehicle?.vin
+    var menuOpen by remember { mutableStateOf(false) }
 
     Card(
         modifier =
             Modifier
                 .fillMaxWidth()
-                .clickable(onClick = onOpen),
+                .combinedClickable(
+                    onClick = onOpen,
+                    onLongClick = { if (row.vehicle != null) menuOpen = true },
+                ),
     ) {
-        Row(
-            modifier = Modifier.padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(display.title, style = MaterialTheme.typography.titleMedium)
-                Text(
-                    text = display.status,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = statusColor(row.connection),
+        Box {
+            Row(
+                modifier = Modifier.padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(display.title, style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        text = display.status,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = statusColor(row.connection),
+                    )
+                    Text(
+                        text = vin ?: row.address,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontFamily = if (vin != null) FontFamily.Monospace else null,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    if (explicitScan && !paired && row.connection != null) {
+                        val pairingInProgress =
+                            row.connection.pairing == PairingPhase.CHECKING ||
+                                row.connection.pairing == PairingPhase.SENDING ||
+                                row.connection.pairing == PairingPhase.WAITING_FOR_CARD
+                        TextButton(
+                            onClick = onPair,
+                            enabled = !pairingInProgress,
+                        ) {
+                            Text("Pair")
+                        }
+                    }
+                }
+                if (level != null) {
+                    Text(
+                        text = "$level%",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                } else {
+                    StatusPill(row.connection)
+                }
+            }
+            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                DropdownMenuItem(
+                    text = { Text(if (vin == null) "Add VIN" else "Edit VIN") },
+                    onClick = {
+                        menuOpen = false
+                        onEditVin()
+                    },
                 )
+            }
+        }
+    }
+}
+
+/** The app-wide log; every line is tagged with the car it came from. */
+@Composable
+private fun LogCard(log: List<LogEntry>) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(12.dp)) {
+            Text("Log", style = MaterialTheme.typography.titleSmall)
+            Spacer(Modifier.height(4.dp))
+            if (log.isEmpty()) {
                 Text(
-                    text = row.vehicle?.maskedVin ?: row.address,
+                    text = "No activity yet.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                if (explicitScan && !paired && row.connection != null) {
-                    val pairingInProgress =
-                        row.connection.pairing == PairingPhase.CHECKING ||
-                            row.connection.pairing == PairingPhase.SENDING ||
-                            row.connection.pairing == PairingPhase.WAITING_FOR_CARD
-                    TextButton(
-                        onClick = onPair,
-                        enabled = !pairingInProgress,
-                    ) {
-                        Text("Pair")
+            } else {
+                val logScroll = rememberScrollState()
+                LaunchedEffect(logScroll.maxValue) {
+                    logScroll.scrollTo(logScroll.maxValue)
+                }
+                Column(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 200.dp)
+                            .verticalScroll(logScroll),
+                ) {
+                    log.takeLast(100).forEach { line ->
+                        Text(
+                            text = line.message,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontFamily = FontFamily.Monospace,
+                        )
                     }
                 }
-            }
-            if (level != null) {
-                Text(
-                    text = "$level%",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-            } else {
-                StatusPill(row.connection)
             }
         }
     }

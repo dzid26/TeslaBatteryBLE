@@ -11,6 +11,9 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.text.SpannableString
+import android.text.Spanned
+import android.text.style.ForegroundColorSpan
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.ServiceCompat
@@ -21,6 +24,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 
@@ -50,6 +54,14 @@ class BleTrackingService : Service() {
         val controller = BleControllerHolder.get(this)
         scope.launch {
             controller.state.collect { state -> publish(modelsFor(state)) }
+        }
+        // The charge reading ages between state changes; re-evaluate every
+        // minute so the percentage can turn gray at the staleness boundary.
+        scope.launch {
+            while (true) {
+                delay(STALENESS_TICK_MS)
+                publish(modelsFor(controller.state.value))
+            }
         }
     }
 
@@ -83,12 +95,19 @@ class BleTrackingService : Service() {
             if (connection.phase == ConnectionPhase.IDLE) return@mapNotNull null
             val advert = state.devices.firstOrNull { it.address == vehicle.address }
             val display = connectionDisplay(connection, advert, vehicle = vehicle)
+            val percent = connection.charge?.batteryLevel
+            val readAt = connection.chargeAtMillis
+            val percentStale =
+                percent != null &&
+                    (readAt == null || System.currentTimeMillis() - readAt > STALE_READING_MS)
             NotificationModel(
                 bleName = vehicle.bleName,
                 title = display.title,
                 status = display.status,
                 stateText = display.stateText,
                 rssi = display.rssi,
+                percent = percent,
+                percentStale = percentStale,
                 showWake =
                     connection.status?.asleep == true &&
                         connection.sessions.contains("DOMAIN_VEHICLE_SECURITY"),
@@ -132,6 +151,8 @@ class BleTrackingService : Service() {
                     status = "No car connected",
                     stateText = "No car connected",
                     rssi = null,
+                    percent = null,
+                    percentStale = false,
                     showWake = false,
                 )
 
@@ -142,6 +163,8 @@ class BleTrackingService : Service() {
                     status = "Tracking ${models.size} cars",
                     stateText = "Tracking ${models.size} cars",
                     rssi = null,
+                    percent = null,
+                    percentStale = false,
                     showWake = false,
                 )
         }
@@ -188,12 +211,11 @@ class BleTrackingService : Service() {
         current: NotificationModel,
     ): Boolean {
         if (previous == null) return true
-        if (previous.title != current.title ||
-            previous.stateText != current.stateText ||
-            previous.showWake != current.showWake
-        ) {
+        if (previous.title != current.title || previous.stateText != current.stateText) return true
+        if (previous.percent != current.percent || previous.percentStale != current.percentStale) {
             return true
         }
+        if (previous.showWake != current.showWake) return true
         val oldRssi = previous.rssi
         val newRssi = current.rssi
         if (oldRssi == null || newRssi == null) return oldRssi != newRssi
@@ -209,7 +231,7 @@ class BleTrackingService : Service() {
                 .Builder(this, CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_stat_tracking)
                 .setContentTitle(model.title)
-                .setContentText(model.status)
+                .setContentText(notificationText(model))
                 .setContentIntent(openAppIntent(model.bleName))
                 .setOngoing(true)
                 .setSilent(true)
@@ -232,6 +254,33 @@ class BleTrackingService : Service() {
             builder.setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
         }
         return builder.build()
+    }
+
+    /**
+     * The notification line: the state plus the last known percentage, with the
+     * percentage in gray once its reading is older than [STALE_READING_MS].
+     * Notifications accept spans, so no rich-text layout is needed.
+     */
+    private fun notificationText(model: NotificationModel): CharSequence {
+        val percent = model.percent ?: return model.status
+        val percentText = "$percent%"
+        val text =
+            if (model.status.contains(percentText)) {
+                model.status
+            } else {
+                "${model.status} · $percentText"
+            }
+        if (!model.percentStale) return text
+        val start = text.indexOf(percentText)
+        if (start < 0) return text
+        return SpannableString(text).apply {
+            setSpan(
+                ForegroundColorSpan(STALE_TEXT_COLOR),
+                start,
+                start + percentText.length,
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+            )
+        }
     }
 
     /** Tapping a car's notification opens that car; the summary opens the app. */
@@ -284,6 +333,8 @@ class BleTrackingService : Service() {
         val status: String,
         val stateText: String,
         val rssi: Int?,
+        val percent: Int?,
+        val percentStale: Boolean,
         val showWake: Boolean,
     )
 
@@ -301,6 +352,11 @@ class BleTrackingService : Service() {
         private const val CAR_NOTIFICATION_BASE = 1000
         private const val REQUEST_OPEN_APP = 0
         private const val RSSI_NOTIFICATION_STEP = 5
+
+        /** A reading older than this is shown grayed out in the notification. */
+        private const val STALE_READING_MS = 5 * 60_000L
+        private const val STALENESS_TICK_MS = 60_000L
+        private const val STALE_TEXT_COLOR = 0xFF9E9E9E.toInt()
 
         /** True while the foreground service is running (same process). */
         @Volatile

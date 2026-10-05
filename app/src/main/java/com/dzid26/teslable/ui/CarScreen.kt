@@ -3,16 +3,13 @@ package com.dzid26.teslable.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -22,22 +19,17 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
@@ -58,13 +50,11 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.drawText
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import com.dzid26.teslable.ble.BleUiState
 import com.dzid26.teslable.ble.ConnectionPhase
-import com.dzid26.teslable.ble.LogEntry
 import com.dzid26.teslable.ble.PairingPhase
 import com.dzid26.teslable.ble.TeslaAdvert
 import com.dzid26.teslable.ble.TeslaConnection
@@ -92,14 +82,12 @@ import kotlin.math.roundToInt
 @Composable
 internal fun CarScreen(
     state: BleUiState,
-    bleName: String,
     vehicle: Vehicle?,
     advert: TeslaAdvert?,
     address: String,
     history: List<BatterySample>,
     onBack: () -> Unit,
     onPair: () -> Unit,
-    onVinChange: (String) -> Unit,
     onRefresh: () -> Unit,
     onOpenSettings: () -> Unit,
     onToggleTracking: (Boolean) -> Unit,
@@ -113,7 +101,6 @@ internal fun CarScreen(
             history.filter { it.vehicleId == vehicle.bleName }
         }
     val paired = isPaired(connection, vehicle)
-    var editingVin by rememberSaveable(bleName) { mutableStateOf(false) }
     // What a pull on this screen will do, and the feedback while it runs.
     val pullLabel =
         when {
@@ -197,7 +184,6 @@ internal fun CarScreen(
                     advert = advert,
                     vehicle = vehicle,
                     history = vehicleHistory,
-                    onEditVin = { editingVin = true },
                 )
                 // Once the app key is enrolled the hero carries its status; the
                 // card only exists for pairing, so it disappears when there is
@@ -206,21 +192,8 @@ internal fun CarScreen(
                     KeyCard(connection, vehicle, onPair)
                 }
                 BatteryHistoryCard(vehicleHistory)
-                LogCard(bleName = bleName, log = state.log)
             }
         }
-    }
-
-    if (editingVin) {
-        // Start from the stored VIN so a typo can be corrected, not retyped.
-        LaunchedEffect(Unit) { onVinChange(vehicle?.vin ?: "") }
-        VinDialog(
-            bleName = bleName,
-            vinInput = state.vinInput,
-            expectedBleName = state.expectedBleName,
-            onVinChange = onVinChange,
-            onDismiss = { editingVin = false },
-        )
     }
 }
 
@@ -230,7 +203,6 @@ private fun HeroCard(
     advert: TeslaAdvert?,
     vehicle: Vehicle?,
     history: List<BatterySample>,
-    onEditVin: () -> Unit,
 ) {
     val display = connectionDisplay(connection, advert, vehicle = vehicle)
     val charge = connection?.charge
@@ -241,64 +213,48 @@ private fun HeroCard(
     val lastKnown = history.lastOrNull()
     val keySlot = connection?.keySlot ?: vehicle?.keySlot
     val pairing = connection?.pairing ?: PairingPhase.IDLE
-    var menuOpen by remember { mutableStateOf(false) }
     Card(
         modifier =
             Modifier
-                .fillMaxWidth()
-                .combinedClickable(
-                    onClick = {},
-                    onLongClick = { menuOpen = true },
-                ),
+                .fillMaxWidth(),
     ) {
-        Box {
-            Column(Modifier.padding(16.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text(display.title, style = MaterialTheme.typography.titleMedium)
-                        // The app key state sits above the connection state: it is
-                        // what unlocks authenticated reads.
-                        if (keySlot != null || pairing == PairingPhase.OK) {
-                            Text(
-                                text = keySlot?.let { "App key paired · slot $it" } ?: "App key paired",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
+        Column(Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(display.title, style = MaterialTheme.typography.titleMedium)
+                    // The app key state sits above the connection state: it is
+                    // what unlocks authenticated reads.
+                    if (keySlot != null || pairing == PairingPhase.OK) {
                         Text(
-                            text = display.status,
+                            text = keySlot?.let { "App key paired · slot $it" } ?: "App key paired",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        if (pairing == PairingPhase.OK) {
-                            // Only shown for the pairing that just succeeded; the
-                            // Tesla screen calls the key Phone Key, so this hint does.
-                            Text(
-                                text = "Rename the Phone Key in Controls > Locks on the Tesla screen.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.primary,
-                            )
-                        }
                     }
-                    StatusPill(connection)
+                    Text(
+                        text = display.status,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    if (pairing == PairingPhase.OK) {
+                        // Only shown for the pairing that just succeeded; the
+                        // Tesla screen calls the key Phone Key, so this hint does.
+                        Text(
+                            text = "Rename the Phone Key in Controls > Locks on the Tesla screen.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
                 }
-                Spacer(Modifier.height(12.dp))
-                SocBlock(level = level, lastKnown = lastKnown, stateText = display.stateText)
-                Spacer(Modifier.height(8.dp))
-                connection?.status?.let { status ->
-                    Text(vehicleStatusText(status), style = MaterialTheme.typography.bodySmall)
-                }
-                ChargeDetails(charge)
+                StatusPill(connection)
             }
-            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                DropdownMenuItem(
-                    text = { Text("Edit VIN") },
-                    onClick = {
-                        menuOpen = false
-                        onEditVin()
-                    },
-                )
+            Spacer(Modifier.height(12.dp))
+            SocBlock(level = level, lastKnown = lastKnown, stateText = display.stateText)
+            Spacer(Modifier.height(8.dp))
+            connection?.status?.let { status ->
+                Text(vehicleStatusText(status), style = MaterialTheme.typography.bodySmall)
             }
+            ChargeDetails(charge)
         }
     }
 }
@@ -525,97 +481,6 @@ private fun pairingDetailText(pairing: PairingPhase): String? =
         else -> null
     }
 
-@Composable
-private fun VinDialog(
-    bleName: String,
-    vinInput: String,
-    expectedBleName: String?,
-    onVinChange: (String) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    val mismatch =
-        vinInput.length == VIN_LENGTH &&
-            expectedBleName != null &&
-            expectedBleName != bleName
-    val valid = vinInput.length == VIN_LENGTH && expectedBleName == bleName
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("VIN") },
-        text = {
-            OutlinedTextField(
-                value = vinInput,
-                onValueChange = onVinChange,
-                singleLine = true,
-                label = { Text("17-character VIN") },
-                isError = mismatch,
-                supportingText = {
-                    Text(
-                        text =
-                            when {
-                                mismatch -> "Doesn't match this car's advertised name"
-                                valid -> "Saved. Used for authenticated sessions; never logged."
-                                else -> "Printed on the windshield or the driver's door jamb."
-                            },
-                    )
-                },
-                modifier = Modifier.fillMaxWidth(),
-            )
-        },
-        confirmButton = {
-            TextButton(
-                onClick = onDismiss,
-                enabled = valid,
-            ) {
-                Text("Save")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
-        },
-    )
-}
-
-@Composable
-private fun LogCard(
-    bleName: String,
-    log: List<LogEntry>,
-) {
-    val lines = log.filter { it.vehicleId == null || it.vehicleId == bleName }
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(12.dp)) {
-            Text("Log", style = MaterialTheme.typography.titleSmall)
-            Spacer(Modifier.height(4.dp))
-            if (lines.isEmpty()) {
-                Text(
-                    text = "No activity yet.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            } else {
-                val logScroll = rememberScrollState()
-                LaunchedEffect(logScroll.maxValue) {
-                    logScroll.scrollTo(logScroll.maxValue)
-                }
-                Column(
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .heightIn(max = 200.dp)
-                            .verticalScroll(logScroll),
-                ) {
-                    lines.takeLast(100).forEach { line ->
-                        Text(
-                            text = line.message,
-                            style = MaterialTheme.typography.bodySmall,
-                            fontFamily = FontFamily.Monospace,
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
 // ---------------------------------------------------------------- battery card
 
 @Composable
@@ -797,7 +662,6 @@ private fun HistoryRange.label(): String =
         HistoryRange.ALL -> "All"
     }
 
-private const val VIN_LENGTH = 17
 private const val REFRESH_FEEDBACK_MS = 2500L
 
 private val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")

@@ -27,6 +27,7 @@ import com.dzid26.teslable.ble.BleControllerHolder
 import com.dzid26.teslable.ble.BleTrackingService
 import com.dzid26.teslable.ble.PairingKeyStore
 import com.dzid26.teslable.ble.TeslaBleController
+import com.dzid26.teslable.ble.shouldTrack
 import com.dzid26.teslable.ui.AboutScreen
 import com.dzid26.teslable.ui.MainScreen
 import com.dzid26.teslable.ui.PermissionWizardHost
@@ -76,7 +77,7 @@ class MainActivity : ComponentActivity() {
 
                 // Once a car with an enrolled key is connected, hand off to the
                 // foreground service so BLE keeps running with the app backgrounded.
-                val trackingNeeded = controller.shouldTrack()
+                val trackingNeeded = state.shouldTrack()
                 LaunchedEffect(trackingNeeded) {
                     if (!trackingNeeded || BleTrackingService.isRunning) return@LaunchedEffect
                     if (!hasNotificationPermission(context)) {
@@ -126,7 +127,7 @@ class MainActivity : ComponentActivity() {
                                 onOpenVehicle = controller::openVehicle,
                                 onOpenRequestConsumed = controller::consumeOpenVehicleRequest,
                                 onPairKey = controller::pairKey,
-                                onVinChange = controller::setVinInput,
+                                onSaveVin = controller::saveVin,
                                 onWake = { controller.wakeVehicle() },
                                 onReadSoc = { controller.requestChargeState() },
                                 onOpenSettings = { screen = AppScreen.SETTINGS },

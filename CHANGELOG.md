@@ -20,8 +20,8 @@ All notable changes to this project are documented here. The format is based on
 ### Changed
 
 - Car view: the paired app key status sits in the hero above the connection
-  state, the key card only appears while pairing, and the VIN is hidden behind
-  a long-press "Edit VIN" menu on the car card
+  state, the key card only appears while pairing, and the VIN is not shown;
+  the cars list shows the full VIN and long-pressing a car opens "Edit VIN"
 - Wording: the app's key is called "App key" everywhere; "Phone Key" appears
   only in the rename hint that mirrors the Tesla screen
 - Battery history is excluded from Android backup, so a restored install never
@@ -38,6 +38,10 @@ All notable changes to this project are documented here. The format is based on
   reading, instead of only a connection state
 - Unpaired car view explains the NFC-card walkthrough before pairing
 - RSSI is shown only while connected
+- The log panel moved from the car view to the cars screen, where it shows
+  every car's activity
+- The notification grays out the last known percentage once its reading is
+  older than five minutes, so a stale value cannot pass for a fresh one
 - Disconnected cars read just "Disconnected" (the tap-to-reconnect hint is gone)
 - Cars list and car view refresh by pulling down, with a labeled Material pill
   indicator (Scan for cars / Wake car / Read battery) that swaps its icon for a
@@ -58,6 +62,9 @@ All notable changes to this project are documented here. The format is based on
 
 - Crash on Android 12+ when opening a car while Bluetooth permissions were
   missing; the connect and scan paths now stop with a readable log instead
+- The tracking foreground service starts reliably again: its condition is now
+  a pure function of the observed UI state, so the ongoing notification comes
+  back instead of silently being skipped
 
 ## [0.2.0-beta.2] - 2026-10-05
 

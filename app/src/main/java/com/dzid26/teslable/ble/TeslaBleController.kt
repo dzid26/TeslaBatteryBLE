@@ -118,37 +118,21 @@ class TeslaBleController(
 
     // ---------------------------------------------------------------- UI actions
 
-    fun setVinInput(input: String) {
-        val normalized = Vehicle.normalizeVin(input)
-        val expected =
-            if (normalized.length == Vehicle.VIN_LENGTH) {
-                bleNameOf(normalized)
-            } else {
-                null
-            }
-        val vehicle = selectedVehicle()
-        if (vehicle != null && expected != null) {
-            if (vehicle.acceptsVin(normalized)) {
-                updateVehicle(vehicle.bleName) { it.copy(vin = normalized) }
-                log("${vehicle.title}: VIN saved")
-                // A VIN unlocks the sessions; retry the handshake now.
-                selectedLink()?.takeIf { it.phase == ConnectionPhase.READY }?.startSession()
-            } else {
-                log("${vehicle.title}: VIN does not match this car's advertised name")
-            }
-        } else if (vehicle == null && expected != null) {
-            // The selected car is not remembered yet; remember it so the VIN
-            // has somewhere to live, then save it if it checks out.
-            val link = selectedLink()
-            if (link != null) {
-                rememberVehicle(link.bleName, link.address, link.gattName())
-                val remembered = vehicles[link.bleName]
-                if (remembered != null && remembered.acceptsVin(normalized)) {
-                    updateVehicle(remembered.bleName) { it.copy(vin = normalized) }
-                }
-            }
+    /** Saves a VIN for one car after the cars-list editor validated it. */
+    fun saveVin(
+        bleName: String,
+        vin: String,
+    ) {
+        val normalized = Vehicle.normalizeVin(vin)
+        val vehicle = vehicles[bleName] ?: return
+        if (!vehicle.acceptsVin(normalized)) {
+            log("${vehicle.title}: VIN does not match this car's advertised name")
+            return
         }
-        _state.update { it.copy(vinInput = input, expectedBleName = expected) }
+        updateVehicle(bleName) { it.copy(vin = normalized) }
+        log("${vehicle.title}: VIN saved")
+        // A VIN unlocks the sessions; retry the handshake now.
+        links[bleName]?.takeIf { it.phase == ConnectionPhase.READY }?.startSession()
     }
 
     fun startScan() {
@@ -277,18 +261,7 @@ class TeslaBleController(
     }
 
     /** True when an enrolled car is connected, so the tracking service should run. */
-    fun shouldTrack(): Boolean {
-        val state = _state.value
-        return state.trackingEnabled &&
-            state.connections.values.any { connection ->
-                connection.phase == ConnectionPhase.READY &&
-                    (
-                        connection.pairing == PairingPhase.OK ||
-                            connection.keySlot != null ||
-                            connection.sessions.isNotEmpty()
-                    )
-            }
-    }
+    fun shouldTrack(): Boolean = _state.value.shouldTrack()
 
     /** Master switch: off tears everything down, on reconnects to paired cars. */
     fun setTrackingEnabled(enabled: Boolean) {
@@ -319,8 +292,6 @@ class TeslaBleController(
                 devices = emptyList(),
                 connections = emptyMap(),
                 selectedBleName = null,
-                vinInput = "",
-                expectedBleName = null,
                 log = emptyList(),
             )
         }
@@ -525,11 +496,8 @@ class TeslaBleController(
         vehicles[name] = updated
         vehicleStore.save(vehicles.values)
         publishVehicles()
-        syncVinDraft(name)
         if (changed) log("${nameFor(address)}: remembered for reconnect")
     }
-
-    private fun selectedVehicle(): Vehicle? = selectedBleName?.let(vehicles::get)
 
     private fun selectedLink(): VehicleLink? = selectedBleName?.let(links::get)
 
@@ -547,13 +515,9 @@ class TeslaBleController(
         _state.update {
             it.copy(
                 selectedBleName = name,
-                vinInput = vehicle?.vin ?: "",
-                expectedBleName = vehicle?.vin?.let(::bleNameOf),
             )
         }
     }
-
-    private fun bleNameOf(vin: String): String? = runCatching { TeslaNames.bleName(vin) }.getOrNull()
 
     private fun updateVehicle(
         bleName: String,
@@ -563,19 +527,6 @@ class TeslaBleController(
         vehicles[bleName] = transform(vehicle)
         vehicleStore.save(vehicles.values)
         publishVehicles()
-        syncVinDraft(bleName)
-    }
-
-    /** Keeps the VIN editor's draft in step when the selected car's VIN changes. */
-    private fun syncVinDraft(bleName: String) {
-        if (bleName != selectedBleName) return
-        val vin = vehicles[bleName]?.vin
-        _state.update {
-            it.copy(
-                vinInput = vin ?: "",
-                expectedBleName = vin?.let(::bleNameOf),
-            )
-        }
     }
 
     private fun publishVehicles() {
@@ -1119,7 +1070,9 @@ class TeslaBleController(
                     val charge = runCatching { TeslaCommands.parseChargeState(plaintext) }.getOrNull()
                     if (charge != null) {
                         val previous = _state.value.connections[address]?.charge
-                        updateConnection(address) { it.copy(charge = charge) }
+                        updateConnection(address) {
+                            it.copy(charge = charge, chargeAtMillis = System.currentTimeMillis())
+                        }
                         historyStore.record(bleName, charge)
                         if (previous?.batteryLevel != charge.batteryLevel ||
                             previous?.chargingState != charge.chargingState
