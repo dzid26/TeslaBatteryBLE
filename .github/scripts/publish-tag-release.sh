@@ -1,85 +1,49 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: AGPL-3.0-only
-# Publish a tagged release.
-#
-# If the rolling preview release points at this commit, convert it into the
-# tagged release (move the release to the new tag, update title/notes, replace
-# the asset) instead of deleting it and creating a new one. Otherwise fall
-# back to creating a fresh release.
-#
-# Screenshots ship as release assets: one composed sheet when ImageMagick is
-# available, otherwise the individual images.
+# Publish a tagged release: the CHANGELOG section plus the screenshot sheet
+# captured by CI. Run from a checkout with the debug APK built and the
+# emulator screenshots captured into `screenshots/`.
 set -euo pipefail
 
 TAG="${GITHUB_REF_NAME:?GITHUB_REF_NAME is required}"
 REPO="${GITHUB_REPOSITORY:?GITHUB_REPOSITORY is required}"
-SHA="${GITHUB_SHA:-$(git rev-parse HEAD)}"
-APK="app/build/outputs/apk/debug/app-debug.apk"
-ASSET_APK="TeslaBatteryBLE-${TAG}.apk"
+VERSION="${TAG#v}"
+APK="dist/TeslaBatteryBLE-${TAG}.apk"
 NOTES="release-notes.md"
-SITE_IMAGES_DIR="website/images"
-SHEET="screenshot-sheet.png"
+SHEET="screenshots/screenshot-sheet.png"
+SHEET_NAME="$(basename "$SHEET")"
+SHEET_URL="https://github.com/$REPO/releases/download/$TAG/$SHEET_NAME"
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ "$TAG" != "${TAG%-*}" ]; then PRE_FLAG="--prerelease"; else PRE_FLAG=""; fi
 
-case "$TAG" in
-  *-*) PRERELEASE_JSON="true" ;;
-  *) PRERELEASE_JSON="false" ;;
-esac
+[ -f "$APK" ] || { echo "missing $APK (the build job stages it for tags)" >&2; exit 1; }
 
-[ -f "$APK" ] || { echo "missing $APK" >&2; exit 1; }
-cp "$APK" "$ASSET_APK"
+{
+  awk -v h="## [$VERSION]" '
+    index($0, h) == 1 { found = 1 }
+    found && /^## \[/ && index($0, h) != 1 { exit }
+    found { print }
+  ' CHANGELOG.md
 
-SHEET_OK="false"
-if bash "$SCRIPT_DIR/build-screenshot-sheet.sh" "$SHEET"; then
-  SHEET_OK="true"
-fi
-export SCREENSHOT_BASE_URL="https://github.com/$REPO/releases/download/$TAG"
-if [ "$SHEET_OK" = "true" ]; then
-  export SCREENSHOT_SHEET_URL="$SCREENSHOT_BASE_URL/$SHEET"
-fi
-bash "$SCRIPT_DIR/build-release-notes.sh"
-
-git fetch --tags origin
-
-REUSED="false"
-PREVIEW_ID="$(gh release view preview --json databaseId --jq '.databaseId' 2>/dev/null || true)"
-if [ -n "$PREVIEW_ID" ]; then
-  PREVIEW_SHA="$(git rev-parse -q --verify 'refs/tags/preview^{commit}' 2>/dev/null || true)"
-  if [ -n "$PREVIEW_SHA" ] && [ "$PREVIEW_SHA" = "$SHA" ]; then
-    jq -n --arg tag "$TAG" --arg name "$TAG" --arg body "$(cat "$NOTES")" \
-      --argjson pre "$PRERELEASE_JSON" \
-      '{tag_name: $tag, name: $name, prerelease: $pre, body: $body}' > release-payload.json
-    if gh api -X PATCH "repos/$REPO/releases/$PREVIEW_ID" --input release-payload.json > /dev/null; then
-      REUSED="true"
-      echo "Converted the rolling preview release into $TAG."
-    else
-      echo "Preview conversion failed; creating a new release instead."
-    fi
+  if [ -f "$SHEET" ]; then
+    echo
+    echo "## Screenshots"
+    echo
+    echo "![App screenshots: light and dark]($SHEET_URL)"
   fi
+} > "$NOTES"
+
+if [ ! -s "$NOTES" ]; then
+  echo "See [CHANGELOG.md](https://github.com/$REPO/blob/main/CHANGELOG.md)." > "$NOTES"
 fi
 
-if [ "$REUSED" = "true" ]; then
-  gh release upload "$TAG" "$ASSET_APK" --clobber
-  while read -r asset; do
-    [ -n "$asset" ] || continue
-    gh release delete-asset "$TAG" "$asset" --yes || true
-  done < <(gh release view "$TAG" --json assets --jq '.assets[].name | select(startswith("TeslaBatteryBLE-preview-"))')
-  # The release no longer points at the rolling tag.
-  git push origin ":refs/tags/preview" || true
-elif [ "$PRERELEASE_JSON" = "true" ]; then
-  gh release create "$TAG" --title "$TAG" --prerelease --notes-file "$NOTES" "$ASSET_APK"
+if gh release view "$TAG" > /dev/null 2>&1; then
+  gh release edit "$TAG" --title "$TAG" --notes-file "$NOTES" $PRE_FLAG
 else
-  gh release create "$TAG" --title "$TAG" --notes-file "$NOTES" "$ASSET_APK"
+  gh release create "$TAG" --title "$TAG" --notes-file "$NOTES" $PRE_FLAG
 fi
 
-if [ "$SHEET_OK" = "true" ]; then
+gh release upload "$TAG" "$APK" --clobber
+if [ -f "$SHEET" ]; then
   gh release upload "$TAG" "$SHEET" --clobber
-  # Drop stale individual screenshots now that the sheet is used.
-  while read -r asset; do
-    [ -n "$asset" ] || continue
-    gh release delete-asset "$TAG" "$asset" --yes || true
-  done < <(gh release view "$TAG" --json assets --jq '.assets[].name | select(endswith(".png")) | select(. != "screenshot-sheet.png")')
-elif compgen -G "$SITE_IMAGES_DIR/*.png" > /dev/null; then
-  gh release upload "$TAG" "$SITE_IMAGES_DIR"/*.png --clobber
 fi
