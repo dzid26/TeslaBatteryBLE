@@ -73,11 +73,12 @@ git push origin "refs/tags/$TAG" --force
   fi
 } > preview-notes.md
 
+# Recreate the release on every build so the "released" time matches the
+# commit; editing in place keeps the original creation date.
 if gh release view "$TAG" > /dev/null 2>&1; then
-  gh release edit "$TAG" --title "$TITLE" --prerelease --notes-file preview-notes.md
-else
-  gh release create "$TAG" --title "$TITLE" --prerelease --notes-file preview-notes.md
+  gh release delete "$TAG" --yes
 fi
+gh release create "$TAG" --title "$TITLE" --prerelease --notes-file preview-notes.md
 
 gh release upload "$TAG" "$ASSET_APK" --clobber
 if [ -f "$SHEET" ]; then
