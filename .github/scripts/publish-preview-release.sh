@@ -70,14 +70,31 @@ git push origin "refs/tags/$TAG" --force
     echo
     echo "**Full diff**: https://github.com/$REPO/compare/$PREV_TAG...$TAG"
   fi
-  if [ -d "$SITE_IMAGES_DIR" ] && compgen -G "$SITE_IMAGES_DIR/*.png" > /dev/null; then
-    echo
-    echo "## Screenshots"
-    echo
-    for screenshot in "$SITE_IMAGES_DIR"/*.png; do
-      name="$(basename "$screenshot")"
-      echo "<img src=\"$PAGES_ORIGIN/images/$name\" width=\"360\" alt=\"${name%.png}\">"
+  if [ -d "$SITE_IMAGES_DIR" ]; then
+    # Light screenshots first, then dark variants; glob order is alphabetical,
+    # which would interleave them.
+    screenshots=()
+    for file in "$SITE_IMAGES_DIR"/*.png; do
+      [ -e "$file" ] || continue
+      case "$(basename "$file")" in
+        *-dark.png) ;;
+        *) screenshots+=("$file") ;;
+      esac
     done
+    for file in "$SITE_IMAGES_DIR"/*-dark.png; do
+      [ -e "$file" ] || continue
+      screenshots+=("$file")
+    done
+
+    if [ "${#screenshots[@]}" -gt 0 ]; then
+      echo
+      echo "## Screenshots"
+      echo
+      for screenshot in "${screenshots[@]}"; do
+        name="$(basename "$screenshot")"
+        echo "<img src=\"$PAGES_ORIGIN/images/$name\" width=\"360\" alt=\"${name%.png}\">"
+      done
+    fi
   fi
 } > preview-notes.md
 

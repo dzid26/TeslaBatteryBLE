@@ -20,14 +20,31 @@ RAW_ORIGIN="https://raw.githubusercontent.com/$REPO/$TAG_SHA"
     found { print }
   ' CHANGELOG.md
 
-  if [ -d "$SITE_IMAGES_DIR" ] && compgen -G "$SITE_IMAGES_DIR/*.png" > /dev/null; then
-    echo
-    echo "## Screenshots"
-    echo
-    for screenshot in "$SITE_IMAGES_DIR"/*.png; do
-      file_name="$(basename "$screenshot")"
-      echo "<img src=\"$RAW_ORIGIN/website/images/$file_name\" width=\"360\" alt=\"${file_name%.png}\">"
+  if [ -d "$SITE_IMAGES_DIR" ]; then
+    # Light screenshots first, then dark variants; glob order is alphabetical,
+    # which would interleave them.
+    screenshots=()
+    for file in "$SITE_IMAGES_DIR"/*.png; do
+      [ -e "$file" ] || continue
+      case "$(basename "$file")" in
+        *-dark.png) ;;
+        *) screenshots+=("$file") ;;
+      esac
     done
+    for file in "$SITE_IMAGES_DIR"/*-dark.png; do
+      [ -e "$file" ] || continue
+      screenshots+=("$file")
+    done
+
+    if [ "${#screenshots[@]}" -gt 0 ]; then
+      echo
+      echo "## Screenshots"
+      echo
+      for screenshot in "${screenshots[@]}"; do
+        file_name="$(basename "$screenshot")"
+        echo "<img src=\"$RAW_ORIGIN/website/images/$file_name\" width=\"360\" alt=\"${file_name%.png}\">"
+      done
+    fi
   fi
 } > release-notes.md
 
