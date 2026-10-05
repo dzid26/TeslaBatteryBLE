@@ -19,7 +19,9 @@ data class BatterySample(
 }
 
 /** Time window for the battery graph. */
-enum class HistoryRange(val durationMillis: Long?) {
+enum class HistoryRange(
+    val durationMillis: Long?,
+) {
     SIX_HOURS(6 * 60 * 60 * 1000L),
     DAY(24 * 60 * 60 * 1000L),
     WEEK(7 * 24 * 60 * 60 * 1000L),

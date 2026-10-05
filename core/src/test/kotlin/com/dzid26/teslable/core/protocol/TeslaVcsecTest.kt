@@ -95,7 +95,13 @@ class TeslaVcsecTest {
         val info = TeslaVcsec.parseWhitelistInfoResponse(response)
         assertNotNull(info)
         assertEquals(1, info!!.numberOfEntries)
-        assertArrayEquals(keyId, info.whitelistEntries.first().publicKeySHA1.toByteArray())
+        assertArrayEquals(
+            keyId,
+            info.whitelistEntries
+                .first()
+                .publicKeySHA1
+                .toByteArray(),
+        )
     }
 
     @Test

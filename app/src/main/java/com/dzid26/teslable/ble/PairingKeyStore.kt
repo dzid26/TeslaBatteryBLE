@@ -31,8 +31,9 @@ import javax.crypto.spec.GCMParameterSpec
  * migrated transparently on first load, then re-saved in the currently selected
  * mode.
  */
-class PairingKeyStore(context: Context) {
-
+class PairingKeyStore(
+    context: Context,
+) {
     private val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
     /** True when the key is allowed to be included in Android backup. */
@@ -70,19 +71,25 @@ class PairingKeyStore(context: Context) {
             if (decrypted == null) {
                 // Keystore material restored from another device cannot be
                 // decrypted; drop it so a fresh key can be generated.
-                prefs.edit().remove(KEY_IV).remove(KEY_PRIVATE).remove(KEY_PUBLIC).apply()
+                prefs
+                    .edit()
+                    .remove(KEY_IV)
+                    .remove(KEY_PRIVATE)
+                    .remove(KEY_PUBLIC)
+                    .apply()
                 return null
             }
             save(decrypted)
             return decrypted
         }
 
-        val plaintext = runCatching {
-            TeslaKeyPair(
-                privateKeyPkcs8 = Base64.decode(stored, Base64.NO_WRAP),
-                publicKeyRaw = Base64.decode(publicKey, Base64.NO_WRAP),
-            )
-        }.getOrNull() ?: return null
+        val plaintext =
+            runCatching {
+                TeslaKeyPair(
+                    privateKeyPkcs8 = Base64.decode(stored, Base64.NO_WRAP),
+                    publicKeyRaw = Base64.decode(publicKey, Base64.NO_WRAP),
+                )
+            }.getOrNull() ?: return null
 
         if (!isBackupEnabled()) {
             // A plaintext key exists but the current mode is device-only:
@@ -92,9 +99,14 @@ class PairingKeyStore(context: Context) {
         return plaintext
     }
 
-    private fun save(keyPair: TeslaKeyPair, backupEnabled: Boolean = isBackupEnabled()) {
-        val editor = prefs.edit()
-            .putString(KEY_PUBLIC, Base64.encodeToString(keyPair.publicKeyRaw, Base64.NO_WRAP))
+    private fun save(
+        keyPair: TeslaKeyPair,
+        backupEnabled: Boolean = isBackupEnabled(),
+    ) {
+        val editor =
+            prefs
+                .edit()
+                .putString(KEY_PUBLIC, Base64.encodeToString(keyPair.publicKeyRaw, Base64.NO_WRAP))
         if (backupEnabled) {
             editor
                 .putString(KEY_PRIVATE, Base64.encodeToString(keyPair.privateKeyPkcs8, Base64.NO_WRAP))
@@ -118,7 +130,10 @@ class PairingKeyStore(context: Context) {
     }
 
     /** Decrypts material written in device-only (Keystore-wrapped) format. */
-    private fun decryptWithKeystore(encrypted: String, publicKey: String): TeslaKeyPair? {
+    private fun decryptWithKeystore(
+        encrypted: String,
+        publicKey: String,
+    ): TeslaKeyPair? {
         val iv = prefs.getString(KEY_IV, null) ?: return null
         return runCatching {
             val cipher = Cipher.getInstance(TRANSFORMATION)
@@ -140,18 +155,20 @@ class PairingKeyStore(context: Context) {
         val existing = (keyStore.getEntry(ALIAS, null) as? KeyStore.SecretKeyEntry)?.secretKey
         if (existing != null) return existing
 
-        return KeyGenerator.getInstance("AES", ANDROID_KEYSTORE).apply {
-            init(
-                KeyGenParameterSpec.Builder(
-                    ALIAS,
-                    KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT,
+        return KeyGenerator
+            .getInstance("AES", ANDROID_KEYSTORE)
+            .apply {
+                init(
+                    KeyGenParameterSpec
+                        .Builder(
+                            ALIAS,
+                            KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT,
+                        ).setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                        .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+                        .setKeySize(KEY_SIZE_BITS)
+                        .build(),
                 )
-                    .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
-                    .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
-                    .setKeySize(KEY_SIZE_BITS)
-                    .build()
-            )
-        }.generateKey()
+            }.generateKey()
     }
 
     private companion object {

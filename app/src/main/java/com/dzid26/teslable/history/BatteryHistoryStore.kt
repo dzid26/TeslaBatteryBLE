@@ -24,7 +24,9 @@ import java.io.File
  * does not flood the file. First cut per ADR-0002: Room/SQLite when queries
  * outgrow this.
  */
-class BatteryHistoryStore(context: Context) {
+class BatteryHistoryStore(
+    context: Context,
+) {
     private val file = File(context.filesDir, FILE_NAME)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val mutex = Mutex()
@@ -76,7 +78,8 @@ class BatteryHistoryStore(context: Context) {
     private fun readFile(): List<BatterySample> {
         if (!file.exists()) return emptyList()
         return runCatching {
-            file.readLines()
+            file
+                .readLines()
                 .mapNotNull(BatteryHistoryCsv::parse)
                 .takeLast(MAX_SAMPLES)
         }.getOrDefault(emptyList())

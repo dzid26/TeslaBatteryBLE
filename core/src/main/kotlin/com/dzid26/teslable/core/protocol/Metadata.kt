@@ -11,7 +11,9 @@ interface HashContext {
     fun digest(): ByteArray
 }
 
-class MessageDigestContext(algorithm: String) : HashContext {
+class MessageDigestContext(
+    algorithm: String,
+) : HashContext {
     private val digest = MessageDigest.getInstance(algorithm)
 
     override fun update(data: ByteArray) = digest.update(data)
@@ -19,7 +21,9 @@ class MessageDigestContext(algorithm: String) : HashContext {
     override fun digest(): ByteArray = digest.digest()
 }
 
-class MacContext(key: ByteArray) : HashContext {
+class MacContext(
+    key: ByteArray,
+) : HashContext {
     private val mac =
         Mac.getInstance(HMAC_SHA256).apply {
             init(SecretKeySpec(key, HMAC_SHA256))
@@ -34,7 +38,9 @@ class MacContext(key: ByteArray) : HashContext {
     }
 }
 
-class Metadata(private val context: HashContext) {
+class Metadata(
+    private val context: HashContext,
+) {
     private var lastTag = -1
 
     fun add(

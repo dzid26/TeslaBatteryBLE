@@ -97,7 +97,8 @@ class TeslaSessionTest {
         assertNotNull(gcm)
         assertEquals(8, gcm!!.counter)
         assertFalse(
-            encrypted.protobuf_message_as_bytes!!.toByteArray()
+            encrypted.protobuf_message_as_bytes!!
+                .toByteArray()
                 .contentEquals("hello".toByteArray()),
         )
 
@@ -159,7 +160,10 @@ class TeslaSessionTest {
         val encrypted = session.encrypt(message, 5)!!
         assertArrayEquals(
             fixedNonce,
-            encrypted.signature_data?.AES_GCM_Personalized_data?.nonce?.toByteArray(),
+            encrypted.signature_data
+                ?.AES_GCM_Personalized_data
+                ?.nonce
+                ?.toByteArray(),
         )
     }
 
@@ -169,12 +173,12 @@ class TeslaSessionTest {
         counter: Int,
     ): RoutableMessage {
         val metadata =
-            Metadata.sha256()
+            Metadata
+                .sha256()
                 .add(
                     Tag.TAG_SIGNATURE_TYPE.value,
                     byteArrayOf(SignatureType.SIGNATURE_TYPE_AES_GCM_RESPONSE.value.toByte()),
-                )
-                .add(Tag.TAG_DOMAIN.value, byteArrayOf(Domain.DOMAIN_INFOTAINMENT.value.toByte()))
+                ).add(Tag.TAG_DOMAIN.value, byteArrayOf(Domain.DOMAIN_INFOTAINMENT.value.toByte()))
                 .add(Tag.TAG_PERSONALIZATION.value, vin.toByteArray())
                 .addUint32(Tag.TAG_COUNTER.value, counter)
                 .addUint32(Tag.TAG_FLAGS.value, 0)

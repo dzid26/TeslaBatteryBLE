@@ -9,7 +9,9 @@ import org.json.JSONObject
  * Persists known vehicles (identity, current address, per-vehicle VIN and key
  * slot).
  */
-class VehicleStore(context: Context) {
+class VehicleStore(
+    context: Context,
+) {
     private val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
     fun load(): List<Vehicle> {

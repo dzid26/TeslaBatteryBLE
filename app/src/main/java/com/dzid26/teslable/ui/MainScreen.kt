@@ -120,7 +120,11 @@ fun MainScreen(
     val address =
         vehicle?.address
             ?: advert?.address
-            ?: bleName?.let { name -> state.connections.values.firstOrNull { it.name == name }?.address }
+            ?: bleName?.let { name ->
+                state.connections.values
+                    .firstOrNull { it.name == name }
+                    ?.address
+            }
 
     if (bleName != null && address != null) {
         CarScreen(
@@ -938,7 +942,8 @@ private fun formatTime(
     millis: Long,
     showDate: Boolean,
 ): String =
-    Instant.ofEpochMilli(millis)
+    Instant
+        .ofEpochMilli(millis)
         .atZone(ZoneId.systemDefault())
         .format(if (showDate) dateTimeFormatter else timeFormatter)
 

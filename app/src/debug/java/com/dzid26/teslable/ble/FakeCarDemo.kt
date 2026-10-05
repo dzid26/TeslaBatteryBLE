@@ -7,7 +7,9 @@ import com.dzid26.teslable.core.TeslaNames
 import kotlin.random.Random
 
 /** Debug wiring that makes the app talk to [FakeTeslaTransport] cars. */
-class FakeCarDemo(private val context: Context) : DemoMode.Car {
+class FakeCarDemo(
+    private val context: Context,
+) : DemoMode.Car {
     override fun createTransport(
         address: String,
         listener: TeslaTransport.Listener,

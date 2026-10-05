@@ -47,7 +47,8 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         controller = BleControllerHolder.get(this)
         // A notification tap can ask for a specific car before the UI exists.
-        intent?.getStringExtra(BleTrackingService.EXTRA_BLE_NAME)
+        intent
+            ?.getStringExtra(BleTrackingService.EXTRA_BLE_NAME)
             ?.let(controller::openVehicleByBleName)
         setContent {
             TeslaBleTheme {
@@ -85,7 +86,8 @@ class MainActivity : ComponentActivity() {
                 val requestPermissions: () -> Unit = {
                     val activity = context as? Activity
                     val deniedForever =
-                        requestedOnce && activity != null &&
+                        requestedOnce &&
+                            activity != null &&
                             requiredBlePermissions().none {
                                 ActivityCompat.shouldShowRequestPermissionRationale(activity, it)
                             }
@@ -175,7 +177,8 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        intent.getStringExtra(BleTrackingService.EXTRA_BLE_NAME)
+        intent
+            .getStringExtra(BleTrackingService.EXTRA_BLE_NAME)
             ?.let(controller::openVehicleByBleName)
     }
 }

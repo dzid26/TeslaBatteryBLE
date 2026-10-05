@@ -46,8 +46,13 @@ import com.tesla.generated.carserver.server.Response as CarServerResponse
  * tap, session handshakes with the core crypto, and encrypted wake/charge
  * responses.
  */
-class FakeCarProtocol(private val vin: String) {
-    data class Response(val bytes: ByteArray, val delayMs: Long = 0)
+class FakeCarProtocol(
+    private val vin: String,
+) {
+    data class Response(
+        val bytes: ByteArray,
+        val delayMs: Long = 0,
+    )
 
     var asleep: Boolean = true
         private set
@@ -253,12 +258,12 @@ class FakeCarProtocol(private val vin: String) {
         val uuid = request.uuid?.toByteArray() ?: return
 
         val metadata =
-            Metadata.sha256()
+            Metadata
+                .sha256()
                 .add(
                     Tag.TAG_SIGNATURE_TYPE.value,
                     byteArrayOf(SignatureType.SIGNATURE_TYPE_AES_GCM_PERSONALIZED.value.toByte()),
-                )
-                .add(Tag.TAG_DOMAIN.value, byteArrayOf(domain.value.toByte()))
+                ).add(Tag.TAG_DOMAIN.value, byteArrayOf(domain.value.toByte()))
                 .add(Tag.TAG_PERSONALIZATION.value, vin.toByteArray(Charsets.US_ASCII))
                 .add(Tag.TAG_EPOCH.value, gcm.epoch.toByteArray())
                 .addUint32(Tag.TAG_EXPIRES_AT.value, gcm.expires_at)
@@ -329,12 +334,12 @@ class FakeCarProtocol(private val vin: String) {
                 SignatureType.SIGNATURE_TYPE_AES_GCM_PERSONALIZED.value.toByte(),
             ) + requestTag
         val metadata =
-            Metadata.sha256()
+            Metadata
+                .sha256()
                 .add(
                     Tag.TAG_SIGNATURE_TYPE.value,
                     byteArrayOf(SignatureType.SIGNATURE_TYPE_AES_GCM_RESPONSE.value.toByte()),
-                )
-                .add(Tag.TAG_DOMAIN.value, byteArrayOf(domain.value.toByte()))
+                ).add(Tag.TAG_DOMAIN.value, byteArrayOf(domain.value.toByte()))
                 .add(Tag.TAG_PERSONALIZATION.value, vin.toByteArray(Charsets.US_ASCII))
                 .addUint32(Tag.TAG_COUNTER.value, counter)
                 .addUint32(Tag.TAG_FLAGS.value, 0)

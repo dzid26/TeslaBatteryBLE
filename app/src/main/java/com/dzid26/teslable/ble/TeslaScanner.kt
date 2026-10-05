@@ -57,7 +57,8 @@ class TeslaScanner(
         found.clear()
         onDevices(emptyList())
         val settings =
-            ScanSettings.Builder()
+            ScanSettings
+                .Builder()
                 .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
                 .build()
         scanner.startScan(null, settings, callback)

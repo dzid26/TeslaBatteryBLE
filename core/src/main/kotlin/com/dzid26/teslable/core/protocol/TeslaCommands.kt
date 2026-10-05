@@ -51,5 +51,10 @@ object TeslaCommands {
         )
     }
 
-    fun parseActionStatus(payload: ByteArray): String? = Response.ADAPTER.decode(payload).actionStatus?.result?.name
+    fun parseActionStatus(payload: ByteArray): String? =
+        Response.ADAPTER
+            .decode(payload)
+            .actionStatus
+            ?.result
+            ?.name
 }
