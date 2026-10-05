@@ -20,6 +20,7 @@
 
 - [ ] Create and push tag `vX.Y.Z` (e.g. `git tag v0.2.0 && git push origin v0.2.0`).
 - [ ] CI builds the APK, attaches it as `TeslaBatteryBLE-<tag>.apk`, captures screenshots from the simulated car on the emulator, composes one `screenshot-sheet.png`, and attaches it.
+- [ ] The capture is required: a failed capture or a missing sheet fails the run, and the release is not published without its screenshots.
 - [ ] CI sets the release title, marks tags containing `-` as prereleases, and writes notes from the matching `CHANGELOG.md` section plus the sheet.
 - [ ] Verify the release page: correct tag/version, notes, screenshots, and installable APK artifact.
 - [ ] The rolling preview is removed automatically when the tagged commit matches it; otherwise it remains until the next un-released push.

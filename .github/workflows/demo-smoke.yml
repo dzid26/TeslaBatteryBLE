@@ -1,11 +1,14 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 name: Demo smoke
 
-# Manual-only: drives the simulated car on an emulator and captures
-# screenshots. Unit tests and the APK build run in Android CI, so this
-# workflow intentionally has no test job of its own.
+# Manual + daily canary: drives the simulated car on an emulator and captures
+# screenshots. Unit tests and the APK build run in Android CI, so this workflow
+# intentionally has no test job of its own. The schedule catches capture-script
+# drift against UI changes before a release needs it.
 on:
   workflow_dispatch:
+  schedule:
+    - cron: '23 5 * * *'
 
 permissions:
   contents: read
