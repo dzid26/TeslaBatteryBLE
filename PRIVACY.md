@@ -13,9 +13,11 @@ anywhere.**
 
 The app never synchronizes, uploads, or shares anything. Android's system backup
 is separate: if you have it enabled, your device may include app data in cloud
-backup or device-to-device transfer — including the enrolled key, so pairing
-survives a new phone. Backup is protected by your Google account and your device
-lock secret; a rooted or forensically extracted device is outside that protection.
+backup or device-to-device transfer. On Android 12+, the enrolled key is included
+only when encrypted backup (device lock secret) is available, so pairing can
+survive a new phone; on Android 11 and below the key is excluded from backup and
+is re-established with an NFC card tap. A rooted or forensically extracted device
+is outside these protections.
 The enrolled key is charging-manager scoped: it can read vehicle data and control
 charging, but cannot unlock or drive the car, and new keys always need an NFC card
 tap plus vehicle confirmation. Uninstalling removes on-device data; a system

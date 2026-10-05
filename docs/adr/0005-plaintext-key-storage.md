@@ -12,8 +12,9 @@ Date: 2026-10-05
   data and control charging, but cannot unlock, drive, or add new keys (that needs
   the NFC card tap plus vehicle confirmation).
 - App-private storage is sandboxed from other apps. Android Auto Backup is gated
-  by the user's Google account and, on modern Android, end-to-end encrypted with
-  the device lock secret.
+  by the user's Google account and, on Android 12+, end-to-end encrypted with the
+  device lock secret. Older versions cannot require that encryption condition in
+  backup rules.
 
 ## Decision
 
@@ -22,10 +23,15 @@ Date: 2026-10-05
   phone.
 - Keep the legacy Keystore-encrypted format readable for one release cycle and
   migrate it transparently on first load.
+- On Android 12+, cloud backup is allowed only when client-side encryption is
+  available (`disableIfNoEncryptionCapabilities`); on Android 11 and below the key
+  is excluded from backup, because the platform cannot express that condition.
 
 ## Consequences
 
-- Pairing survives device restore; no NFC re-pair is needed.
+- Pairing survives device restore on Android 12+ when encrypted backup is
+  available; on Android 11 and below (or without a qualifying lock screen) the key
+  is not backed up and a re-pair via NFC card tap is needed.
 - Rooted or forensically extracted devices expose the key; anyone with the backup
   and the lock secret can use it (near the car for BLE; Fleet API additionally
   requires Tesla account access).

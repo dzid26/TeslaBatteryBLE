@@ -47,13 +47,14 @@ reads wait until the car is already awake or you trigger a wake.
 ## Where are my keys stored?
 
 In app-private storage on your phone, which other apps cannot read. Vehicle
-keys (P-256) are generated on-device. The enrolled key is included in Android's
-system backup, so pairing survives a phone change; backup is protected by your
-Google account and device lock secret. The default `CHARGING_MANAGER` role limits
-impact to read + charge control — it cannot unlock or drive the car, and adding
-new keys always needs an NFC card tap plus vehicle confirmation. You can remove
-the app's key from the car's key list at any time. Uninstalling the app deletes
-local key material. Details:
+keys (P-256) are generated on-device. On Android 12+, the enrolled key is
+included in Android's system backup only when encrypted backup (device lock
+secret) is available, so pairing survives a phone change; on Android 11 and below
+it is excluded from backup and re-pairing needs the NFC card tap. The default
+`CHARGING_MANAGER` role limits impact to read + charge control — it cannot unlock
+or drive the car, and adding new keys always needs an NFC card tap plus vehicle
+confirmation. You can remove the app's key from the car's key list at any time.
+Uninstalling the app deletes local key material. Details:
 [session and pairing](protocol/session-and-pairing.md),
 [ADR-0005](adr/0005-plaintext-key-storage.md).
 
