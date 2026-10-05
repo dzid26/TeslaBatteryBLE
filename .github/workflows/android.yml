@@ -19,8 +19,9 @@ permissions:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  # Never cancel main-branch runs (they feed the rolling preview); only supersede PR runs.
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  # Only the newest run for a ref matters (main feeds the rolling preview).
+  # Tags are their own group, so releases are never cancelled by a push.
+  cancel-in-progress: true
 
 jobs:
   build:
