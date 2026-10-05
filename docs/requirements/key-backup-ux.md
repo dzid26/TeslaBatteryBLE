@@ -29,7 +29,19 @@ no export/import, no deep links.
 ## Decided against (for now)
 
 - Onboarding flow, "pairing not restored" card, in-app key export/import.
-- A danger-zone "forget key" action: uninstall or system "clear storage"
-  already removes local keys, and the car's key list removes the whitelist
-  entry. Deleting locally would not purge the Google backup copy, so the
-  button would give false confidence.
+- A danger-zone "forget key" action. The use cases are already covered, and a
+  local delete would overpromise:
+  - Selling or handing over the phone: the car's key list (Controls → Locks)
+    is the real revocation; uninstall or a factory reset removes the local
+    copy. An in-app delete cannot touch the car's whitelist.
+  - Key compromise or a lost phone: same car-side removal; a lost phone should
+    be locked or remotely wiped.
+  - Testing pairing: "Clear pairing cache" already resets the app's pairing
+    state, and re-pairing re-enrolls the same key.
+  - Getting the key out of Google backup: turn the setting off so the next
+    backup pass replaces the cloud copy, or `bmgr wipe` over adb for an
+    immediate purge. The app cannot verify the cloud copy, so a button would
+    give false confidence.
+  - Privacy "delete my data": uninstall or system "Clear storage" covers it.
+- Revisit if the app ever enrolls OWNER/DRIVER-scoped keys, where key loss has
+  a bigger blast radius.
