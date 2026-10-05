@@ -50,10 +50,8 @@ find it (`sdk.dir=...`).
 
 1. Fork / branch from `main`.
 2. Make the change, add tests and docs (README/CHANGELOG/plan as applicable).
-3. Sign off your commits with the [Developer Certificate of Origin](https://developercertificate.org/):
-   `git commit -s` adds `Signed-off-by: Your Name <you@example.com>`.
-   We use DCO — **no CLA**.
-4. Open the PR and fill in the template. Small, focused PRs merge fastest.
+3. Open the PR and fill in the template. Contributions are licensed under
+   AGPL-3.0-only, matching the project (no CLA). Small, focused PRs merge fastest.
 
 Hardware-dependent changes: note in the PR what was tested and what was not. Real-car
 validation is batched by the maintainer (see the checklist in the master plan).

@@ -19,7 +19,7 @@ account, nothing leaves the phone."*
 
 | Decision | Choice | Notes |
 | --- | --- | --- |
-| License | **AGPL-3.0-only** | Whole repo. Switching to `-or-later` is a one-line change until external contributions land; afterwards it is effectively frozen (DCO, no CLA). |
+| License | **AGPL-3.0-only** | Whole repo. Switching to `-or-later` is a one-line change until external contributions land; afterwards it is effectively frozen. |
 | Distribution | GitHub Releases + Obtainium now; F-Droid + IzzyOnDroid next; Play later | Signed releases are a prerequisite for F-Droid/IzzyOnDroid. |
 | Core library | Internal until v1, then publish (Maven Central vs JitPack TBD) | Library-grade docs and API hygiene from now on. |
 | Platforms | Android-first; KMP (jvm + apple) at library release | Keep JVM-only dependencies out of `core`. |
@@ -55,7 +55,7 @@ A trustworthy shell around the existing protocol work. No user-facing features.
 - [x] In-app license/credits screen data (with the About screen, Phase 1).
 - [x] README: pitch, badges, screenshots, features, install (GitHub / Obtainium), build, architecture diagram, license, "not affiliated with Tesla, Inc.".
 - [x] App icon: adaptive + monochrome (512 px store export still pending).
-- [x] `SECURITY.md`, `PRIVACY.md` ("nothing leaves the device"), `CODE_OF_CONDUCT.md`, `CONTRIBUTING.md` (DCO, no CLA), `CHANGELOG.md`.
+- [x] `SECURITY.md`, `PRIVACY.md` ("nothing leaves the device"), `CODE_OF_CONDUCT.md`, `CONTRIBUTING.md`, `CHANGELOG.md`.
 - [x] Issue forms (bug: car model/year, vehicle software, Android version, logs; feature request), PR template, `.editorconfig`.
 - [x] CI gates: Android lint, app unit tests, concurrency cancel, least-privilege permissions, Dependabot.
 - [x] CI hardening: pinned action SHAs (#16); ktlint + detekt gates (#19).
@@ -132,4 +132,4 @@ A trustworthy shell around the existing protocol work. No user-facing features.
 - **OEM battery management** kills background BLE → foreground service, documented expectations, FAQ.
 - **Store policy** (location/BLE, Tesla trademark) → F-Droid-first, original icon, explicit disclaimer.
 - **AGPL deters some library consumers** → accepted trade-off (community norm in this protocol space); revisit only if library traction stalls.
-- **Bus factor** → docs-first, `AGENTS.md`, DCO contributions, no CLA.
+- **Bus factor** → docs-first, `AGENTS.md`, no CLA.
