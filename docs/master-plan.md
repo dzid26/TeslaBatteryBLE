@@ -67,6 +67,7 @@ A trustworthy shell around the existing protocol work. No user-facing features.
 ## 6. Phase 1 — v0.2 "Trust & polish" (target: end of October)
 
 - [x] UX P0: permission rationale + pairing walkthrough (incl. NFC card tap), connection state clarity, last-known SOC, readable errors (2026-10-05).
+- [ ] Key backup & restore UX (onboarding, backup status, manual-install restore): `docs/requirements/key-backup-ux.md` (UX pass; implementation can be delegated).
 - [x] About screen: version, licenses, privacy statement, donation links (2026-10-05).
 - [ ] Dark theme + strings extracted to resources (translation-ready).
 - [x] Fake BLE transport + simulated car (`FakeCarProtocol`, round-trip tests, CI demo run).
