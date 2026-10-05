@@ -89,6 +89,18 @@ jobs:
           body_path: release-notes.md
           files: TeslaBatteryBLE-*.apk
 
+      - name: Remove superseded preview release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git fetch --tags origin
+          preview_sha="$(git rev-parse -q --verify 'refs/tags/preview^{commit}' 2>/dev/null || true)"
+          if [ -n "$preview_sha" ] && [ "$preview_sha" = "$GITHUB_SHA" ] && gh release view preview > /dev/null 2>&1; then
+            gh release delete preview --yes --cleanup-tag || true
+            echo "Removed the rolling preview superseded by ${GITHUB_REF_NAME}."
+          fi
+
   preview:
     name: Rolling preview release
     needs: build

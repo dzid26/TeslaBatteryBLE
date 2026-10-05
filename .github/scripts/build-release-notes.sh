@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: AGPL-3.0-only
 # Build release notes for a tag: the CHANGELOG section for the version plus
-# screenshots served from the deployed GitHub Pages site.
+# screenshots pinned to the release commit, so old release notes never change.
 set -euo pipefail
 
 TAG="${GITHUB_REF_NAME:?GITHUB_REF_NAME is required}"
@@ -9,10 +9,9 @@ REPO="${GITHUB_REPOSITORY:?GITHUB_REPOSITORY is required}"
 VERSION="${TAG#v}"
 SITE_IMAGES_DIR="website/images"
 
-# GitHub Pages origin for the deployed site images (owner is lowercased).
-OWNER="${REPO%/*}"
-NAME="${REPO#*/}"
-PAGES_ORIGIN="https://$(printf '%s' "$OWNER" | tr '[:upper:]' '[:lower:]').github.io/$NAME"
+# Pin images to the release commit (raw.githubusercontent.com is immutable).
+TAG_SHA="${GITHUB_SHA:-$(git rev-parse HEAD)}"
+RAW_ORIGIN="https://raw.githubusercontent.com/$REPO/$TAG_SHA"
 
 {
   awk -v h="## [$VERSION]" '
@@ -27,7 +26,7 @@ PAGES_ORIGIN="https://$(printf '%s' "$OWNER" | tr '[:upper:]' '[:lower:]').githu
     echo
     for screenshot in "$SITE_IMAGES_DIR"/*.png; do
       file_name="$(basename "$screenshot")"
-      echo "<img src=\"$PAGES_ORIGIN/images/$file_name\" width=\"360\" alt=\"${file_name%.png}\">"
+      echo "<img src=\"$RAW_ORIGIN/website/images/$file_name\" width=\"360\" alt=\"${file_name%.png}\">"
     done
   fi
 } > release-notes.md
