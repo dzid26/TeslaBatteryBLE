@@ -1,0 +1,144 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+name: PR screenshots
+
+# Capture the demo build on pull requests that touch the app UI or the capture
+# flow and post the screenshot sheet in one bot comment, so reviews see the
+# visual result. The sheet is uploaded to the rolling pr-shots release and the
+# comment is updated on every push. Note: PRs from forks get a read-only token,
+# so the upload/comment steps fail there by design.
+on:
+  pull_request:
+    paths:
+      - 'app/**'
+      - '.github/scripts/capture-screenshots.sh'
+      - '.github/scripts/build-screenshot-sheet.sh'
+      - '.github/workflows/pr-screenshots.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write      # upload the sheet to the pr-shots release
+  pull-requests: write # post/update the comment
+
+concurrency:
+  group: pr-screenshots-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  screenshots:
+    name: Capture and post screenshots
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6
+
+      - name: Make gradlew executable
+        run: chmod +x gradlew
+
+      - name: Build the demo APK
+        run: ./gradlew :app:assembleDebug -PdemoCar=true
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Install ImageMagick
+        run: sudo apt-get install -y imagemagick
+
+      # Same headless environment as the Android CI capture: the windowed
+      # default never renders the app on CI runners.
+      - name: Capture screenshots
+        id: capture
+        continue-on-error: true
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          emulator-boot-timeout: 420
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          disable-animations: true
+          script: bash .github/scripts/capture-screenshots.sh app/build/outputs/apk/debug/app-debug.apk screenshots
+
+      # Emulator flakes (GL context preemption, adb daemon) are common on CI
+      # runners; give the capture one fresh attempt like Android CI does. The
+      # assert below still fails the job when no complete set is produced.
+      - name: Retry the capture once
+        if: steps.capture.outcome == 'failure'
+        continue-on-error: true
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          emulator-boot-timeout: 420
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          disable-animations: true
+          script: rm -rf screenshots && bash .github/scripts/capture-screenshots.sh app/build/outputs/apk/debug/app-debug.apk screenshots
+
+      - name: Assert the screenshots
+        run: |
+          set -euo pipefail
+          missing=""
+          for name in 01-overview 02-scanning 03-car 04-history 05-settings \
+              01-overview-dark 02-scanning-dark 03-car-dark 04-history-dark 05-settings-dark; do
+            if [ ! -f "screenshots/$name.png" ]; then
+              echo "missing required screenshot: $name.png"
+              missing=true
+            fi
+          done
+          [ -z "$missing" ]
+
+      - name: Compose the screenshot sheet
+        run: bash .github/scripts/build-screenshot-sheet.sh screenshots screenshots/screenshot-sheet.png
+
+      - name: Upload the sheet to the pr-shots release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          SHORT="$(git rev-parse --short HEAD)"
+          NAME="screenshot-sheet-$SHORT.png"
+          cp screenshots/screenshot-sheet.png "$NAME"
+          if ! gh release view pr-shots > /dev/null 2>&1; then
+            gh release create pr-shots --title "PR screenshots" --prerelease \
+              --notes "Screenshot sheets for PR review comments. An asset is added per push; old ones can be pruned."
+          fi
+          gh release upload pr-shots "$NAME" --clobber
+
+      - name: Post or update the screenshots comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          PR="$PR_NUMBER"
+          if [ -z "$PR" ]; then
+            PR="$(gh pr list --head "${{ github.ref_name }}" --state open --json number --jq '.[0].number // empty')"
+          fi
+          if [ -z "$PR" ]; then
+            echo "no open PR for ${{ github.ref_name }}; skipping the comment"
+            exit 0
+          fi
+          SHORT="$(git rev-parse --short HEAD)"
+          URL="https://github.com/${{ github.repository }}/releases/download/pr-shots/screenshot-sheet-$SHORT.png"
+          BODY="<!-- pr-screenshots -->"$'\n'"## Screenshots ($SHORT)"$'\n\n'"![App screenshots: light and dark]($URL)"$'\n\n'"Captured from the demo build at $SHORT."
+          COMMENT_ID="$(gh api "repos/${{ github.repository }}/issues/$PR/comments" --paginate --jq '[.[] | select(.body | contains("<!-- pr-screenshots -->")) | .id] | .[0] // empty')"
+          if [ -n "$COMMENT_ID" ]; then
+            gh api -X PATCH "repos/${{ github.repository }}/issues/comments/$COMMENT_ID" -f body="$BODY" > /dev/null
+          else
+            gh pr comment "$PR" --body "$BODY"
+          fi
