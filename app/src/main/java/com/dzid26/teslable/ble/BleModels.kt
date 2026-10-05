@@ -108,6 +108,8 @@ const val STALE_READING_MS = 5 * 60_000L
 data class BatteryPercent(
     val value: Int,
     val stale: Boolean,
+    /** When the reading was taken, when known. */
+    val readAtMillis: Long?,
 )
 
 /**
@@ -123,9 +125,15 @@ fun batteryPercent(
     val live = connection?.charge?.batteryLevel
     if (live != null) {
         val readAt = connection.chargeAtMillis
-        return BatteryPercent(live, readAt == null || nowMillis - readAt > STALE_READING_MS)
+        return BatteryPercent(
+            value = live,
+            stale = readAt == null || nowMillis - readAt > STALE_READING_MS,
+            readAtMillis = readAt,
+        )
     }
-    return lastKnown?.let { BatteryPercent(it.percent, stale = true) }
+    return lastKnown?.let {
+        BatteryPercent(value = it.percent, stale = true, readAtMillis = it.timestampMillis)
+    }
 }
 
 /** The title and status line both the app list and the notification show for a car. */

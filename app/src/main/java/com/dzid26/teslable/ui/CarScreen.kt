@@ -318,12 +318,12 @@ private fun SocBlock(
                     text = "${lastKnown.percent}",
                     style = MaterialTheme.typography.displayLarge,
                     fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = MaterialTheme.colorScheme.outline,
                 )
                 Text(
                     text = "%",
                     style = MaterialTheme.typography.headlineSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = MaterialTheme.colorScheme.outline,
                     modifier = Modifier.padding(bottom = 6.dp),
                 )
             }

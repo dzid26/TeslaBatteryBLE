@@ -39,7 +39,9 @@ All notable changes to this project are documented here. The format is based on
 - Unpaired car view explains the NFC-card walkthrough before pairing
 - RSSI is shown only while connected
 - The cars list and the ongoing notification fall back to the last stored
-  percentage when the car is asleep, shown gray so it cannot pass for fresh
+  percentage when the car is asleep, shown gray with its age ("77% · 50m ago")
+  so it cannot pass for fresh; the age carries the meaning even on skins that
+  drop the color span
 - The log panel is pinned to the bottom of the cars screen
 - An empty cars list starts scanning on its own; the Enable toggle still
   disables scanning, and pull-to-refresh remains the manual path

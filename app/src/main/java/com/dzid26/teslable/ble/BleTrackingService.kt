@@ -105,7 +105,8 @@ class BleTrackingService : Service() {
             val advert = state.devices.firstOrNull { it.address == vehicle.address }
             val display = connectionDisplay(connection, advert, vehicle = vehicle)
             val lastKnown = history.lastOrNull { it.vehicleId == vehicle.bleName }
-            val reading = batteryPercent(connection, lastKnown, System.currentTimeMillis())
+            val now = System.currentTimeMillis()
+            val reading = batteryPercent(connection, lastKnown, now)
             NotificationModel(
                 bleName = vehicle.bleName,
                 title = display.title,
@@ -114,6 +115,7 @@ class BleTrackingService : Service() {
                 rssi = display.rssi,
                 percent = reading?.value,
                 percentStale = reading?.stale == true,
+                percentAgeLabel = reading?.readAtMillis?.let { ageLabel(now - it) },
                 showWake =
                     connection.status?.asleep == true &&
                         connection.sessions.contains("DOMAIN_VEHICLE_SECURITY"),
@@ -159,6 +161,7 @@ class BleTrackingService : Service() {
                     rssi = null,
                     percent = null,
                     percentStale = false,
+                    percentAgeLabel = null,
                     showWake = false,
                 )
 
@@ -171,6 +174,7 @@ class BleTrackingService : Service() {
                     rssi = null,
                     percent = null,
                     percentStale = false,
+                    percentAgeLabel = null,
                     showWake = false,
                 )
         }
@@ -221,6 +225,7 @@ class BleTrackingService : Service() {
         if (previous.percent != current.percent || previous.percentStale != current.percentStale) {
             return true
         }
+        if (previous.percentAgeLabel != current.percentAgeLabel) return true
         if (previous.showWake != current.showWake) return true
         val oldRssi = previous.rssi
         val newRssi = current.rssi
@@ -263,19 +268,26 @@ class BleTrackingService : Service() {
     }
 
     /**
-     * The notification line: the state plus the last known percentage, with the
-     * percentage in gray once its reading is older than [STALE_READING_MS].
-     * Notifications accept spans, so no rich-text layout is needed.
+     * The notification line: the state, the last known percentage, and its age
+     * once the reading is stale. The age is in the text because OEM skins
+     * (Samsung One UI) may drop the gray span that stock Android keeps.
      */
     private fun notificationText(model: NotificationModel): CharSequence {
         val percent = model.percent ?: return model.status
         val percentText = "$percent%"
-        val text =
+        var text =
             if (model.status.contains(percentText)) {
                 model.status
             } else {
                 "${model.status} · $percentText"
             }
+        val ageLabel = if (model.percentStale) model.percentAgeLabel else null
+        val at = text.indexOf(percentText)
+        if (ageLabel != null && at >= 0) {
+            val insertAt = at + percentText.length
+            val suffix = if (ageLabel == NOW_LABEL) " · just now" else " · $ageLabel ago"
+            text = text.substring(0, insertAt) + suffix + text.substring(insertAt)
+        }
         if (!model.percentStale) return text
         val start = text.indexOf(percentText)
         if (start < 0) return text
@@ -286,6 +298,17 @@ class BleTrackingService : Service() {
                 start + percentText.length,
                 Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
             )
+        }
+    }
+
+    /** Coarse age buckets, so the notification re-posts at most every 10 min. */
+    private fun ageLabel(ageMillis: Long): String {
+        val minutes = ageMillis / 60_000
+        return when {
+            minutes < 5 -> NOW_LABEL
+            minutes < 60 -> "${(minutes / AGE_BUCKET_MINUTES).coerceAtLeast(1) * AGE_BUCKET_MINUTES}m"
+            minutes < 24 * 60 -> "${minutes / 60}h"
+            else -> "${minutes / (24 * 60)}d"
         }
     }
 
@@ -341,6 +364,7 @@ class BleTrackingService : Service() {
         val rssi: Int?,
         val percent: Int?,
         val percentStale: Boolean,
+        val percentAgeLabel: String?,
         val showWake: Boolean,
     )
 
@@ -361,6 +385,12 @@ class BleTrackingService : Service() {
 
         /** How often notification text is re-evaluated as readings age. */
         private const val STALENESS_TICK_MS = 60_000L
+
+        /** Age bucket for a reading under five minutes old. */
+        private const val NOW_LABEL = "now"
+
+        /** Minute granularity for the age shown next to a stale percentage. */
+        private const val AGE_BUCKET_MINUTES = 10
         private const val STALE_TEXT_COLOR = 0xFF9E9E9E.toInt()
 
         /** True while the foreground service is running (same process). */

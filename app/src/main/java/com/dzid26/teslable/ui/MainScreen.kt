@@ -529,7 +529,7 @@ private fun VehicleCard(
                         fontWeight = FontWeight.SemiBold,
                         color =
                             if (reading.stale) {
-                                MaterialTheme.colorScheme.onSurfaceVariant
+                                MaterialTheme.colorScheme.outline
                             } else {
                                 MaterialTheme.colorScheme.primary
                             },
