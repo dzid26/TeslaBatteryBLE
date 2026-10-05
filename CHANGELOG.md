@@ -21,6 +21,9 @@ All notable changes to this project are documented here. The format is based on
   reading, instead of only a connection state
 - Unpaired car view explains the NFC-card walkthrough before pairing
 - Wake and command send failures are logged instead of failing silently
+- Release screenshots are captured from the simulated car automatically in CI
+  and attached to each release as one `screenshot-sheet.png`; tag releases are
+  always created fresh (the rolling preview is no longer converted in place)
 
 ## [0.2.0-beta.2] - 2026-10-05
 

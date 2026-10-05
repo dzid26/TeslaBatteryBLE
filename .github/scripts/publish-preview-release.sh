@@ -2,31 +2,19 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # Create or update the rolling "preview" release for the current commit.
 #
-# Run from a checkout of the repository with `dist/app-debug.apk` already built.
-# Screenshots ship as release assets: one composed sheet when ImageMagick is
-# available, otherwise the individual images.
+# Run from a checkout with `dist/app-debug.apk` built and the emulator
+# screenshots captured into `screenshots/` (see android.yml).
 set -euo pipefail
 
 REPO="${GITHUB_REPOSITORY:?GITHUB_REPOSITORY is required}"
 SHA="${GITHUB_SHA:-$(git rev-parse HEAD)}"
-SHORT_SHA="$(git rev-parse --short "$SHA")"
 TAG="preview"
 TITLE="Preview build"
 APK="dist/app-debug.apk"
-ASSET_APK="TeslaBatteryBLE-preview-$SHORT_SHA.apk"
-SITE_IMAGES_DIR="website/images"
-SHEET="screenshot-sheet.png"
-
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=./screenshot-sections.sh
-source "$SCRIPT_DIR/screenshot-sections.sh"
-
-SCREENSHOT_BASE_URL="https://github.com/$REPO/releases/download/$TAG"
-SHEET_OK="false"
-if bash "$SCRIPT_DIR/build-screenshot-sheet.sh" "$SHEET"; then
-  SHEET_OK="true"
-  SCREENSHOT_SHEET_URL="$SCREENSHOT_BASE_URL/$SHEET"
-fi
+ASSET_APK="TeslaBatteryBLE-preview.apk"
+SHEET="screenshots/screenshot-sheet.png"
+SHEET_NAME="$(basename "$SHEET")"
+SHEET_URL="https://github.com/$REPO/releases/download/$TAG/$SHEET_NAME"
 
 [ -f "$APK" ] || { echo "missing $APK" >&2; exit 1; }
 cp "$APK" "$ASSET_APK"
@@ -77,35 +65,21 @@ git push origin "refs/tags/$TAG" --force
     echo
     echo "**Full diff**: https://github.com/$REPO/compare/$PREV_TAG...$TAG"
   fi
-  if [ "$SHEET_OK" = "true" ]; then
+  if [ -f "$SHEET" ]; then
     echo
     echo "## Screenshots"
     echo
-    echo "![App screenshots: light and dark]($SCREENSHOT_SHEET_URL)"
-  else
-    emit_screenshots "$SCREENSHOT_BASE_URL"
+    echo "![App screenshots: light and dark]($SHEET_URL)"
   fi
 } > preview-notes.md
 
 if gh release view "$TAG" > /dev/null 2>&1; then
-  # Drop stale SHA-named APK assets from previous runs so old builds never linger.
-  while read -r name; do
-    [ -n "$name" ] || continue
-    gh release delete-asset "$TAG" "$name" --yes || true
-  done < <(gh release view "$TAG" --json assets --jq '.assets[].name | select(endswith(".apk"))')
   gh release edit "$TAG" --title "$TITLE" --prerelease --notes-file preview-notes.md
 else
-  gh release create "$TAG" --title "$TITLE" --prerelease --notes-file preview-notes.md "$ASSET_APK"
+  gh release create "$TAG" --title "$TITLE" --prerelease --notes-file preview-notes.md
 fi
 
 gh release upload "$TAG" "$ASSET_APK" --clobber
-if [ "$SHEET_OK" = "true" ]; then
+if [ -f "$SHEET" ]; then
   gh release upload "$TAG" "$SHEET" --clobber
-  # Drop stale individual screenshots now that the sheet is used.
-  while read -r asset; do
-    [ -n "$asset" ] || continue
-    gh release delete-asset "$TAG" "$asset" --yes || true
-  done < <(gh release view "$TAG" --json assets --jq '.assets[].name | select(endswith(".png")) | select(. != "screenshot-sheet.png")')
-elif compgen -G "$SITE_IMAGES_DIR/*.png" > /dev/null; then
-  gh release upload "$TAG" "$SITE_IMAGES_DIR"/*.png --clobber
 fi
