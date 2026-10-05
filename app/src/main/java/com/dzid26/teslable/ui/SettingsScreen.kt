@@ -178,6 +178,18 @@ private fun VehicleKeysCard(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            if (backupEnabled) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text =
+                        "Android decides when to back up (usually daily, while idle and charging). " +
+                            "Check or trigger one in system Settings \u2192 Backup. Restores happen " +
+                            "during phone setup, a device transfer, or a store install - a manually " +
+                            "installed APK is not restored automatically.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }

@@ -62,6 +62,40 @@ Details:
 [session and pairing](protocol/session-and-pairing.md),
 [ADR-0005](adr/0005-plaintext-key-storage.md).
 
+## Does my pairing survive a reinstall or a new phone?
+
+Only when "Include vehicle keys in Android backup" is on (Settings → Vehicle
+keys). With it off - the default - the private key is wrapped by this device's
+Android Keystore, which Android deletes on uninstall, so you re-pair with one
+NFC card tap. With it on:
+
+- A new phone can restore pairing during setup or a device-to-device transfer
+  (Android 12+; Android 11 and below always keep keys out of backup).
+- A store install (Play) can restore app data automatically.
+- Installing an APK by hand (Obtainium, a browser download, `adb install`)
+  does not trigger a restore; see the next question.
+
+## How do I know Android backed up my data, and how do I restore it after a manual install?
+
+Android does not tell apps when a backup last ran. The device-level last backup
+is shown in system settings - usually Settings → System → Backup → Back up now -
+and Android runs backups in the background, typically daily while the phone is
+idle and charging.
+
+For a manually installed APK, restore app data over adb:
+
+    adb shell bmgr list transports
+    adb shell bmgr transport <transport from the list>
+    adb shell bmgr list sets          # note the token for this device
+    adb shell bmgr restore <token> com.dzid26.teslable
+
+Use the Google transport (for example
+`com.google.android.gms/.backup.BackupTransportService`). The device must be
+signed in to the account that holds the backup and have backup enabled
+(`bmgr enabled`). You can also force a backup with
+`adb shell bmgr backupnow com.dzid26.teslable`. Without adb, restore only
+happens during phone setup, a device transfer, or a store install.
+
 ## Why is background tracking sometimes killed?
 
 Android OEM battery management can stop background work aggressively. The app

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 package com.dzid26.teslable.ble
 
+import android.app.backup.BackupManager
 import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
@@ -34,6 +35,7 @@ import javax.crypto.spec.GCMParameterSpec
 class PairingKeyStore(
     context: Context,
 ) {
+    private val appContext = context.applicationContext
     private val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
     /** True when the key is allowed to be included in Android backup. */
@@ -50,6 +52,9 @@ class PairingKeyStore(
             save(current, enabled)
         }
         prefs.edit().putBoolean(KEY_BACKUP_ENABLED, enabled).apply()
+        // Replacing or excluding the key changes what the next backup should
+        // contain; nudge the system instead of waiting for the daily pass.
+        BackupManager(appContext).dataChanged()
     }
 
     fun load(): TeslaKeyPair? = loadInternal()
@@ -118,6 +123,11 @@ class PairingKeyStore(
                 .putString(KEY_IV, Base64.encodeToString(iv, Base64.NO_WRAP))
         }
         editor.apply()
+        if (backupEnabled) {
+            // The key is part of what Android backs up now; schedule a pass
+            // rather than waiting for the next idle window.
+            BackupManager(appContext).dataChanged()
+        }
     }
 
     /** Encrypts bytes with the Keystore AES-GCM key, returning IV and ciphertext. */

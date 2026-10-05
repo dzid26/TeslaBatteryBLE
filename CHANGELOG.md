@@ -15,6 +15,8 @@ All notable changes to this project are documented here. The format is based on
 
 ### Changed
 
+- Settings explains when Android runs backups and how to check or trigger one;
+  enabling key backup nudges the system so the key is stored sooner
 - Pairing starts with a whitelist check: a key the car already has is marked
   paired instantly, with no card tap and no failure after clearing the cache
 - Car view shows the last stored SOC ("Last known · …") when there is no live
