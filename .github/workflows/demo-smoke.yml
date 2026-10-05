@@ -5,6 +5,12 @@ on:
   push:
     branches: [ main ]
     tags: [ 'v*' ]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'website/**'
+      - 'fastlane/**'
+      - 'LICENSE'
   pull_request:
   workflow_dispatch:
 
