@@ -1,0 +1,81 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Detekt configuration for TeslaBatteryBLE. Complements the default rule set
+# (enabled via `buildUponDefaultConfig` in the Gradle `detekt` blocks); rules
+# below are relaxed only where the defaults are noisy for this codebase.
+# Prefer tuning here over @Suppress annotations.
+complexity:
+  # BLE controller is a facade over many small GATT operations; the UI holds
+  # one screen per car plus shared cards.
+  TooManyFunctions:
+    thresholdInFiles: 20
+    thresholdInClasses: 45
+    thresholdInInterfaces: 20
+    thresholdInObjects: 20
+    thresholdInEnums: 20
+  # Activity setup and Compose screen layouts are inherently long; the rule
+  # still catches anything growing past them.
+  LongMethod:
+    threshold: 110
+  # Compose screens wire many event callbacks; the session object carries the
+  # full handshake context in its constructor. Thresholds trip at >=, so 9
+  # permits the session's 8 parameters.
+  LongParameterList:
+    functionThreshold: 14
+    constructorThreshold: 9
+  # BLE message dispatchers and UI-state mappers are inherently branchy.
+  CyclomaticComplexMethod:
+    threshold: 20
+
+style:
+  # Protocol parsers and BLE handlers use guard-clause early returns; the
+  # sliding-window check needs five exits. Thresholds trip at >=, so 6
+  # permits five.
+  ReturnCount:
+    max: 6
+    excludeGuardClauses: true
+  # Frame/queue loops exit via break/continue/return on protocol conditions.
+  LoopWithTooManyJumpStatements:
+    maxJumpCount: 5
+  # Protocol, crypto and chart code is full of domain constants (byte masks,
+  # key sizes, percentages, time units) that read better inline.
+  MagicNumber:
+    ignoreNumbers:
+      - '-1'
+      - '0'
+      - '1'
+      - '2'
+      - '4'
+      - '5'
+      - '6'
+      - '7'
+      - '8'
+      - '16'
+      - '24'
+      - '33'
+      - '50'
+      - '60'
+      - '65'
+      - '100'
+      - '256'
+      - '1000'
+      - '0x04'
+      - '0xFF'
+      - '0xFFFF'
+      - '0xFF43A047'
+      - '5.0'
+      - '100.0'
+      - '1000L'
+      - '60_000'
+  # Aligned with ktlint's 140-column limit: ktlint's function-signature rule
+  # requires bodies that fit in 140 columns on one line, so a lower detekt
+  # limit would make the two tools contradict each other.
+  MaxLineLength:
+    maxLineLength: 140
+
+naming:
+  # UpperCamelCase is the official convention for @Composable functions.
+  # The default test-source excludes are repeated here because specifying
+  # `excludes` replaces (rather than extends) the detekt defaults; backtick
+  # test names would otherwise be flagged.
+  FunctionNaming:
+    excludes: ['**/test/**', '**/androidTest/**', '**/commonTest/**', '**/ui/**']

@@ -2,7 +2,6 @@
 
 package com.dzid26.teslable.ble
 
-import android.content.Context
 import com.dzid26.teslable.BuildConfig
 
 /**
@@ -28,5 +27,5 @@ object DemoMode {
         fun adverts(): List<TeslaAdvert>
     }
 
-    fun isEnabled(context: Context): Boolean = car != null && BuildConfig.DEMO_CAR
+    fun isEnabled(): Boolean = car != null && BuildConfig.DEMO_CAR
 }

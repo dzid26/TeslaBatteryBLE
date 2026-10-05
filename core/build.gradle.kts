@@ -2,6 +2,8 @@
 plugins {
     alias(libs.plugins.kotlin.jvm)
     alias(libs.plugins.wire)
+    alias(libs.plugins.ktlint)
+    alias(libs.plugins.detekt)
 }
 
 java {
@@ -26,4 +28,18 @@ wire {
     }
     kotlin {
     }
+}
+
+// Wire-generated protos follow their own conventions. The task sources are
+// narrowed by absolute path: the plugin matches string patterns against
+// paths relative to each source root, where "build/generated" never
+// appears, so a filter exclude cannot match it.
+tasks.withType<org.jlleitschuh.gradle.ktlint.tasks.BaseKtLintCheckTask>().configureEach {
+    // Snapshot to a plain list: deriving from `source` lazily would recurse.
+    val lintSources = source.files.filter { !it.invariantSeparatorsPath.contains("/build/generated/") }
+    setSource(lintSources)
+}
+
+detekt {
+    buildUponDefaultConfig = true
 }

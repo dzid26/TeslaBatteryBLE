@@ -4,15 +4,18 @@ import java.util.Properties
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.ktlint)
+    alias(libs.plugins.detekt)
 }
 
 // The owner-held signing identity, shared by local builds and CI (see
 // keystore.properties, gitignored). Without it, debug builds fall back to the
 // standard debug key so contributors can still build.
-val keystoreProperties = Properties().apply {
-    val file = rootProject.file("keystore.properties")
-    if (file.exists()) file.inputStream().use { load(it) }
-}
+val keystoreProperties =
+    Properties().apply {
+        val file = rootProject.file("keystore.properties")
+        if (file.exists()) file.inputStream().use { load(it) }
+    }
 
 android {
     namespace = "com.dzid26.teslable"
@@ -53,7 +56,7 @@ android {
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
+                "proguard-rules.pro",
             )
         }
     }
@@ -86,4 +89,18 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     debugImplementation(libs.androidx.compose.ui.tooling)
     testImplementation(libs.junit)
+}
+
+// Generated code (BuildConfig, etc.) follows its own conventions. The task
+// sources are narrowed by absolute path: the plugin matches string patterns
+// against paths relative to each source root, where "build/generated"
+// never appears, so a filter exclude cannot match it.
+tasks.withType<org.jlleitschuh.gradle.ktlint.tasks.BaseKtLintCheckTask>().configureEach {
+    // Snapshot to a plain list: deriving from `source` lazily would recurse.
+    val lintSources = source.files.filter { !it.invariantSeparatorsPath.contains("/build/generated/") }
+    setSource(lintSources)
+}
+
+detekt {
+    buildUponDefaultConfig = true
 }

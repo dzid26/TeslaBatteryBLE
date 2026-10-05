@@ -55,11 +55,7 @@ class BatteryHistoryStore(context: Context) {
             mutex.withLock {
                 val current = _samples.value
                 val last = current.lastOrNull { it.vehicleId == sample.vehicleId }
-                if (last != null &&
-                    last.percent == sample.percent &&
-                    last.chargingState == sample.chargingState &&
-                    sample.timestampMillis - last.timestampMillis < DEDUPE_WINDOW_MS
-                ) {
+                if (isDuplicate(last, sample)) {
                     return@withLock
                 }
                 val updated = (current + sample).takeLast(MAX_SAMPLES)
@@ -85,6 +81,15 @@ class BatteryHistoryStore(context: Context) {
                 .takeLast(MAX_SAMPLES)
         }.getOrDefault(emptyList())
     }
+
+    private fun isDuplicate(
+        last: BatterySample?,
+        sample: BatterySample,
+    ): Boolean =
+        last != null &&
+            last.percent == sample.percent &&
+            last.chargingState == sample.chargingState &&
+            sample.timestampMillis - last.timestampMillis < DEDUPE_WINDOW_MS
 
     private companion object {
         const val FILE_NAME = "battery-history.csv"

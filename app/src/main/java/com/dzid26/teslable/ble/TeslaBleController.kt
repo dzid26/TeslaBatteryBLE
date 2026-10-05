@@ -55,7 +55,7 @@ class TeslaBleController(context: Context) {
             onLog = ::log,
         )
 
-    private fun demoCar(): DemoMode.Car? = if (DemoMode.isEnabled(appContext)) DemoMode.car else null
+    private fun demoCar(): DemoMode.Car? = if (DemoMode.isEnabled()) DemoMode.car else null
 
     private fun createTransport(
         address: String,
@@ -90,7 +90,7 @@ class TeslaBleController(context: Context) {
         if (!prefs.getBoolean(KEY_TRACKING_ENABLED, true)) {
             _state.update { it.copy(trackingEnabled = false) }
         }
-        if (DemoMode.isEnabled(appContext)) {
+        if (DemoMode.isEnabled()) {
             // The simulated car carries a fixed demo VIN; give it a home once.
             val demoName = runCatching { TeslaNames.bleName(DemoMode.DEMO_VIN) }.getOrNull()
             if (demoName != null && vehicles[demoName]?.vin == null) {
@@ -457,7 +457,7 @@ class TeslaBleController(context: Context) {
         if (!TeslaNames.isTeslaBleName(name)) return
         val existing = vehicles[name]
         val demoVin =
-            if (DemoMode.isEnabled(appContext) &&
+            if (DemoMode.isEnabled() &&
                 name == runCatching { TeslaNames.bleName(DemoMode.DEMO_VIN) }.getOrNull()
             ) {
                 DemoMode.DEMO_VIN

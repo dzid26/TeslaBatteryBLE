@@ -62,6 +62,9 @@ jobs:
       - name: Android lint
         run: ./gradlew :app:lintDebug
 
+      - name: Static analysis (ktlint, detekt)
+        run: ./gradlew ktlintCheck detekt
+
       - name: Build debug APK
         run: ./gradlew :app:assembleDebug
 
