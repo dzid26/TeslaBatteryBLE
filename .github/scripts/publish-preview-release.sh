@@ -101,6 +101,11 @@ fi
 gh release upload "$TAG" "$ASSET_APK" --clobber
 if [ "$SHEET_OK" = "true" ]; then
   gh release upload "$TAG" "$SHEET" --clobber
+  # Drop stale individual screenshots now that the sheet is used.
+  while read -r asset; do
+    [ -n "$asset" ] || continue
+    gh release delete-asset "$TAG" "$asset" --yes || true
+  done < <(gh release view "$TAG" --json assets --jq '.assets[].name | select(endswith(".png")) | select(. != "screenshot-sheet.png")')
 elif compgen -G "$SITE_IMAGES_DIR/*.png" > /dev/null; then
   gh release upload "$TAG" "$SITE_IMAGES_DIR"/*.png --clobber
 fi

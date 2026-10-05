@@ -43,7 +43,7 @@ bash "$SCRIPT_DIR/build-release-notes.sh"
 git fetch --tags origin
 
 REUSED="false"
-PREVIEW_ID="$(gh release view preview --json id --jq '.id' 2>/dev/null || true)"
+PREVIEW_ID="$(gh release view preview --json databaseId --jq '.databaseId' 2>/dev/null || true)"
 if [ -n "$PREVIEW_ID" ]; then
   PREVIEW_SHA="$(git rev-parse -q --verify 'refs/tags/preview^{commit}' 2>/dev/null || true)"
   if [ -n "$PREVIEW_SHA" ] && [ "$PREVIEW_SHA" = "$SHA" ]; then
@@ -75,6 +75,11 @@ fi
 
 if [ "$SHEET_OK" = "true" ]; then
   gh release upload "$TAG" "$SHEET" --clobber
+  # Drop stale individual screenshots now that the sheet is used.
+  while read -r asset; do
+    [ -n "$asset" ] || continue
+    gh release delete-asset "$TAG" "$asset" --yes || true
+  done < <(gh release view "$TAG" --json assets --jq '.assets[].name | select(endswith(".png")) | select(. != "screenshot-sheet.png")')
 elif compgen -G "$SITE_IMAGES_DIR/*.png" > /dev/null; then
   gh release upload "$TAG" "$SITE_IMAGES_DIR"/*.png --clobber
 fi
