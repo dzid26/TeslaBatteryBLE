@@ -63,7 +63,7 @@ No range-at-100 signal. Fleet Telemetry also needs an owner account plus a self-
 
 ### 2.3 The scale (`fullRatedRange`) without a 100% charge
 
-The car never reports its 100% range, and the new-car EPA figure is the SoH denominator, not the scale the car uses to render today's rated range — do not use it for this inversion. Worked example: the observed ~268 mi scale (section 2.1) against a 2019 Model 3 Performance's EPA-new 310 mi (18-inch wheels; ~299 with the 20-inch option, EPA via fueleconomy.gov) is ~86–90% of new. Learn the scale online instead:
+The car never reports its 100% range, and the new-car EPA figure is the SoH denominator, not the scale the car uses to render today's rated range — do not use it for this inversion. Worked example: the observed ~268 mi scale (section 2.1) against a 2019 Model 3 Performance's EPA-new 310 mi (20-inch wheels were standard that year, EPA via fueleconomy.gov) is ~86.5% of new; a reported pack health of ~85% agrees within ~1.5 points, so the learned scale cross-checks the car's own SoH. Learn the scale online instead:
 
 - Track `r = ratedRange / (level / 100)` over time. The integer level makes r fluctuate with rounding; the true scale k sits at:
   - the minimum r if the level is floor-rounded (r ≥ k),
