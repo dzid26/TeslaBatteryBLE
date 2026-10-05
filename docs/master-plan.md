@@ -90,12 +90,12 @@ A trustworthy shell around the existing protocol work. No user-facing features.
 
 ## 7. Phase 2 — v0.3–0.5 "Product" (target: Nov–Dec)
 
-- [ ] **Pre-1.0 hygiene sweep**: delete legacy/migration paths that only serve pre-release states (key-storage adoption, format migrations, dead branches); document the resulting reset.
+- [ ] **Pre-1.0 hygiene sweep (owner decision 2026-10-05: remove all)**: delete legacy/migration paths — per-car legacy-key adoption, Keystore-material conversion, format migrations, dead branches. Very old installs re-pair (the key-storage session can restore a device key over adb); coordinate key-file changes with it.
 - [ ] Navigation: cars list → car view landed 2026-10-05 (no tabs; last opened car restored). Settings/Logs + ViewModels later.
 - [x] SOC history graph + charge sessions (first cut 2026-10-04: CSV store, 6h/24h/7d/All graph, since-last-charge stats; session list + export later).
-- [ ] History graph line styles: a thin line across sample gaps (missing data) and a dashed line for projections (charge-completion estimate by default).
+- [ ] History graph line styles: a thin line across sample gaps (missing data) and a dashed line for the charge-completion projection.
 - [ ] **Battery health v1 (loose, BLE-only)**: rated-range + energy-delta capacity estimates fused with confidence + data-quality flag; session-count "Learning" gate; Service-Mode health-test result logging; habit cards (charge-limit share, AC/DC mix, deep discharges); charge taper / balancing-sawtooth detection; static reference bands from published studies. Never claim cell imbalance, pack temperatures, or month-quantified lifespan without pack-level data.
-- [ ] **Float-precision readings**: parse `battery_range` / `est_battery_range` (and `usable_battery_level`) into the charge model and history samples so the health estimators work on sub-percent SOC/range instead of integer steps. Old CSV rows are dropped, not migrated (pre-1.0 hygiene).
+- [ ] **Float-precision readings**: parse `battery_range` / `est_battery_range` (and `usable_battery_level`) into the charge model and history samples; add a core helper for precise readings with documented fallbacks, used by the estimators and wherever the UI benefits. Old CSV rows are dropped, not migrated (pre-1.0 hygiene).
 - [ ] Notifications: charge complete, SOC thresholds, **vampire-drain alert**.
 - [ ] Widget (Glance), automation intents (Tasker), CSV/JSON export.
 - [ ] Multiple cars: storage, per-vehicle links, VIN, per-car notifications and the cars/car UI landed (ADR-0004); share redacted diagnostics open. Requirements: `docs/requirements/multi-vehicle.md`.
