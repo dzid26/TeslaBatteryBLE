@@ -5,4 +5,4 @@ contact_links:
     about: Please report vulnerabilities privately, never in a public issue.
   - name: Contributing guide
     url: https://github.com/dzid26/TeslaBatteryBLE/blob/main/CONTRIBUTING.md
-    about: Dev setup, test expectations, and the DCO sign-off.
+    about: Dev setup and test expectations.

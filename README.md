@@ -107,8 +107,8 @@ Protocol details: [`docs/protocol/`](docs/protocol/). Architecture decisions:
 ## Contributing
 
 Contributions are welcome. Start with [`CONTRIBUTING.md`](CONTRIBUTING.md) — dev
-setup, module map, test expectations, and the DCO sign-off (no CLA). Issues and
-pull requests use templates in [`.github/`](.github/).
+setup, module map, and test expectations. Issues and pull requests use templates
+in [`.github/`](.github/).
 
 ## Security & privacy
 

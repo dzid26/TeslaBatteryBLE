@@ -32,7 +32,7 @@ Master plan: `docs/master-plan.md` — read it first and update its checkboxes w
 
 - Post agent comments as `github-actions[bot]` through the `Agent comment` workflow instead of the maintainer account:
   `body_b64="$(printf '%s' "comment" | base64 -w0)"; gh workflow run agent-comment.yml -f pr=<n> -f body_b64="$body_b64"`
-- Pushes, merges, and commits stay on the maintainer account (commits need DCO sign-off).
+- Pushes, merges, and commits stay on the maintainer account.
 
 ## Do not
 

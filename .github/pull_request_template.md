@@ -21,7 +21,6 @@
 
 ## Checklist
 
-- [ ] Commits are signed off (`git commit -s`, DCO — no CLA)
 - [ ] Protocol changes ship test vectors; `expected.txt` regenerated, not hand-edited
 - [ ] No VINs, keys, or decrypted payloads in logs
 - [ ] Docs/changelog/master-plan updated where relevant
