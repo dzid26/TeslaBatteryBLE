@@ -12,9 +12,9 @@ while the car is awake (see ADR-0001's polling cadence).
 ## Decision
 
 - One sample per SOC read: vehicle id (advertised name, per ADR-0004),
-  timestamp, SOC % (with the precise SOC, rated/estimated/ideal ranges, both
-  raw SOC levels, and session energy counters when the car reports them),
-  charge limit, charging state.
+  timestamp, and raw car fields only — displayed/usable SOC, rated/estimated/
+  ideal ranges, and session energy counters when the car reports them — plus
+  the charge limit and charging state; display values are derived at runtime.
 - First cut: append-only CSV at `filesDir/battery-history.csv`, loaded into
   memory (capped at 20k samples) behind a `StateFlow`. Repeated identical
   readings within a minute are skipped so polling does not flood the file.

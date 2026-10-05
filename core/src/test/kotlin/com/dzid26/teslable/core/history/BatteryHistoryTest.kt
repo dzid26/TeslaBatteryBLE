@@ -13,7 +13,7 @@ class BatteryHistoryTest {
         state: String? = "Disconnected",
     ) = BatterySample(
         timestampMillis = minutes * 60_000L,
-        percent = percent,
+        batteryLevel = percent,
         chargingState = state,
         chargeLimit = null,
     )
@@ -82,25 +82,25 @@ class BatteryHistoryTest {
     }
 
     @Test
-    fun chargeStatsUsePreciseSocWhenAvailable() {
+    fun chargeStatsDeriveFromTheDisplayedLevel() {
         val samples =
             listOf(
                 sample(0, 80, "Charging"),
-                sample(30, 80).copy(socPercent = 79.5f),
-                sample(60, 79).copy(socPercent = 78.75f),
+                sample(30, 80).copy(usableBatteryLevel = 79),
+                sample(60, 79).copy(usableBatteryLevel = 78),
             )
 
         val stats = chargeStats(samples)!!
-        assertEquals(79.5f, stats.startPercent)
-        assertEquals(78.75f, stats.currentPercent)
-        assertEquals(78.75f, stats.minPercent)
-        assertEquals(79.5f, stats.maxPercent)
-        assertEquals(0.75f, stats.usedPercent, 0.0001f)
+        assertEquals(80f, stats.startPercent)
+        assertEquals(79f, stats.currentPercent)
+        assertEquals(79f, stats.minPercent)
+        assertEquals(80f, stats.maxPercent)
+        assertEquals(1f, stats.usedPercent)
     }
 
     @Test
-    fun bestSocPercentFallsBackToRoundedPercent() {
-        assertEquals(78f, sample(0, 78).bestSocPercent)
-        assertEquals(77.6f, sample(0, 78).copy(socPercent = 77.6f).bestSocPercent)
+    fun percentDerivesFromTheDisplayedLevel() {
+        assertEquals(78, sample(0, 78).percent)
+        assertEquals(77, sample(0, 78).copy(batteryLevel = 77).percent)
     }
 }

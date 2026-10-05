@@ -44,17 +44,14 @@ class BatteryHistoryStore(
         charge: TeslaCommands.Charge,
         nowMillis: Long = System.currentTimeMillis(),
     ) {
-        val percent = charge.batteryLevel ?: return
+        val batteryLevel = charge.batteryLevel ?: return
         val sample =
             BatterySample(
                 timestampMillis = nowMillis,
-                percent = percent,
+                batteryLevel = batteryLevel,
                 chargingState = charge.chargingState,
                 chargeLimit = charge.chargeLimit,
                 vehicleId = vehicleId,
-                socPercent = percent.toFloat(),
-                rangeMiles = charge.batteryRange,
-                batteryLevel = charge.batteryLevel,
                 usableBatteryLevel = charge.usableBatteryLevel,
                 ratedRangeMiles = charge.batteryRange,
                 estRangeMiles = charge.estBatteryRange,

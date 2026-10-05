@@ -2,10 +2,15 @@
 
 package com.dzid26.teslable.core.history
 
-/** One battery reading, recorded whenever a car reports charge state. */
+/**
+ * One battery reading, recorded whenever a car reports charge state.
+ *
+ * Storage holds raw car fields only; display values are derived at runtime.
+ */
 data class BatterySample(
     val timestampMillis: Long,
-    val percent: Int,
+    /** Displayed SOC (`battery_level`). */
+    val batteryLevel: Int,
     val chargingState: String?,
     val chargeLimit: Int?,
     /**
@@ -14,13 +19,7 @@ data class BatterySample(
      * rows written before per-vehicle history existed.
      */
     val vehicleId: String = "",
-    /** Displayed SOC as a float; duplicates [batteryLevel], used by stats and the CSV. */
-    val socPercent: Float? = null,
-    /** Rated range in miles; duplicates [ratedRangeMiles], used by the car view and the CSV. */
-    val rangeMiles: Float? = null,
-    /** Displayed SOC as reported (`battery_level`), before [socPercent] fallbacks. */
-    val batteryLevel: Int? = null,
-    /** Usable SOC as reported (`usable_battery_level`); can sit below [batteryLevel]. */
+    /** Usable SOC (`usable_battery_level`); can sit below [batteryLevel]. */
     val usableBatteryLevel: Int? = null,
     /** `battery_range`: rated range in miles at this SOC. */
     val ratedRangeMiles: Float? = null,
@@ -35,10 +34,10 @@ data class BatterySample(
     /** `charge_miles_added_ideal`: ideal miles added so far this session. */
     val chargeMilesAddedIdeal: Float? = null,
 ) {
-    val isCharging: Boolean get() = chargingState == "Charging"
+    /** The displayed level, derived for the chart, stats, and car view. */
+    val percent: Int get() = batteryLevel
 
-    /** [socPercent] when recorded, else the rounded [percent] (older rows). */
-    val bestSocPercent: Float get() = socPercent ?: percent.toFloat()
+    val isCharging: Boolean get() = chargingState == "Charging"
 }
 
 /** Time window for the battery graph. */
@@ -85,9 +84,9 @@ fun chargeStats(samples: List<BatterySample>): ChargeStats? {
     val tail = samples.subList(startIndex, samples.size)
     return ChargeStats(
         sinceMillis = start.timestampMillis,
-        startPercent = start.bestSocPercent,
-        currentPercent = tail.last().bestSocPercent,
-        minPercent = tail.minOf { it.bestSocPercent },
-        maxPercent = tail.maxOf { it.bestSocPercent },
+        startPercent = start.percent.toFloat(),
+        currentPercent = tail.last().percent.toFloat(),
+        minPercent = tail.minOf { it.percent.toFloat() },
+        maxPercent = tail.maxOf { it.percent.toFloat() },
     )
 }
