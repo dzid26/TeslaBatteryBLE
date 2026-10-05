@@ -1,4 +1,4 @@
-# ADR-0005: Plaintext key storage for backup portability
+# ADR-0005: Optional plaintext key storage for backup portability
 
 Status: Accepted
 Date: 2026-10-05
@@ -18,23 +18,28 @@ Date: 2026-10-05
 
 ## Decision
 
-- Store the P-256 private key as PKCS#8 base64 in app-private SharedPreferences,
-  not wrapped by a Keystore key, so Android backup can restore pairing on a new
-  phone.
+- Default to device-only storage: the P-256 private key is encrypted with an AES
+  key held in the Android Keystore, so it is not readable from a backup and does
+  not survive a phone change.
+- Offer an in-app opt-in setting, "Include key in Android backup". When enabled,
+  the private key is stored as PKCS#8 base64 in app-private SharedPreferences so
+  Android backup can restore pairing on a new phone. The switch shows a warning
+  dialog before it takes effect.
+- Keep the encryption-gated backup rules: on Android 12+, cloud backup is allowed
+  only when client-side encryption is available (`disableIfNoEncryptionCapabilities`);
+  on Android 11 and below the key is excluded from backup.
 - Keep the legacy Keystore-encrypted format readable for one release cycle and
-  migrate it transparently on first load.
-- On Android 12+, cloud backup is allowed only when client-side encryption is
-  available (`disableIfNoEncryptionCapabilities`); on Android 11 and below the key
-  is excluded from backup, because the platform cannot express that condition.
+  migrate it transparently on first load into the currently selected mode.
 
 ## Consequences
 
+- Most users keep hardware-wrapped, device-only keys. Only users who explicitly
+  opt in get backup portability.
 - Pairing survives device restore on Android 12+ when encrypted backup is
-  available; on Android 11 and below (or without a qualifying lock screen) the key
-  is not backed up and a re-pair via NFC card tap is needed.
-- Rooted or forensically extracted devices expose the key; anyone with the backup
-  and the lock secret can use it (near the car for BLE; Fleet API additionally
-  requires Tesla account access).
-- Revisit before adding DRIVER/OWNER roles or non-charging scopes: those raise the
-  impact of key compromise and justify hardware-backed storage (TEE/StrongBox).
+  available and the user opted in; otherwise a re-pair via NFC card tap is needed.
+- Rooted or forensically extracted devices expose the key in portable mode;
+  anyone with the encrypted backup and the lock secret can use it (near the car
+  for BLE; Fleet API additionally requires Tesla account access).
+- Revisit before adding DRIVER/OWNER roles or non-charging scopes: those raise
+  the impact of key compromise and justify hardware-backed storage (TEE/StrongBox).
 - Supersedes the key-storage bullet of ADR-0001.

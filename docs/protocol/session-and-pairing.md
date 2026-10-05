@@ -3,10 +3,13 @@
 ## Key material
 
 - Vehicle keys are P-256 (secp256r1) key pairs generated on-device.
-- The private key is stored as PKCS#8 base64 in app-private SharedPreferences so
-  Android's system backup can restore pairing on a new phone (ADR-0005).
-- Legacy Keystore-encrypted material is decrypted and migrated transparently on
-  first load; the IV is removed after migration.
+- Default mode is device-only: the private key is encrypted with an AES key held
+  in the Android Keystore, so it is not readable from a backup.
+- Optional portable mode (user opt-in in Settings) stores the private key as
+  PKCS#8 base64 in app-private SharedPreferences so Android's encrypted backup can
+  restore pairing on a new phone (ADR-0005).
+- Keystore-encrypted material is decrypted and migrated transparently on first
+  load into the currently selected mode.
 - Keys never leave the device and are never logged. The default enrolled role is
   `CHARGING_MANAGER` (read + charge control, no unlock/drive). TEE/StrongBox-backed
   storage is a future hardening step if higher-privilege roles are added.
