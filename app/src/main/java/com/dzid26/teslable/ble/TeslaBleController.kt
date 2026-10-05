@@ -1002,11 +1002,14 @@ class TeslaBleController(
                 log("${name()}: no VCSEC session to wake with")
                 return
             }
-            sendAuthenticated(
-                domain = Domain.DOMAIN_VEHICLE_SECURITY,
-                payload = TeslaCommands.buildWakeRequest(),
-                kind = CommandKind.WAKE,
-            )
+            if (!sendAuthenticated(
+                    domain = Domain.DOMAIN_VEHICLE_SECURITY,
+                    payload = TeslaCommands.buildWakeRequest(),
+                    kind = CommandKind.WAKE,
+                )
+            ) {
+                log("${name()}: failed to send wake request")
+            }
             wakeRefreshAttempts = 0
             handler.removeCallbacks(wakeRefresh)
             handler.postDelayed(wakeRefresh, WAKE_REFRESH_MS)
@@ -1058,7 +1061,9 @@ class TeslaBleController(
                 }
             val requestId = session.requestId(encrypted) ?: return false
             pendingCommands[uuid.toHex()] = PendingCommand(domain, requestId, kind)
-            return transport?.send(encrypted.encode()) == true
+            val sent = transport?.send(encrypted.encode()) == true
+            if (!sent) log("${name()}: failed to send ${kind.name.lowercase()} request")
+            return sent
         }
 
         private fun handleEncryptedResponse(bytes: ByteArray): Boolean {

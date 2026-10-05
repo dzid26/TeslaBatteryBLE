@@ -34,6 +34,7 @@ import com.dzid26.teslable.ble.hasBlePermissions
 import com.dzid26.teslable.ble.isLocationEnabled
 import com.dzid26.teslable.ble.requiredBlePermissions
 import com.dzid26.teslable.ui.MainScreen
+import com.dzid26.teslable.ui.PermissionState
 import com.dzid26.teslable.ui.SettingsScreen
 import com.dzid26.teslable.ui.TeslaBleTheme
 
@@ -66,8 +67,8 @@ class MainActivity : ComponentActivity() {
                 val state by controller.state.collectAsState()
                 val batteryHistory by controller.batteryHistory.collectAsState()
                 var permissionsGranted by remember { mutableStateOf(hasBlePermissions(context)) }
+                var permissionsDeniedForever by remember { mutableStateOf(false) }
                 var locationEnabled by remember { mutableStateOf(isLocationEnabled(context)) }
-                var requestedOnce by remember { mutableStateOf(false) }
                 var showSettings by rememberSaveable { mutableStateOf(false) }
 
                 val permissionLauncher =
@@ -75,6 +76,9 @@ class MainActivity : ComponentActivity() {
                         ActivityResultContracts.RequestMultiplePermissions(),
                     ) { result ->
                         permissionsGranted = result.values.all { it } && hasBlePermissions(context)
+                        permissionsDeniedForever =
+                            !permissionsGranted &&
+                            shouldOpenAppSettings(context)
                         if (permissionsGranted) {
                             locationEnabled = isLocationEnabled(context)
                             controller.startScan()
@@ -82,14 +86,7 @@ class MainActivity : ComponentActivity() {
                     }
 
                 val requestPermissions: () -> Unit = {
-                    val activity = context as? Activity
-                    val deniedForever =
-                        requestedOnce &&
-                            activity != null &&
-                            requiredBlePermissions().none {
-                                ActivityCompat.shouldShowRequestPermissionRationale(activity, it)
-                            }
-                    if (deniedForever) {
+                    if (permissionsDeniedForever) {
                         context.startActivity(
                             Intent(
                                 Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
@@ -97,7 +94,6 @@ class MainActivity : ComponentActivity() {
                             ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
                         )
                     } else {
-                        requestedOnce = true
                         permissionLauncher.launch(requiredBlePermissions().toTypedArray())
                     }
                 }
@@ -134,7 +130,12 @@ class MainActivity : ComponentActivity() {
                     MainScreen(
                         state = state,
                         history = batteryHistory,
-                        permissionsGranted = permissionsGranted,
+                        permissionState =
+                            when {
+                                permissionsGranted -> PermissionState.GRANTED
+                                permissionsDeniedForever -> PermissionState.DENIED_FOREVER
+                                else -> PermissionState.MISSING
+                            },
                         locationServicesEnabled = locationEnabled,
                         onRequestPermissions = requestPermissions,
                         onToggleScan = {
@@ -186,3 +187,14 @@ private fun hasNotificationPermission(context: Context): Boolean =
     Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
         ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
         PackageManager.PERMISSION_GRANTED
+
+/**
+ * True when Android will no longer show the permission dialog: every required
+ * permission is denied with "don't ask again", so the app must open settings.
+ */
+private fun shouldOpenAppSettings(context: Context): Boolean {
+    val activity = context as? Activity ?: return false
+    return requiredBlePermissions().none {
+        ActivityCompat.shouldShowRequestPermissionRationale(activity, it)
+    }
+}

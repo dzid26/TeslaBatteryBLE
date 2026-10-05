@@ -52,7 +52,7 @@ A trustworthy shell around the existing protocol work. No user-facing features.
 
 - [x] Land the in-flight BLE refactor (`BlePermissions`, `KnownCarStore`, controller, strings) after build + test verification.
 - [x] `LICENSE` (AGPL-3.0-only) + `THIRD_PARTY_NOTICES.md` + `SPDX-License-Identifier` headers in sources.
-- [ ] In-app license/credits screen data (with the About screen, Phase 1).
+- [x] In-app license/credits screen data (with the About screen, Phase 1).
 - [x] README: pitch, badges, screenshots, features, install (GitHub / Obtainium), build, architecture diagram, license, "not affiliated with Tesla, Inc.".
 - [x] App icon: adaptive + monochrome (512 px store export still pending).
 - [x] `SECURITY.md`, `PRIVACY.md` ("nothing leaves the device"), `CODE_OF_CONDUCT.md`, `CONTRIBUTING.md` (DCO, no CLA), `CHANGELOG.md`.
@@ -66,8 +66,8 @@ A trustworthy shell around the existing protocol work. No user-facing features.
 
 ## 6. Phase 1 — v0.2 "Trust & polish" (target: end of October)
 
-- [ ] UX P0: permission rationale + pairing walkthrough (incl. NFC card tap), connection state clarity, last-known SOC, readable errors.
-- [ ] About screen: version, licenses, privacy statement, donation links.
+- [x] UX P0: permission rationale + pairing walkthrough (incl. NFC card tap), connection state clarity, last-known SOC, readable errors (2026-10-05).
+- [x] About screen: version, licenses, privacy statement, donation links (2026-10-05).
 - [ ] Dark theme + strings extracted to resources (translation-ready).
 - [x] Fake BLE transport + simulated car (`FakeCarProtocol`, round-trip tests, CI demo run).
 - [ ] Controller state-machine tests.
@@ -82,7 +82,7 @@ A trustworthy shell around the existing protocol work. No user-facing features.
 - [x] Obtainium instructions (README); F-Droid metadata (`fastlane/`).
 - [ ] F-Droid submission; IzzyOnDroid submission; document GitHub→F-Droid signature migration (blocked on signed releases).
 - [x] `FUNDING.yml` + README donation section.
-- [ ] About-screen donation links (with the About screen).
+- [x] About-screen donation links (with the About screen).
 - [ ] v0.2.0 tagged, signed, with curated changelog.
 
 ## 7. Phase 2 — v0.3–0.5 "Product" (target: Nov–Dec)

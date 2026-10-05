@@ -1,6 +1,6 @@
 # Requirements: multiple vehicles and per-vehicle VINs
 
-Status: Implemented (2026-10-05): per-vehicle storage, links and VIN, per-car notifications, cars list → car view navigation. Open questions remain for later.
+Status: Implemented (2026-10-05): per-vehicle storage, links and VIN, per-car notifications, cars list → car view navigation. All open questions decided (section 12).
 Date: 2026-10-04 · Updated: 2026-10-05
 Related: `docs/adr/0001-battery-tracker.md` (ADR-0001), `docs/adr/0002-battery-history-storage.md`, `docs/master-plan.md`
 
@@ -153,17 +153,22 @@ Out of scope (unchanged unless stated):
 7. An unreachable or unpaired vehicle is shown as such and never blocks other
    vehicles.
 
-## 12. Open questions (decide before implementation)
+## 12. Decisions (open questions resolved 2026-10-05)
 
-- Hard cap on simultaneous connections (recommend 3) and behaviour when more
-  known vehicles are in range.
-- Aggregate "all vehicles" chart: v1 or later (recommend later).
-- One notification per vehicle vs. a single grouped summary (recommend per
-  vehicle, grouped).
-- History key: VIN-first vs. advertised-name-first, and whether to rewrite rows
-  when the VIN is learned (recommend: advertised name is the key; VIN is an
-  attribute, upgraded in place).
-- Whether unpairing a vehicle in-app should also offer to clear its history.
+- **Simultaneous connections**: hard cap of 3 (`MAX_ACTIVE_LINKS`). When more
+  known cars are in range, the active/selected car is prioritised, then the
+  most recently seen; the rest stay disconnected and are picked up as slots
+  free. A cap of 3 matches the per-vehicle link budget and the test fleet.
+- **Aggregate "all vehicles" chart**: later (Phase 2+). Charts stay per vehicle
+  so an unreachable car cannot distort another car's history.
+- **Notifications**: one grouped notification per vehicle plus a group summary,
+  each with its own Wake action and tap-to-open. Implemented.
+- **History key**: the advertised name is the row key (`vehicleId`); the VIN is
+  an attribute of the vehicle record and never rewrites history rows. A car
+  whose VIN is entered later keeps its existing samples.
+- **Unpairing in-app**: not offered yet. When it lands, removing a vehicle
+  offers (never forces) clearing that vehicle's history; the key on the car
+  stays until the owner removes it manually.
 
 ## 13. Current single-car assumptions to unwind (implementation map)
 

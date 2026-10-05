@@ -58,7 +58,7 @@ import com.dzid26.teslable.core.history.BatterySample
 fun MainScreen(
     state: BleUiState,
     history: List<BatterySample>,
-    permissionsGranted: Boolean,
+    permissionState: PermissionState,
     locationServicesEnabled: Boolean,
     onRequestPermissions: () -> Unit,
     onToggleScan: () -> Unit,
@@ -120,7 +120,7 @@ fun MainScreen(
     } else {
         ConnectionsScreen(
             state = state,
-            permissionsGranted = permissionsGranted,
+            permissionState = permissionState,
             locationServicesEnabled = locationServicesEnabled,
             onRequestPermissions = onRequestPermissions,
             onToggleScan = onToggleScan,
@@ -182,7 +182,7 @@ private fun vehicleRows(state: BleUiState): List<VehicleRow> {
 @Composable
 private fun ConnectionsScreen(
     state: BleUiState,
-    permissionsGranted: Boolean,
+    permissionState: PermissionState,
     locationServicesEnabled: Boolean,
     onRequestPermissions: () -> Unit,
     onToggleScan: () -> Unit,
@@ -218,10 +218,11 @@ private fun ConnectionsScreen(
                     .padding(innerPadding)
                     .padding(horizontal = 16.dp),
         ) {
-            if (!permissionsGranted) {
-                Button(onClick = onRequestPermissions) {
-                    Text("Grant Bluetooth permissions")
-                }
+            if (permissionState != PermissionState.GRANTED) {
+                PermissionCard(
+                    deniedForever = permissionState == PermissionState.DENIED_FOREVER,
+                    onRequestPermissions = onRequestPermissions,
+                )
                 Spacer(Modifier.height(8.dp))
             }
             if (!locationServicesEnabled) {
@@ -292,6 +293,32 @@ private fun ConnectionsScreen(
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+/** Explains why the app needs BLE permissions before Android's dialog. */
+@Composable
+private fun PermissionCard(
+    deniedForever: Boolean,
+    onRequestPermissions: () -> Unit,
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(12.dp)) {
+            Text("Allow Bluetooth access", style = MaterialTheme.typography.titleSmall)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text =
+                    "TeslaBatteryBLE finds and talks to your Tesla over Bluetooth. " +
+                        "Android also requires location permission for BLE scans; the app " +
+                        "never reads your location and nothing leaves the phone.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(8.dp))
+            Button(onClick = onRequestPermissions) {
+                Text(if (deniedForever) "Open app settings" else "Grant permissions")
             }
         }
     }

@@ -6,6 +6,22 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Added
+
+- About card in Settings: version, source/sponsor links, privacy policy link,
+  in-app license and credits summary, and the Tesla, Inc. disclaimer
+- Permission rationale card on the cars list, with an "Open app settings"
+  fallback when Android will no longer show the permission dialog
+
+### Changed
+
+- Pairing starts with a whitelist check: a key the car already has is marked
+  paired instantly, with no card tap and no failure after clearing the cache
+- Car view shows the last stored SOC ("Last known · …") when there is no live
+  reading, instead of only a connection state
+- Unpaired car view explains the NFC-card walkthrough before pairing
+- Wake and command send failures are logged instead of failing silently
+
 ## [0.2.0-beta.2] - 2026-10-05
 
 ### Added

@@ -135,7 +135,7 @@ internal fun CarScreen(
                     .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            HeroCard(connection, advert, vehicle)
+            HeroCard(connection, advert, vehicle, vehicleHistory)
             ActionsRow(connection, onWake, onReadSoc)
             PhoneKeyCard(connection, vehicle, onPair)
             VinCard(
@@ -156,9 +156,13 @@ private fun HeroCard(
     connection: TeslaConnection?,
     advert: TeslaAdvert?,
     vehicle: Vehicle?,
+    history: List<BatterySample>,
 ) {
     val display = connectionDisplay(connection, advert, vehicle = vehicle)
     val level = connection?.charge?.batteryLevel
+    // With no live reading, the newest stored sample still answers "how full
+    // is the car?" at a glance; the caption makes its age explicit.
+    val lastKnown = history.lastOrNull()
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -173,34 +177,62 @@ private fun HeroCard(
                 StatusPill(connection)
             }
             Spacer(Modifier.height(12.dp))
-            if (level != null) {
-                Row(verticalAlignment = Alignment.Bottom) {
-                    Text(
-                        text = "$level",
-                        style = MaterialTheme.typography.displayLarge,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Text(
-                        text = "%",
-                        style = MaterialTheme.typography.headlineSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(bottom = 6.dp),
+            when {
+                level != null -> {
+                    Row(verticalAlignment = Alignment.Bottom) {
+                        Text(
+                            text = "$level",
+                            style = MaterialTheme.typography.displayLarge,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Text(
+                            text = "%",
+                            style = MaterialTheme.typography.headlineSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(bottom = 6.dp),
+                        )
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    LinearProgressIndicator(
+                        progress = { level / 100f },
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .height(8.dp)
+                                .clip(RoundedCornerShape(4.dp)),
                     )
                 }
-                Spacer(Modifier.height(8.dp))
-                LinearProgressIndicator(
-                    progress = { level / 100f },
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .height(8.dp)
-                            .clip(RoundedCornerShape(4.dp)),
-                )
-            } else {
-                Text(
-                    text = display.stateText,
-                    style = MaterialTheme.typography.headlineSmall,
-                )
+
+                lastKnown != null -> {
+                    Row(verticalAlignment = Alignment.Bottom) {
+                        Text(
+                            text = "${lastKnown.percent}",
+                            style = MaterialTheme.typography.displayLarge,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(
+                            text = "%",
+                            style = MaterialTheme.typography.headlineSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(bottom = 6.dp),
+                        )
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    val age = System.currentTimeMillis() - lastKnown.timestampMillis
+                    Text(
+                        text =
+                            if (age < 60_000) {
+                                "Last known · just now"
+                            } else {
+                                "Last known · ${formatDuration(age)} ago"
+                            },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+
+                else -> Text(text = display.stateText, style = MaterialTheme.typography.headlineSmall)
             }
             Spacer(Modifier.height(8.dp))
             connection?.status?.let { status ->
@@ -279,6 +311,16 @@ private fun PhoneKeyCard(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    if (!paired) {
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text =
+                                "Pair so this phone can wake and read the car; keep an " +
+                                    "NFC card ready for the car's prompt.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
                 if (!paired) {
                     Button(
