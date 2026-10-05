@@ -323,6 +323,9 @@ class FakeCarProtocol(
                     charge_state =
                         ChargeState(
                             battery_level = batteryLevel,
+                            usable_battery_level = batteryLevel,
+                            battery_range = batteryLevel * RATED_MILES_PER_PERCENT,
+                            est_battery_range = batteryLevel * ESTIMATED_MILES_PER_PERCENT,
                             charge_limit_soc = CHARGE_LIMIT,
                             charging_state = ChargeState.ChargingState(Disconnected = Void()),
                         ),
@@ -417,5 +420,7 @@ class FakeCarProtocol(
         const val SESSION_COUNTER = 500
         const val EPOCH_BYTES = 16
         const val CHARGE_LIMIT = 85
+        const val RATED_MILES_PER_PERCENT = 3.0f
+        const val ESTIMATED_MILES_PER_PERCENT = 2.9f
     }
 }

@@ -10,6 +10,7 @@ import com.dzid26.teslable.core.protocol.TeslaPairing
 import com.dzid26.teslable.core.protocol.TeslaSession
 import com.dzid26.teslable.core.protocol.TeslaSessionRequests
 import com.dzid26.teslable.core.protocol.TeslaVcsec
+import com.dzid26.teslable.core.reading.PreciseReading
 import com.tesla.generated.universalmessage.Domain
 import com.tesla.generated.universalmessage.RoutableMessage
 import com.tesla.generated.vcsec.OperationStatus_E
@@ -121,8 +122,15 @@ class FakeCarProtocolTest {
         val charge = TeslaCommands.parseChargeState(plaintext)
         assertNotNull(charge)
         assertEquals(78, charge!!.batteryLevel)
+        assertEquals(78, charge.usableBatteryLevel)
         assertEquals(85, charge.chargeLimit)
         assertEquals("Disconnected", charge.chargingState)
+        assertEquals(234f, charge.batteryRange)
+        assertEquals(226.2f, charge.estBatteryRange!!, 0.01f)
+
+        val reading = PreciseReading.from(charge)
+        assertEquals(78f, reading.socPercent)
+        assertEquals(226.2f, reading.rangeMiles!!, 0.01f)
     }
 
     @Test
