@@ -6,7 +6,7 @@ anywhere.**
 ## What the app stores (on your device only)
 
 - Vehicle advertisements seen during scanning (name, address, RSSI) — in memory while scanning
-- Your enrolled key material — stored in app-private storage, device-only by
+- Your enrolled vehicle keys — stored in app-private storage, device-only by
   default; included in Android backup only if you opt in (see below)
 - Known cars (VIN, advertised BLE name) so you can reconnect
 - Battery and connection history (SOC samples, charge sessions) in a local database
@@ -14,16 +14,17 @@ anywhere.**
 
 The app never synchronizes, uploads, or shares anything. Android's system backup
 is separate: if you have it enabled, your device may include app data in cloud
-backup or device-to-device transfer. By default the vehicle key stays encrypted
-with this device's Keystore and is kept out of backups, so a new phone requires
-re-pairing with an NFC card tap. If you opt in to "Include key in Android backup"
-in Settings, the key can be restored on a new phone; on Android 12+ this requires
-encrypted backup (device lock secret), and on Android 11 and below the key stays
-excluded from backup. A rooted or forensically extracted device is outside these
-protections.
-The enrolled key is charging-manager scoped: it can read vehicle data and control
-charging, but cannot unlock or drive the car, and new keys always need an NFC card
-tap plus vehicle confirmation. Uninstalling removes on-device data; a system
+backup or device-to-device transfer. By default vehicle keys stay encrypted with
+this device's hardware-backed Keystore (AES) and are kept out of backups, so a
+new phone requires re-pairing with an NFC card tap. One setting applies to all
+paired cars: if you opt in to "Include vehicle keys in Android backup", the keys
+can be restored on a new phone — Android backups are encrypted with your Google
+account and device lock, and on Android 12+ the app additionally requires that
+encrypted backup is available; Android 11 and below always keep the keys out of
+backup. A rooted or forensically extracted device is outside these protections.
+The enrolled keys are charging-manager scoped: they can read vehicle data and
+control charging, but cannot unlock or drive, and new keys always need an NFC
+card tap plus vehicle confirmation. Uninstalling removes on-device data; a system
 backup copy, if any, is managed by your device and Google account settings.
 
 ## Permissions and why they exist

@@ -3,11 +3,12 @@
 ## Key material
 
 - Vehicle keys are P-256 (secp256r1) key pairs generated on-device.
-- Default mode is device-only: the private key is encrypted with an AES key held
-  in the Android Keystore, so it is not readable from a backup.
-- Optional portable mode (user opt-in in Settings) stores the private key as
-  PKCS#8 base64 in app-private SharedPreferences so Android's encrypted backup can
-  restore pairing on a new phone (ADR-0005).
+- Default mode is device-only: the private keys are encrypted with an AES key
+  held in the hardware-backed Android Keystore, so they are not readable from a
+  backup.
+- Optional portable mode (one global setting, user opt-in in Settings) stores the
+  private keys as PKCS#8 base64 in app-private SharedPreferences so Android's
+  encrypted backup can restore pairing on a new phone (ADR-0005).
 - Keystore-encrypted material is decrypted and migrated transparently on first
   load into the currently selected mode.
 - Keys never leave the device and are never logged. The default enrolled role is

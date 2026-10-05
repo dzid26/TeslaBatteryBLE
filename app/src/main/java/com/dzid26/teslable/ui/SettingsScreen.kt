@@ -73,7 +73,7 @@ fun SettingsScreen(
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp)) {
                     Text(
-                        text = "Vehicle key",
+                        text = "Vehicle keys",
                         style = MaterialTheme.typography.titleMedium,
                     )
                     Spacer(Modifier.height(12.dp))
@@ -82,7 +82,7 @@ fun SettingsScreen(
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Text(
-                            text = "Include key in Android backup",
+                            text = "Include vehicle keys in Android backup",
                             style = MaterialTheme.typography.bodyLarge,
                             modifier = Modifier.weight(1f),
                         )
@@ -102,11 +102,13 @@ fun SettingsScreen(
                     Text(
                         text =
                             if (backupEnabled) {
-                                "Android can restore the key on a new phone. " +
-                                    "Requires encrypted backup (Android 12+); older versions keep it out of backups."
+                                "Currently: vehicle keys are stored so Android can back them up. " +
+                                    "Google backups are encrypted with your Google account and device lock, " +
+                                    "so a new phone can restore pairing from them."
                             } else {
-                                "The key is encrypted with this device's Keystore and stays out of backups. " +
-                                    "On a new phone you re-pair with an NFC card tap."
+                                "Currently: vehicle keys are encrypted with this device's hardware-backed " +
+                                    "Keystore (AES) and stay out of Android backups. On a new phone you re-pair " +
+                                    "with an NFC card tap."
                             },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -117,55 +119,76 @@ fun SettingsScreen(
     }
 
     if (showEnableDialog) {
-        AlertDialog(
-            onDismissRequest = { showEnableDialog = false },
-            title = { Text("Include key in Android backup?") },
-            text = {
-                Text(
-                    "The vehicle key will be stored so Android can back it up. " +
-                        "Anyone with your Google backup and device lock could use it near the car — " +
-                        "they could read vehicle data and control charging, but they cannot unlock or drive, " +
-                        "and adding new keys still needs the NFC card tap plus vehicle confirmation. " +
-                        "If you turn this off later, older backup copies may remain until they are replaced.",
-                )
+        EnableBackupDialog(
+            onConfirm = {
+                showEnableDialog = false
+                keyStore.setBackupEnabled(true)
+                backupEnabled = true
             },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showEnableDialog = false
-                        keyStore.setBackupEnabled(true)
-                        backupEnabled = true
-                    },
-                ) { Text("Include in backup") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showEnableDialog = false }) { Text("Cancel") }
-            },
+            onDismiss = { showEnableDialog = false },
         )
     }
 
     if (showDisableDialog) {
-        AlertDialog(
-            onDismissRequest = { showDisableDialog = false },
-            title = { Text("Stop backing up the key?") },
-            text = {
-                Text(
-                    "New backups will exclude the key, but copies already stored in Android backup " +
-                        "may remain until they are replaced.",
-                )
+        DisableBackupDialog(
+            onConfirm = {
+                showDisableDialog = false
+                keyStore.setBackupEnabled(false)
+                backupEnabled = false
             },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showDisableDialog = false
-                        keyStore.setBackupEnabled(false)
-                        backupEnabled = false
-                    },
-                ) { Text("Stop backup") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDisableDialog = false }) { Text("Cancel") }
-            },
+            onDismiss = { showDisableDialog = false },
         )
     }
+}
+
+@Composable
+private fun EnableBackupDialog(
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Include vehicle keys in Android backup?") },
+        text = {
+            Text(
+                "This applies to every car you have paired. Currently each vehicle key is " +
+                    "encrypted with this device's hardware-backed Keystore (AES) and never leaves it. " +
+                    "Turning this on stores the keys so Android can back them up; Google backups are " +
+                    "encrypted with your Google account and device lock, so exposure requires someone " +
+                    "who can restore your backup and unlock your phone. Near the car, that person could " +
+                    "read vehicle data and control charging — they cannot unlock or drive, and new keys " +
+                    "still need the NFC card tap plus vehicle confirmation. If you turn this off later, " +
+                    "older backup copies may remain until they are replaced.",
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm) { Text("Include in backup") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        },
+    )
+}
+
+@Composable
+private fun DisableBackupDialog(
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Stop backing up vehicle keys?") },
+        text = {
+            Text(
+                "New backups will exclude the keys, but copies already stored in Android backup " +
+                    "may remain until they are replaced.",
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm) { Text("Stop backup") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        },
+    )
 }
