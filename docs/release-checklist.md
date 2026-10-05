@@ -19,8 +19,10 @@
 ## Release
 
 - [ ] Create and push tag `vX.Y.Z` (e.g. `git tag v0.2.0 && git push origin v0.2.0`).
-- [ ] CI builds the APK and attaches it to the GitHub release.
-- [ ] Verify the release page: correct tag, version name, changelog, and installable APK artifact.
+- [ ] CI builds the APK, attaches it as `TeslaBatteryBLE-<tag>.apk`, sets the release title, and marks tags containing `-` as prereleases.
+- [ ] Release notes come from the matching `CHANGELOG.md` section plus screenshots pinned to the release commit (immutable).
+- [ ] Verify the release page: correct tag/version, notes, and installable APK artifact.
+- [ ] The rolling preview is removed automatically when the tagged commit matches it; otherwise it remains until the next un-released push.
 
 ## Current status
 
