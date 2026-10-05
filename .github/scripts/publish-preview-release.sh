@@ -21,9 +21,9 @@ cp "$APK" "$ASSET_APK"
 
 git fetch --tags origin
 
-# Most recent release that is not the rolling preview itself.
-PREV_TAG="$(gh release list --limit 100 --json tagName,createdAt \
-  --jq '[.[] | select(.tagName != "preview")] | sort_by(.createdAt) | reverse | .[0].tagName // empty')"
+# Nearest release tag reachable from this commit. Release creation times are
+# not reliable: converted previews keep the preview's original createdAt.
+PREV_TAG="$(git describe --tags --abbrev=0 --match 'v*' "$SHA" 2>/dev/null || true)"
 
 # If the newest release is cut from this commit there are no un-released
 # changes: drop the rolling preview instead of publishing an empty one.
