@@ -28,7 +28,17 @@ object TeslaCommands {
         val chargeMilesAddedRated: Float? = null,
         /** Ideal miles added so far this session (`charge_miles_added_ideal`). */
         val chargeMilesAddedIdeal: Float? = null,
-    )
+        /** Charging speed in miles per hour (`charge_rate_mph`, int field). */
+        val chargeRateMph: Int? = null,
+        /** Charging speed in miles per hour (`charge_rate_mph_float`, float field). */
+        val chargeRateMphFloat: Float? = null,
+    ) {
+        /** Charging slope in miles per hour: the float rate when plausible, else the int rate. */
+        val chargingMph: Float?
+            get() =
+                chargeRateMphFloat?.takeIf { it.isFinite() && it > 0f }
+                    ?: chargeRateMph?.takeIf { it > 0 }?.toFloat()
+    }
 
     fun buildWakeRequest(): ByteArray = UnsignedMessage(RKEAction = RKEAction_E.RKE_ACTION_WAKE_VEHICLE).encode()
 
@@ -67,6 +77,8 @@ object TeslaCommands {
             chargeEnergyAdded = charge.charge_energy_added,
             chargeMilesAddedRated = charge.charge_miles_added_rated,
             chargeMilesAddedIdeal = charge.charge_miles_added_ideal,
+            chargeRateMph = charge.charge_rate_mph,
+            chargeRateMphFloat = charge.charge_rate_mph_float,
         )
     }
 

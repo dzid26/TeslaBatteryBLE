@@ -149,4 +149,44 @@ class BatteryChartTest {
         // 10% gained over 30 min -> the last 20% takes another 60 min.
         assertEquals(180 * 60_000L, projection.completionMillis)
     }
+
+    @Test
+    fun projectionUsesTheLiveRateAndTheRunsMiles() {
+        val samples =
+            listOf(
+                sample(0, 50, "Charging", limit = 80).copy(ratedRangeMiles = 150f),
+                sample(10, 60, "Charging", limit = 80).copy(ratedRangeMiles = 180f),
+            )
+
+        // 20% left at 3 mi/% = 60 mi; at the live 90 mph that is 40 min,
+        // not the 20 min the integer-percent average would give.
+        val projection = chargeProjection(samples, chargeRateMph = 90f)!!
+        assertEquals(10 * 60_000L + 40 * 60_000L, projection.completionMillis)
+    }
+
+    @Test
+    fun projectionUsesTheLearnedScaleWithTheLiveRate() {
+        val samples =
+            listOf(
+                sample(0, 50, "Charging", limit = 80),
+                sample(10, 60, "Charging", limit = 80),
+            )
+
+        // 20% x 2.4 mi/% = 48 mi; at 90 mph that is 32 min.
+        val projection = chargeProjection(samples, chargeRateMph = 90f, fullRangeMiles = 240f)!!
+        assertEquals(10 * 60_000L + 32 * 60_000L, projection.completionMillis)
+    }
+
+    @Test
+    fun projectionKeepsThePercentFallbackWithoutARate() {
+        val samples =
+            listOf(
+                sample(0, 50, "Charging", limit = 80).copy(ratedRangeMiles = 150f),
+                sample(10, 60, "Charging", limit = 80).copy(ratedRangeMiles = 180f),
+            )
+
+        // No live rate: the run average still gives 20 min for the last 20%.
+        val projection = chargeProjection(samples, fullRangeMiles = 240f)!!
+        assertEquals(10 * 60_000L + 20 * 60_000L, projection.completionMillis)
+    }
 }
