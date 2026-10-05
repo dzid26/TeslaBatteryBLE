@@ -58,11 +58,11 @@ class BatteryHistoryTest {
 
         val stats = chargeStats(samples)!!
         assertEquals(90 * 60_000L, stats.sinceMillis)
-        assertEquals(84, stats.startPercent)
-        assertEquals(78, stats.currentPercent)
-        assertEquals(78, stats.minPercent)
-        assertEquals(84, stats.maxPercent)
-        assertEquals(6, stats.usedPercent)
+        assertEquals(84f, stats.startPercent)
+        assertEquals(78f, stats.currentPercent)
+        assertEquals(78f, stats.minPercent)
+        assertEquals(84f, stats.maxPercent)
+        assertEquals(6f, stats.usedPercent)
     }
 
     @Test
@@ -77,7 +77,30 @@ class BatteryHistoryTest {
 
         val stats = chargeStats(samples)!!
         assertEquals(90 * 60_000L, stats.sinceMillis)
-        assertEquals(75, stats.startPercent)
-        assertEquals(0, stats.usedPercent)
+        assertEquals(75f, stats.startPercent)
+        assertEquals(0f, stats.usedPercent)
+    }
+
+    @Test
+    fun chargeStatsUsePreciseSocWhenAvailable() {
+        val samples =
+            listOf(
+                sample(0, 80, "Charging"),
+                sample(30, 80).copy(socPercent = 79.5f),
+                sample(60, 79).copy(socPercent = 78.75f),
+            )
+
+        val stats = chargeStats(samples)!!
+        assertEquals(79.5f, stats.startPercent)
+        assertEquals(78.75f, stats.currentPercent)
+        assertEquals(78.75f, stats.minPercent)
+        assertEquals(79.5f, stats.maxPercent)
+        assertEquals(0.75f, stats.usedPercent, 0.0001f)
+    }
+
+    @Test
+    fun bestSocPercentFallsBackToRoundedPercent() {
+        assertEquals(78f, sample(0, 78).bestSocPercent)
+        assertEquals(77.6f, sample(0, 78).copy(socPercent = 77.6f).bestSocPercent)
     }
 }

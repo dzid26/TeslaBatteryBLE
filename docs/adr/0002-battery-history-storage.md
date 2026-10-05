@@ -12,7 +12,8 @@ while the car is awake (see ADR-0001's polling cadence).
 ## Decision
 
 - One sample per SOC read: vehicle id (advertised name, per ADR-0004),
-  timestamp, SOC %, charge limit, charging state.
+  timestamp, SOC % (with the precise usable SOC and range when the car reports
+  them), charge limit, charging state.
 - First cut: append-only CSV at `filesDir/battery-history.csv`, loaded into
   memory (capped at 20k samples) behind a `StateFlow`. Repeated identical
   readings within a minute are skipped so polling does not flood the file.
@@ -22,5 +23,7 @@ while the car is awake (see ADR-0001's polling cadence).
 ## Consequences
 
 - Zero dependencies and easy to inspect or export; ships now.
+- The CSV format is not stable before 1.0: rows written by an older format are
+  dropped on load, never migrated.
 - Aggregations are in memory. Move to Room/SQLite when queries, retention, or
   the number of vehicles outgrow the CSV.
