@@ -43,9 +43,9 @@ All notable changes to this project are documented here. The format is based on
   indicator (Scan for cars / Wake car / Read battery) that swaps its icon for a
   spinner while running, replacing the Scan, Wake and Read buttons; a Stop
   action appears while scanning
-- Battery history chart: missing stretches (car asleep or out of range) draw
-  as a thin line instead of looking continuous, and while charging a dashed
-  line projects when the charge limit will be reached at the current rate
+- Battery history chart: every measurement is marked with a dot (dense samples
+  form a thick band, sparse ones show as separate dots), and while charging a
+  dashed line projects when the charge limit will be reached at the current rate
 - Battery readings keep the car's precise values: the car view shows range to a
   tenth of a mile, history stats use the usable SOC instead of the rounded whole
   percent, and history rows written before this change are dropped on load
