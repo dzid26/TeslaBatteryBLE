@@ -60,7 +60,11 @@ object TeslaVcsec {
         return FromVCSECMessage.ADAPTER.decode(payload).whitelistEntryInfo
     }
 
-    fun parseCommandStatus(payload: ByteArray): OperationStatus_E? = FromVCSECMessage.ADAPTER.decode(payload).commandStatus?.operationStatus
+    fun parseCommandStatus(payload: ByteArray): OperationStatus_E? =
+        FromVCSECMessage.ADAPTER
+            .decode(payload)
+            .commandStatus
+            ?.operationStatus
 
     private fun buildInformationRequest(
         type: InformationRequestType,

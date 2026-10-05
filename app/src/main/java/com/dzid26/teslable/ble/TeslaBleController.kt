@@ -28,7 +28,9 @@ import kotlinx.coroutines.flow.update
  * discovery and selection live here; connecting, sessions, pairing, polling and
  * commands live in the link, so one car failing never touches another.
  */
-class TeslaBleController(context: Context) {
+class TeslaBleController(
+    context: Context,
+) {
     private val appContext = context.applicationContext
     private val prefs = appContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
     private val _state = MutableStateFlow(BleUiState())
@@ -167,7 +169,9 @@ class TeslaBleController(context: Context) {
     fun openVehicle(address: String) {
         val name =
             _state.value.connections[address]?.name
-                ?: _state.value.devices.firstOrNull { it.address == address }?.name
+                ?: _state.value.devices
+                    .firstOrNull { it.address == address }
+                    ?.name
                 ?: vehicles.values.firstOrNull { it.address == address }?.bleName
                 ?: return
         openVehicle(name, address)
@@ -306,7 +310,8 @@ class TeslaBleController(context: Context) {
     private fun onDevicesFound(devices: List<TeslaAdvert>) {
         val now = System.currentTimeMillis()
         val strongestByName =
-            devices.groupBy { it.name }
+            devices
+                .groupBy { it.name }
                 .mapValues { (_, found) -> found.maxBy { it.rssi ?: Int.MIN_VALUE } }
         for ((name, device) in strongestByName) {
             val known = vehicles[name] ?: continue
@@ -551,7 +556,9 @@ class TeslaBleController(context: Context) {
         val connection = _state.value.connections[address]
         return connection?.gattDeviceName
             ?: connection?.name
-            ?: _state.value.devices.firstOrNull { it.address == address }?.name
+            ?: _state.value.devices
+                .firstOrNull { it.address == address }
+                ?.name
             ?: address
     }
 
@@ -568,7 +575,9 @@ class TeslaBleController(context: Context) {
 
     // ------------------------------------------------------------- per-vehicle link
 
-    private data class PendingSession(val domain: Domain)
+    private data class PendingSession(
+        val domain: Domain,
+    )
 
     private data class PendingCommand(
         val domain: Domain,
@@ -639,7 +648,12 @@ class TeslaBleController(context: Context) {
         val wakeRefresh =
             object : Runnable {
                 override fun run() {
-                    if (_state.value.connections[address]?.status?.asleep == false) return
+                    if (_state.value.connections[address]
+                            ?.status
+                            ?.asleep == false
+                    ) {
+                        return
+                    }
                     if (wakeRefreshAttempts++ >= WAKE_REFRESH_MAX_ATTEMPTS) return
                     requestStatus()
                     handler.postDelayed(this, WAKE_REFRESH_MS)
@@ -793,7 +807,10 @@ class TeslaBleController(context: Context) {
 
         /** Infotainment needs an awake car, so it is only requested then. */
         private fun neededSessions(): List<Domain> {
-            val awake = _state.value.connections[address]?.status?.asleep == false
+            val awake =
+                _state.value.connections[address]
+                    ?.status
+                    ?.asleep == false
             return SESSION_DOMAINS.filter { domain ->
                 sessions.containsKey(domain).not() &&
                     (domain != Domain.DOMAIN_INFOTAINMENT || awake)
@@ -851,7 +868,11 @@ class TeslaBleController(context: Context) {
             val encodedInfo = message.session_info?.toByteArray() ?: return false
             val challenge = message.request_uuid.toByteArray()
             val pending = pendingSessions.remove(challenge.toHex()) ?: return false
-            val tag = message.signature_data?.session_info_tag?.tag?.toByteArray()
+            val tag =
+                message.signature_data
+                    ?.session_info_tag
+                    ?.tag
+                    ?.toByteArray()
             if (tag == null) {
                 log("${name()}: session info missing tag")
                 return true
@@ -891,7 +912,10 @@ class TeslaBleController(context: Context) {
         }
 
         fun wake() {
-            if (_state.value.connections[address]?.status?.asleep == false) {
+            if (_state.value.connections[address]
+                    ?.status
+                    ?.asleep == false
+            ) {
                 log("${name()}: car is already awake")
                 return
             }
@@ -910,7 +934,10 @@ class TeslaBleController(context: Context) {
         }
 
         fun requestChargeState() {
-            if (_state.value.connections[address]?.status?.asleep != false) {
+            if (_state.value.connections[address]
+                    ?.status
+                    ?.asleep != false
+            ) {
                 log("${name()}: car is asleep; wake it first")
                 return
             }
@@ -1067,7 +1094,10 @@ class TeslaBleController(context: Context) {
             val enrolled =
                 stored != null &&
                     whitelist.whitelistEntries.any {
-                        it.publicKeySHA1.toByteArray().copyOf(stored.keyId.size).contentEquals(stored.keyId)
+                        it.publicKeySHA1
+                            .toByteArray()
+                            .copyOf(stored.keyId.size)
+                            .contentEquals(stored.keyId)
                     }
             if (stored != null && enrolled && keyId != null) {
                 handler.removeCallbacks(whitelistPoll)
@@ -1084,7 +1114,10 @@ class TeslaBleController(context: Context) {
                 startSession()
                 val index =
                     whitelist.whitelistEntries.indexOfFirst {
-                        it.publicKeySHA1.toByteArray().copyOf(stored.keyId.size).contentEquals(stored.keyId)
+                        it.publicKeySHA1
+                            .toByteArray()
+                            .copyOf(stored.keyId.size)
+                            .contentEquals(stored.keyId)
                     }
                 val slots = occupiedSlots(whitelist.slotMask)
                 keySlotQueue =
@@ -1102,12 +1135,18 @@ class TeslaBleController(context: Context) {
         private fun handleWhitelistEntry(entry: WhitelistEntryInfo) {
             val stored = keyStore.load()
             val matches =
-                stored != null && (
-                    entry.publicKey?.PublicKeyRaw?.toByteArray()?.contentEquals(stored.publicKeyRaw) == true ||
-                        entry.keyId?.publicKeySHA1?.toByteArray()
-                            ?.copyOf(stored.keyId.size)
-                            ?.contentEquals(stored.keyId) == true
-                )
+                stored != null &&
+                    (
+                        entry.publicKey
+                            ?.PublicKeyRaw
+                            ?.toByteArray()
+                            ?.contentEquals(stored.publicKeyRaw) == true ||
+                            entry.keyId
+                                ?.publicKeySHA1
+                                ?.toByteArray()
+                                ?.copyOf(stored.keyId.size)
+                                ?.contentEquals(stored.keyId) == true
+                    )
             if (matches) {
                 keySlotQueue = emptyList()
                 updateConnection(address) { it.copy(keySlot = entry.slot) }

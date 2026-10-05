@@ -32,7 +32,8 @@ object TeslaCrypto {
         peerPublicRaw: ByteArray,
     ): ByteArray {
         val privateKey =
-            KeyFactory.getInstance("EC")
+            KeyFactory
+                .getInstance("EC")
                 .generatePrivate(PKCS8EncodedKeySpec(privateKeyPkcs8)) as ECPrivateKey
         val agreement = KeyAgreement.getInstance("ECDH")
         agreement.init(privateKey)
@@ -45,7 +46,8 @@ object TeslaCrypto {
         require(raw.size == 65 && raw[0] == 0x04.toByte()) { "expected uncompressed point" }
         val x = BigInteger(1, raw.copyOfRange(1, 33))
         val y = BigInteger(1, raw.copyOfRange(33, 65))
-        return KeyFactory.getInstance("EC")
+        return KeyFactory
+            .getInstance("EC")
             .generatePublic(ECPublicKeySpec(ECPoint(x, y), p256Parameters())) as ECPublicKey
     }
 
@@ -90,7 +92,9 @@ object TeslaCrypto {
     fun randomBytes(size: Int): ByteArray = ByteArray(size).also(random::nextBytes)
 
     private fun p256Parameters(): ECParameterSpec =
-        AlgorithmParameters.getInstance("EC").apply {
-            init(ECGenParameterSpec("secp256r1"))
-        }.getParameterSpec(ECParameterSpec::class.java)
+        AlgorithmParameters
+            .getInstance("EC")
+            .apply {
+                init(ECGenParameterSpec("secp256r1"))
+            }.getParameterSpec(ECParameterSpec::class.java)
 }

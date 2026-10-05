@@ -32,12 +32,12 @@ class TeslaSession private constructor(
         val expiresAt = ((clock() - timeZeroMs) / 1000 + expiresInSeconds).toInt()
 
         val metadata =
-            Metadata.sha256()
+            Metadata
+                .sha256()
                 .add(
                     Tag.TAG_SIGNATURE_TYPE.value,
                     byteArrayOf(SignatureType.SIGNATURE_TYPE_AES_GCM_PERSONALIZED.value.toByte()),
-                )
-                .add(Tag.TAG_DOMAIN.value, byteArrayOf(domain.value.toByte()))
+                ).add(Tag.TAG_DOMAIN.value, byteArrayOf(domain.value.toByte()))
                 .add(Tag.TAG_PERSONALIZATION.value, vin.toByteArray(Charsets.US_ASCII))
                 .add(Tag.TAG_EPOCH.value, epoch)
                 .addUint32(Tag.TAG_EXPIRES_AT.value, expiresAt)
@@ -98,12 +98,12 @@ class TeslaSession private constructor(
         val ciphertext = message.protobuf_message_as_bytes?.toByteArray() ?: return null
 
         val metadata =
-            Metadata.sha256()
+            Metadata
+                .sha256()
                 .add(
                     Tag.TAG_SIGNATURE_TYPE.value,
                     byteArrayOf(SignatureType.SIGNATURE_TYPE_AES_GCM_RESPONSE.value.toByte()),
-                )
-                .add(Tag.TAG_DOMAIN.value, byteArrayOf(domain.value.toByte()))
+                ).add(Tag.TAG_DOMAIN.value, byteArrayOf(domain.value.toByte()))
                 .add(Tag.TAG_PERSONALIZATION.value, vin.toByteArray(Charsets.US_ASCII))
                 .addUint32(Tag.TAG_COUNTER.value, gcmData.counter)
                 .addUint32(Tag.TAG_FLAGS.value, message.flags)
@@ -133,7 +133,8 @@ class TeslaSession private constructor(
             challenge: ByteArray,
             encodedInfo: ByteArray,
         ): ByteArray =
-            Metadata.hmacSha256(TeslaCrypto.subkey(sessionKey, LABEL_SESSION_INFO))
+            Metadata
+                .hmacSha256(TeslaCrypto.subkey(sessionKey, LABEL_SESSION_INFO))
                 .add(Tag.TAG_SIGNATURE_TYPE.value, byteArrayOf(SignatureType.SIGNATURE_TYPE_HMAC.value.toByte()))
                 .add(Tag.TAG_PERSONALIZATION.value, vin.toByteArray(Charsets.US_ASCII))
                 .add(Tag.TAG_CHALLENGE.value, challenge)

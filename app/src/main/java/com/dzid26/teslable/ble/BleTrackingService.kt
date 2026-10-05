@@ -205,7 +205,8 @@ class BleTrackingService : Service() {
         groupSummary: Boolean,
     ): Notification {
         val builder =
-            NotificationCompat.Builder(this, CHANNEL_ID)
+            NotificationCompat
+                .Builder(this, CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_stat_tracking)
                 .setContentTitle(model.title)
                 .setContentText(model.status)

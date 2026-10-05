@@ -52,7 +52,10 @@ class FakeCarProtocolTest {
         assertNotNull(info)
         assertEquals(1, info!!.numberOfEntries)
         assertTrue(
-            info.whitelistEntries.first().publicKeySHA1.toByteArray()
+            info.whitelistEntries
+                .first()
+                .publicKeySHA1
+                .toByteArray()
                 .copyOf(client.keyId.size)
                 .contentEquals(client.keyId),
         )
@@ -152,7 +155,11 @@ class FakeCarProtocolTest {
             vin = vin,
             challenge = uuid,
             encodedInfo = response.session_info!!.toByteArray(),
-            tag = response.signature_data!!.session_info_tag!!.tag!!.toByteArray(),
+            tag =
+                response.signature_data!!
+                    .session_info_tag!!
+                    .tag!!
+                    .toByteArray(),
         )!!
     }
 
