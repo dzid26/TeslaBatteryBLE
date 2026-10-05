@@ -86,10 +86,10 @@ Precision annotations Tesla documents in the BLE proto comments for mapped field
 |---|---|---|---|---|---|
 | `Soc` | real | charge_state.usable_battery_level | `ChargeState.usable_battery_level` | int32 | Usable SOC per Tesla docs (`charge_state.usable_battery_level`); cloud real vs BLE int32 whole percent |
 | `BatteryLevel` | real | charge_state.battery_level | `ChargeState.battery_level` | int32 | Displayed SOC (`charge_state.battery_level`); cloud real with sub-percent values observed (e.g. 40.982) vs BLE int32 whole percent |
-| `RatedRange` | real | charge_state.battery_range | `ChargeState.battery_range` | float (2 decimals) | Rated miles |
-| `EstBatteryRange` | real | charge_state.est_battery_range | `ChargeState.est_battery_range` | float (2 decimals) |  |
-| `IdealBatteryRange` | real | — | `ChargeState.ideal_battery_range` | float (2 decimals) |  |
-| `ChargeLimitSoc` | integer | charge_state.charge_limit_soc | `ChargeState.charge_limit_soc` | int32 |  |
+| `RatedRange` | real | charge_state.battery_range | `ChargeState.battery_range` | float (2 decimals) | Rated range: officially rated range at the current SOC - remaining energy over the trim's rated consumption constant (EPA-style); the car's default Rated display, independent of recent driving |
+| `EstBatteryRange` | real | charge_state.est_battery_range | `ChargeState.est_battery_range` | float (2 decimals) | Estimated range: current SOC projected with recent driving consumption; matches the car's Estimated projection ('takes driving conditions into account') |
+| `IdealBatteryRange` | real | — | `ChargeState.ideal_battery_range` | float (2 decimals) | Ideal range: current SOC against an idealized consumption constant (best-case speed/weather); legacy Ideal display, optimistic. BLE only - Fleet Telemetry does not expose it |
+| `ChargeLimitSoc` | integer | charge_state.charge_limit_soc | `ChargeState.charge_limit_soc` | int32 | Configured charge limit: the SOC at which charging terminates (whole percent); firmware before 2024.38 can send it string-encoded |
 | `DetailedChargeState` | DetailedChargeStateValue enum | — | `ChargeState.charging_state` | ChargingState | Disconnected / Charging / Complete / Calibrating … |
 | `ChargeState` | string | — | `ChargeState.charging_state` | ChargingState | Generic signal; overlaps DetailedChargeState |
 | `TimeToFullCharge` | real | charge_state.minutes_to_full_charge charge_state.time_to_full_charge | `ChargeState.minutes_to_full_charge` | int32 | Cloud real **hours**; BLE int32 **minutes** |
