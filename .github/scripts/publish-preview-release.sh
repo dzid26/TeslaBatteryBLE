@@ -80,7 +80,12 @@ if gh release view "$TAG" > /dev/null 2>&1; then
 fi
 gh release create "$TAG" --title "$TITLE" --prerelease --notes-file preview-notes.md
 
+[ -f "$SHEET" ] || { echo "missing $SHEET (the capture step must succeed)" >&2; exit 1; }
 gh release upload "$TAG" "$ASSET_APK" --clobber
-if [ -f "$SHEET" ]; then
-  gh release upload "$TAG" "$SHEET" --clobber
-fi
+gh release upload "$TAG" "$SHEET" --clobber
+
+# The release is not done until both assets are actually attached.
+assets="$(gh release view "$TAG" --json assets --jq '.assets[].name')"
+for expected in "$ASSET_APK" "$SHEET_NAME"; do
+  printf '%s\n' "$assets" | grep -qx "$expected" || { echo "release $TAG is missing $expected" >&2; exit 1; }
+done
