@@ -64,10 +64,10 @@ jobs:
       - name: Drive the simulated car and capture screenshots
         uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
         with:
-          api-level: 30
+          api-level: 34
           target: google_apis
           arch: x86_64
-          profile: pixel_2
+          profile: pixel_6
           emulator-boot-timeout: 420
           disable-animations: true
           script: bash .github/scripts/capture-screenshots.sh app/build/outputs/apk/debug/app-debug.apk demo-screenshots
