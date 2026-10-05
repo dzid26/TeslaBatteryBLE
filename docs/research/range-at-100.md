@@ -85,8 +85,8 @@ Average the range-method and energy-delta results; flag a gap >5 pp as a data-qu
 
 History CSV columns: `vehicleId,timestampMillis,percent,chargeLimit,chargingState,socPercent,rangeMiles,batteryLevel,usableBatteryLevel,ratedRangeMiles,estRangeMiles,idealRangeMiles,chargeEnergyAdded,chargeMilesAddedRated,chargeMilesAddedIdeal`.
 
-- `percent` is the rounded form of `socPercent`; `socPercent` is `usable_battery_level` when plausible, else `battery_level` (`PreciseReading`).
-- `rangeMiles` is `est_battery_range` when plausible, else `battery_range`; the explicit columns carry the raw trio.
+- `percent` is the rounded form of `socPercent`; `socPercent` is the displayed level (`battery_level`).
+- `rangeMiles` is the rated range (`battery_range`); the explicit columns carry the raw trio.
 - Identical percent+state readings within 60 s are skipped; the store keeps the newest 20k rows. Rows from the older CSV format are dropped on load (pre-1.0, no migration).
 
 Manually note per session: ambient temperature, minutes since the last drive or charge (rest), the car's displayed range and display mode (Rated / Estimated / Ideal), and firmware version.

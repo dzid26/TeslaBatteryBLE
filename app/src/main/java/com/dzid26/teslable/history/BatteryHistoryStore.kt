@@ -6,7 +6,6 @@ import android.content.Context
 import com.dzid26.teslable.core.history.BatteryHistoryCsv
 import com.dzid26.teslable.core.history.BatterySample
 import com.dzid26.teslable.core.protocol.TeslaCommands
-import com.dzid26.teslable.core.reading.PreciseReading
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -17,7 +16,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.io.File
-import kotlin.math.roundToInt
 
 /**
  * Battery history as an append-only CSV in app storage, cached in memory and
@@ -46,8 +44,7 @@ class BatteryHistoryStore(
         charge: TeslaCommands.Charge,
         nowMillis: Long = System.currentTimeMillis(),
     ) {
-        val reading = PreciseReading.from(charge)
-        val percent = reading.socPercent?.roundToInt() ?: return
+        val percent = charge.batteryLevel ?: return
         val sample =
             BatterySample(
                 timestampMillis = nowMillis,
@@ -55,8 +52,8 @@ class BatteryHistoryStore(
                 chargingState = charge.chargingState,
                 chargeLimit = charge.chargeLimit,
                 vehicleId = vehicleId,
-                socPercent = reading.socPercent,
-                rangeMiles = reading.rangeMiles,
+                socPercent = percent.toFloat(),
+                rangeMiles = charge.batteryRange,
                 batteryLevel = charge.batteryLevel,
                 usableBatteryLevel = charge.usableBatteryLevel,
                 ratedRangeMiles = charge.batteryRange,

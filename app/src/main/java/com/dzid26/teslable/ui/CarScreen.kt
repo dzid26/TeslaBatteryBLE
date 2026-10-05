@@ -68,7 +68,6 @@ import com.dzid26.teslable.core.history.chargeProjection
 import com.dzid26.teslable.core.history.chargeStats
 import com.dzid26.teslable.core.history.within
 import com.dzid26.teslable.core.protocol.TeslaCommands
-import com.dzid26.teslable.core.reading.PreciseReading
 import kotlinx.coroutines.delay
 import java.time.Instant
 import java.time.ZoneId
@@ -206,8 +205,7 @@ private fun HeroCard(
 ) {
     val display = connectionDisplay(connection, advert, vehicle = vehicle)
     val charge = connection?.charge
-    val reading = charge?.let { PreciseReading.from(it) }
-    val level = reading?.socPercent?.roundToInt()
+    val level = charge?.batteryLevel
     // With no live reading, the newest stored sample still answers "how full
     // is the car?" at a glance; the caption makes its age explicit.
     val lastKnown = history.lastOrNull()
@@ -263,10 +261,9 @@ private fun HeroCard(
 @Composable
 private fun ChargeDetails(charge: TeslaCommands.Charge?) {
     if (charge == null) return
-    val reading = PreciseReading.from(charge)
     val details =
         buildList {
-            reading.rangeMiles?.let { add("${formatRangeMiles(it)} mi") }
+            charge.batteryRange?.let { add("${formatRangeMiles(it)} mi") }
             charge.chargeLimit?.let { add("Charge limit $it%") }
             charge.chargingState?.let { add(chargingStateText(it)) }
         }
