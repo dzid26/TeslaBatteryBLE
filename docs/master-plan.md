@@ -60,7 +60,7 @@ A trustworthy shell around the existing protocol work. No user-facing features.
 - [x] CI gates: Android lint, app unit tests, concurrency cancel, least-privilege permissions, Dependabot.
 - [x] CI hardening: pinned action SHAs (#16); ktlint + detekt gates (#19).
 - [ ] Required checks on `main` (branch protection deliberately deferred while agents push directly).
-- [ ] Release engineering: signed release blocked on owner keystore; release checklist documented.
+- [ ] Release engineering: signed release blocked on owner keystore. Release checklist documented; tag releases ship `TeslaBatteryBLE-<tag>.apk` with screenshots pinned to the release commit; the rolling preview is removed when there are no un-released changes.
 - [x] Docs skeleton: `docs/adr/` (ADR-0001 moved), `docs/protocol/` (transport, session/pairing, domains).
 - [x] `AGENTS.md` for future sessions.
 
@@ -78,7 +78,7 @@ A trustworthy shell around the existing protocol work. No user-facing features.
 - [ ] R8 + resource shrinking; Baseline Profile; LeakCanary (debug only).
 - [x] Screenshots in `docs/images/` (captured in CI, shown in README).
 - [ ] Social preview image.
-- [ ] Website v1 on GitHub Pages (landing + install buttons + privacy story).
+- [x] Website v1 on GitHub Pages (plain, install-focused landing: https://dzid26.github.io/TeslaBatteryBLE/).
 - [x] Obtainium instructions (README); F-Droid metadata (`fastlane/`).
 - [ ] F-Droid submission; IzzyOnDroid submission; document GitHub→F-Droid signature migration (blocked on signed releases).
 - [x] `FUNDING.yml` + README donation section.
