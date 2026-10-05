@@ -93,26 +93,6 @@ header h1 {
   margin: 0 auto 1.75rem;
 }
 
-.badges {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 0.75rem;
-  margin-bottom: 1.75rem;
-}
-
-.badge {
-  display: inline-block;
-  padding: 0.35rem 0.7rem;
-  border-radius: 999px;
-  font-size: 0.85rem;
-  font-weight: 600;
-  text-decoration: none;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  color: var(--text);
-}
-
 .cta-group {
   display: flex;
   flex-wrap: wrap;
@@ -203,33 +183,6 @@ section h2 {
   color: var(--muted);
 }
 
-.feature-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
-  gap: 1.25rem;
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-
-.feature-grid li {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 1.25rem;
-}
-
-.feature-grid h3 {
-  margin: 0 0 0.5rem;
-  font-size: 1.1rem;
-}
-
-.feature-grid p {
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.95rem;
-}
-
 .install-options {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
@@ -265,30 +218,6 @@ section h2 {
   border-radius: 0 0.25rem 0.25rem 0;
   font-size: 0.95rem;
   color: var(--muted);
-}
-
-.privacy-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-
-.privacy-list li {
-  position: relative;
-  padding-left: 1.75rem;
-  margin-bottom: 0.75rem;
-}
-
-.privacy-list li::before {
-  content: "✓";
-  position: absolute;
-  left: 0;
-  color: var(--accent);
-  font-weight: 700;
-}
-
-.status p {
-  margin: 0 0 0.75rem;
 }
 
 footer {

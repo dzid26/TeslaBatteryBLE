@@ -16,12 +16,6 @@
     <div class="container">
       <h1>TeslaBatteryBLE</h1>
       <p class="tagline">An Android app that talks to a Tesla over Bluetooth LE: battery state, charge state, and a local history. Keys are enrolled on the car; there is no account and no server.</p>
-      <div class="badges">
-        <a class="badge" href="https://github.com/dzid26/TeslaBatteryBLE/actions/workflows/android.yml">Android CI</a>
-        <a class="badge" href="https://github.com/dzid26/TeslaBatteryBLE/blob/main/LICENSE">AGPL-3.0-only</a>
-        <span class="badge">Android 8.0+</span>
-        <a class="badge" href="https://github.com/dzid26/TeslaBatteryBLE/blob/main/docs/master-plan.md">Beta</a>
-      </div>
       <div class="cta-group">
         <a class="button button-primary" href="https://github.com/dzid26/TeslaBatteryBLE/releases/tag/preview">Get the preview APK</a>
         <a class="button button-secondary" href="https://github.com/dzid26/TeslaBatteryBLE">View on GitHub</a>
@@ -50,69 +44,24 @@
       </div>
     </section>
 
-    <section aria-labelledby="features-heading">
-      <div class="container">
-        <h2 id="features-heading">Features</h2>
-        <ul class="feature-grid">
-          <li>
-            <h3>Scanning and pairing</h3>
-            <p>Finds cars by their advertised BLE name and enrolls a key with an NFC card tap on the console.</p>
-          </li>
-          <li>
-            <h3>Sessions</h3>
-            <p>Battery and charge data are read over the protocol's authenticated, encrypted session.</p>
-          </li>
-          <li>
-            <h3>Waking</h3>
-            <p>The car is woken only on request, not in the background.</p>
-          </li>
-          <li>
-            <h3>Background tracking</h3>
-            <p>A foreground service keeps the connection and the SOC timeline updated while parked or charging.</p>
-          </li>
-          <li>
-            <h3>History</h3>
-            <p>6 h / 24 h / 7 d / all-time views with since-last-charge stats.</p>
-          </li>
-          <li>
-            <h3>Simulated car</h3>
-            <p>Debug builds include a simulated vehicle, so development and screenshots don't need a car.</p>
-          </li>
-        </ul>
-      </div>
-    </section>
-
-    <section aria-labelledby="privacy-heading">
-      <div class="container">
-        <h2 id="privacy-heading">Privacy</h2>
-        <p>The app has no internet permission; it only talks to the car over Bluetooth.</p>
-        <ul class="privacy-list">
-          <li>Vehicle keys are kept in app-private storage; by default they are encrypted with the device Keystore and left out of backups.</li>
-          <li>Including the keys in Android backup is opt-in in Settings; on Android 12+ it requires encrypted backup.</li>
-          <li>Known cars, SOC history, and settings are stored in a local database.</li>
-          <li>There are no accounts, analytics, ads, or telemetry.</li>
-        </ul>
-        <p>The full privacy statement is in the <a href="https://github.com/dzid26/TeslaBatteryBLE/blob/main/PRIVACY.md">repository</a>.</p>
-      </div>
-    </section>
-
     <section aria-labelledby="install-heading">
       <div class="container">
         <h2 id="install-heading">Install</h2>
+        <p>TeslaBatteryBLE is in beta. The rolling preview is rebuilt from <code>main</code> on every push.</p>
         <div class="install-options">
           <div class="install-card">
-            <h3>GitHub Releases (preview)</h3>
+            <h3>GitHub Releases (preview APK)</h3>
             <ol>
-              <li>Go to the <a href="https://github.com/dzid26/TeslaBatteryBLE/releases/tag/preview">rolling preview release</a>.</li>
+              <li>Open the <a href="https://github.com/dzid26/TeslaBatteryBLE/releases/tag/preview">rolling preview release</a>.</li>
               <li>Download the latest APK.</li>
-              <li>Open the APK on your Android device and allow installation from the browser/file manager.</li>
+              <li>Open the APK on your Android device and allow installation from the browser or file manager.</li>
             </ol>
             <p class="note">Preview APKs are debug builds. They install side by side with future stable releases.</p>
           </div>
           <div class="install-card">
             <h3>Obtainium (auto-updates)</h3>
             <ol>
-              <li>Open Obtainium and tap <strong>Add App</strong>.</li>
+              <li>Open <a href="https://github.com/ImranR98/Obtainium">Obtainium</a> and tap <strong>Add App</strong>.</li>
               <li>Enter <code>https://github.com/dzid26/TeslaBatteryBLE</code>.</li>
               <li>Enable <strong>Include prereleases</strong> (the preview channel is a prerelease).</li>
               <li>Install and let Obtainium track new previews.</li>
@@ -122,11 +71,10 @@
       </div>
     </section>
 
-    <section class="status" aria-labelledby="status-heading">
+    <section aria-labelledby="privacy-heading">
       <div class="container">
-        <h2 id="status-heading">Status &amp; roadmap</h2>
-        <p>The app is in <strong>beta</strong>. The rolling preview release is rebuilt from <code>main</code> on every push; signed stable releases and F-Droid are planned.</p>
-        <p>The <a href="https://github.com/dzid26/TeslaBatteryBLE/blob/main/docs/master-plan.md">master plan</a> lists what's next.</p>
+        <h2 id="privacy-heading">Privacy</h2>
+        <p>The app has no internet permission; it only talks to the car over Bluetooth, and keys and history stay on the device. The full privacy statement is in the <a href="https://github.com/dzid26/TeslaBatteryBLE/blob/main/PRIVACY.md">repository</a>.</p>
       </div>
     </section>
   </main>
