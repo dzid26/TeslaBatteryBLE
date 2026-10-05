@@ -26,6 +26,9 @@ import javax.crypto.spec.GCMParameterSpec
  * survive a phone change. The user can opt in to portable mode (one global
  * setting), which stores the private keys as plaintext PKCS#8 base64 so
  * Android's system backup can restore pairing on a new phone.
+ *
+ * Keys are written in the mode selected at write time; the Settings toggle
+ * re-saves every stored key eagerly, and loading never converts between modes.
  */
 class PairingKeyStore(
     context: Context,
@@ -84,11 +87,6 @@ class PairingKeyStore(
                 )
             }.getOrNull() ?: return null
 
-        if (!isBackupEnabled()) {
-            // A restored plaintext key must not stay readable while the user
-            // has backup off.
-            save(vehicleId, plaintext, backupEnabled = false)
-        }
         return plaintext
     }
 

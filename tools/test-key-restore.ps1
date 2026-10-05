@@ -7,9 +7,8 @@
   Proves a paired key survives a fresh install when key backup is on:
 
     1. checks a pairing key exists (pair the car first if not);
-    2. turns on portable key storage if needed (same effect as Settings ->
-       "Include vehicle keys in Android backup", applied to the prefs and the
-       app is restarted so it migrates the key);
+    2. requires portable key storage to be on (Settings -> "Include vehicle
+       keys in Android backup");
     3. forces an Android backup and keeps a local tar safety copy;
     4. uninstalls and reinstalls the APK (same signing key, so this is exactly
        the "fresh install" case);
@@ -75,25 +74,8 @@ function Tap-Text([string]$Text) {
 }
 function KeyPrefs { (AppShell cat shared_prefs/pairing_key.xml) -join "`n" }
 function HasKey { return [bool]((AppShell ls shared_prefs) -match "pairing_key\.xml") }
-function IsPortable { return -not ((KeyPrefs) -match 'name="iv"') }
+function IsPortable { return -not ((KeyPrefs) -match 'name="key\.[^"]*\.iv"') }
 function BackupEnabled { return (KeyPrefs) -match 'name="key_backup_enabled" value="true"' }
-function EnableBackupMode {
-    # Same end state as the Settings toggle: flag on, key re-saved portable.
-    # The app is stopped, the flag written, then the app migrates on next load.
-    $xml = KeyPrefs
-    if ($xml -match 'name="key_backup_enabled"') {
-        $xml = $xml -replace 'name="key_backup_enabled" value="false"', 'name="key_backup_enabled" value="true"'
-    } else {
-        $xml = $xml -replace '</map>', '    <boolean name="key_backup_enabled" value="true" />' + "`n</map>"
-    }
-    $edited = Join-Path $OutDir "pairing_key.xml"
-    [IO.File]::WriteAllText($edited, $xml)
-    Adb push $edited /data/local/tmp/pairing_key.xml | Out-Null
-    AppShell cp /data/local/tmp/pairing_key.xml shared_prefs/pairing_key.xml | Out-Null
-    Adb shell am start -n "$pkg/.MainActivity" | Out-Null
-    Start-Sleep -Seconds 4
-    Adb shell am force-stop $pkg | Out-Null
-}
 
 Write-Host "device: $Serial"
 Write-Host "apk:    $Apk"
@@ -105,15 +87,12 @@ if (-not ((Adb shell pm path $pkg) -match "package:")) {
 if (-not (HasKey)) {
     throw "no pairing key on the device - pair the car (NFC card) first, then re-run"
 }
-$publicBefore = [regex]::Match((KeyPrefs), 'name="public">([^<]+)<').Groups[1].Value
+$publicBefore = [regex]::Match((KeyPrefs), 'name="key\.[^"]*\.public">([^<]+)<').Groups[1].Value
 Write-Host "key storage: $(if (IsPortable) { 'portable' } else { 'device-only' })"
 
 if (-not (BackupEnabled) -or -not (IsPortable)) {
-    Write-Host "turning on portable key storage (Settings toggle equivalent)..."
-    EnableBackupMode
+    throw "turn on Settings -> 'Include vehicle keys in Android backup' first, then re-run"
 }
-if (-not (BackupEnabled)) { throw "backup setting did not turn on" }
-if (-not (IsPortable)) { throw "key did not migrate to portable storage" }
 Write-Host "backup enabled: yes; portable key: yes"
 
 # 1. Force an Android backup (best effort)
