@@ -57,6 +57,14 @@ class BatteryHistoryStore(
                 vehicleId = vehicleId,
                 socPercent = reading.socPercent,
                 rangeMiles = reading.rangeMiles,
+                batteryLevel = charge.batteryLevel,
+                usableBatteryLevel = charge.usableBatteryLevel,
+                ratedRangeMiles = charge.batteryRange,
+                estRangeMiles = charge.estBatteryRange,
+                idealRangeMiles = charge.idealBatteryRange,
+                chargeEnergyAdded = charge.chargeEnergyAdded,
+                chargeMilesAddedRated = charge.chargeMilesAddedRated,
+                chargeMilesAddedIdeal = charge.chargeMilesAddedIdeal,
             )
         scope.launch {
             mutex.withLock {

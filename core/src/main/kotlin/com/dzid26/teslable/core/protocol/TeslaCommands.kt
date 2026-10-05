@@ -20,8 +20,16 @@ object TeslaCommands {
         val batteryRange: Float? = range,
         /** Estimated range in miles (`est_battery_range`). */
         val estBatteryRange: Float? = null,
+        /** Ideal range in miles (`ideal_battery_range`); absent on most newer cars. */
+        val idealBatteryRange: Float? = null,
         /** Usable SOC (`usable_battery_level`); can sit below [batteryLevel]. */
         val usableBatteryLevel: Int? = null,
+        /** Energy in kWh added so far this session (`charge_energy_added`). */
+        val chargeEnergyAdded: Float? = null,
+        /** Rated miles added so far this session (`charge_miles_added_rated`). */
+        val chargeMilesAddedRated: Float? = null,
+        /** Ideal miles added so far this session (`charge_miles_added_ideal`). */
+        val chargeMilesAddedIdeal: Float? = null,
     )
 
     fun buildWakeRequest(): ByteArray = UnsignedMessage(RKEAction = RKEAction_E.RKE_ACTION_WAKE_VEHICLE).encode()
@@ -56,7 +64,11 @@ object TeslaCommands {
                 },
             range = charge.battery_range,
             estBatteryRange = charge.est_battery_range,
+            idealBatteryRange = charge.ideal_battery_range,
             usableBatteryLevel = charge.usable_battery_level,
+            chargeEnergyAdded = charge.charge_energy_added,
+            chargeMilesAddedRated = charge.charge_miles_added_rated,
+            chargeMilesAddedIdeal = charge.charge_miles_added_ideal,
         )
     }
 
