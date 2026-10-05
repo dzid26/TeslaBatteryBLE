@@ -9,8 +9,8 @@ All notable changes to this project are documented here. The format is based on
 ### Added
 
 - About screen (Settings → About): version, links, support, licenses, and the
-  Tesla, Inc. disclaimer, as tappable rows; version and licenses collapse into
-  one expandable More card
+  Tesla, Inc. disclaimer, as tappable rows; version, licenses, and their links
+  are flat and always visible
 - Permission wizard: full-screen Material pages with a greeting, then one page
   per missing permission explaining what it is for and what the user has to do,
   with an app-settings fallback when Android stops asking; the cars list keeps a
@@ -20,8 +20,8 @@ All notable changes to this project are documented here. The format is based on
 ### Changed
 
 - Car view: the paired app key status sits in the hero above the connection
-  state, the key card only appears while pairing, and the VIN moved from its own
-  card into a quiet hero row that opens an edit dialog for corrections
+  state, the key card only appears while pairing, and the VIN is hidden behind
+  a long-press "Edit VIN" menu on the car card
 - Wording: the app's key is called "App key" everywhere; "Phone Key" appears
   only in the rename hint that mirrors the Tesla screen
 - Battery history is excluded from Android backup, so a restored install never
@@ -38,9 +38,10 @@ All notable changes to this project are documented here. The format is based on
   reading, instead of only a connection state
 - Unpaired car view explains the NFC-card walkthrough before pairing
 - RSSI is shown only while connected
-- Cars list and car view refresh by pulling down; the pull label says what will
-  happen (Scan for cars / Wake car / Read battery), replacing the Scan, Wake
-  and Read buttons; a Stop action appears while scanning
+- Cars list and car view refresh by pulling down, with a labeled Material pill
+  indicator (Scan for cars / Wake car / Read battery) that swaps its icon for a
+  spinner while running, replacing the Scan, Wake and Read buttons; a Stop
+  action appears while scanning
 - Wake and command send failures are logged instead of failing silently
 - Release screenshots are captured from the simulated car automatically in CI
   and attached to each release as one `screenshot-sheet.png`; tag releases are

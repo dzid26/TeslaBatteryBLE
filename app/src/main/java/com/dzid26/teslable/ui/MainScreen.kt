@@ -250,10 +250,11 @@ private fun ConnectionsScreen(
                     .fillMaxSize()
                     .padding(innerPadding),
             indicator = {
-                RefreshIndicator(
+                RefreshPill(
                     state = pullState,
                     isRefreshing = state.scanning,
-                    label = if (state.scanning) "Scanning…" else "Scan for cars",
+                    pullLabel = "Scan for cars",
+                    refreshingLabel = "Scanning…",
                 )
             },
         ) {

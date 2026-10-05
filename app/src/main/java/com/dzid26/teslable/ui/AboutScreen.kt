@@ -5,8 +5,6 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -21,7 +19,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -32,12 +29,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.dzid26.teslable.BuildConfig
@@ -78,7 +72,7 @@ fun AboutScreen(onBack: () -> Unit) {
             AppCard()
             LinksCard()
             SupportCard()
-            MoreCard()
+            LicensesCard()
             Text(
                 text = "Not affiliated with, endorsed by, or sponsored by Tesla, Inc.",
                 style = MaterialTheme.typography.bodySmall,
@@ -93,6 +87,12 @@ private fun AppCard() {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
             Text("TeslaBatteryBLE", style = MaterialTheme.typography.titleLarge)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = "Version ${BuildConfig.VERSION_NAME}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             Spacer(Modifier.height(12.dp))
             Text(
                 text =
@@ -129,61 +129,20 @@ private fun SupportCard() {
     }
 }
 
-/** Version and licenses live behind one quiet expander instead of two cards. */
+/** Flat and always visible: version, license summary, and the full texts. */
 @Composable
-private fun MoreCard() {
-    var expanded by rememberSaveable { mutableStateOf(false) }
-    val rotation by animateFloatAsState(
-        targetValue = if (expanded) 180f else 0f,
-        label = "more-chevron",
-    )
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(
-            Modifier
-                .padding(vertical = 16.dp)
-                .animateContentSize(),
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .clickable { expanded = !expanded }
-                        .padding(horizontal = 16.dp),
-            ) {
-                Text(
-                    text = "More",
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.weight(1f),
-                )
-                Icon(
-                    imageVector = Icons.Filled.KeyboardArrowDown,
-                    contentDescription = if (expanded) "Collapse" else "Expand",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.rotate(rotation),
-                )
-            }
-            if (expanded) {
-                Spacer(Modifier.height(12.dp))
-                Text(
-                    text = "Version ${BuildConfig.VERSION_NAME}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.padding(horizontal = 16.dp),
-                )
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    text =
-                        "TeslaBatteryBLE is AGPL-3.0-only. Bundled libraries (Wire, " +
-                            "AndroidX, Kotlin) are Apache-2.0.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 16.dp),
-                )
-                Spacer(Modifier.height(4.dp))
-                LinkRow("License text", LICENSE_URL)
-                LinkRow("Third-party notices", NOTICES_URL)
-            }
-        }
+private fun LicensesCard() {
+    SectionCard(title = "Licenses") {
+        Text(
+            text =
+                "TeslaBatteryBLE is AGPL-3.0-only. Bundled libraries (Wire, AndroidX, " +
+                    "Kotlin) are Apache-2.0.",
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.padding(horizontal = 16.dp),
+        )
+        Spacer(Modifier.height(4.dp))
+        LinkRow("License text", LICENSE_URL)
+        LinkRow("Third-party notices", NOTICES_URL)
     }
 }
 

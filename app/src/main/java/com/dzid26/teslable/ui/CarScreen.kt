@@ -3,8 +3,9 @@ package com.dzid26.teslable.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -20,15 +21,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -167,10 +168,11 @@ internal fun CarScreen(
                     .fillMaxSize()
                     .padding(innerPadding),
             indicator = {
-                RefreshIndicator(
+                RefreshPill(
                     state = pullState,
                     isRefreshing = refreshing,
-                    label = if (refreshing) refreshingLabel else pullLabel,
+                    pullLabel = pullLabel,
+                    refreshingLabel = refreshingLabel,
                 )
             },
         ) {
@@ -229,156 +231,144 @@ private fun HeroCard(
     val lastKnown = history.lastOrNull()
     val keySlot = connection?.keySlot ?: vehicle?.keySlot
     val pairing = connection?.pairing ?: PairingPhase.IDLE
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(display.title, style = MaterialTheme.typography.titleMedium)
-                    // The app key state sits above the connection state: it is
-                    // what unlocks authenticated reads.
-                    if (keySlot != null || pairing == PairingPhase.OK) {
+    var menuOpen by remember { mutableStateOf(false) }
+    Card(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .combinedClickable(
+                    onClick = {},
+                    onLongClick = { menuOpen = true },
+                ),
+    ) {
+        Box {
+            Column(Modifier.padding(16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(display.title, style = MaterialTheme.typography.titleMedium)
+                        // The app key state sits above the connection state: it is
+                        // what unlocks authenticated reads.
+                        if (keySlot != null || pairing == PairingPhase.OK) {
+                            Text(
+                                text = keySlot?.let { "App key paired · slot $it" } ?: "App key paired",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                         Text(
-                            text = keySlot?.let { "App key paired · slot $it" } ?: "App key paired",
+                            text = display.status,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        if (pairing == PairingPhase.OK) {
+                            // Only shown for the pairing that just succeeded; the
+                            // Tesla screen calls the key Phone Key, so this hint does.
+                            Text(
+                                text = "Rename the Phone Key in Controls > Locks on the Tesla screen.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    }
+                    StatusPill(connection)
+                }
+                Spacer(Modifier.height(12.dp))
+                SocBlock(level = level, lastKnown = lastKnown, stateText = display.stateText)
+                Spacer(Modifier.height(8.dp))
+                connection?.status?.let { status ->
+                    Text(vehicleStatusText(status), style = MaterialTheme.typography.bodySmall)
+                }
+                connection?.charge?.let { charge ->
+                    val details =
+                        buildList {
+                            charge.chargeLimit?.let { add("Charge limit $it%") }
+                            charge.chargingState?.let { add(chargingStateText(it)) }
+                        }
+                    if (details.isNotEmpty()) {
+                        Text(
+                            text = details.joinToString(" · "),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    Text(
-                        text = display.status,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    if (pairing == PairingPhase.OK) {
-                        // Only shown for the pairing that just succeeded; the
-                        // Tesla screen calls the key Phone Key, so this hint does.
-                        Text(
-                            text = "Rename the Phone Key in Controls > Locks on the Tesla screen.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                    }
-                }
-                StatusPill(connection)
-            }
-            Spacer(Modifier.height(12.dp))
-            when {
-                level != null -> {
-                    Row(verticalAlignment = Alignment.Bottom) {
-                        Text(
-                            text = "$level",
-                            style = MaterialTheme.typography.displayLarge,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                        Text(
-                            text = "%",
-                            style = MaterialTheme.typography.headlineSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(bottom = 6.dp),
-                        )
-                    }
-                    Spacer(Modifier.height(8.dp))
-                    LinearProgressIndicator(
-                        progress = { level / 100f },
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .height(8.dp)
-                                .clip(RoundedCornerShape(4.dp)),
-                    )
-                }
-
-                lastKnown != null -> {
-                    Row(verticalAlignment = Alignment.Bottom) {
-                        Text(
-                            text = "${lastKnown.percent}",
-                            style = MaterialTheme.typography.displayLarge,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Text(
-                            text = "%",
-                            style = MaterialTheme.typography.headlineSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(bottom = 6.dp),
-                        )
-                    }
-                    Spacer(Modifier.height(4.dp))
-                    val age = System.currentTimeMillis() - lastKnown.timestampMillis
-                    Text(
-                        text =
-                            if (age < 60_000) {
-                                "Last known · just now"
-                            } else {
-                                "Last known · ${formatDuration(age)} ago"
-                            },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-
-                else -> Text(text = display.stateText, style = MaterialTheme.typography.headlineSmall)
-            }
-            Spacer(Modifier.height(8.dp))
-            connection?.status?.let { status ->
-                Text(vehicleStatusText(status), style = MaterialTheme.typography.bodySmall)
-            }
-            connection?.charge?.let { charge ->
-                val details =
-                    buildList {
-                        charge.chargeLimit?.let { add("Charge limit $it%") }
-                        charge.chargingState?.let { add(chargingStateText(it)) }
-                    }
-                if (details.isNotEmpty()) {
-                    Text(
-                        text = details.joinToString(" · "),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
                 }
             }
-            VinRow(vehicle = vehicle, onEdit = onEditVin)
+            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                DropdownMenuItem(
+                    text = { Text("Edit VIN") },
+                    onClick = {
+                        menuOpen = false
+                        onEditVin()
+                    },
+                )
+            }
         }
     }
 }
 
-/**
- * The VIN lives in the hero, not in its own card: it is set once and only
- * edited to fix a typo, so it stays quiet until tapped.
- */
+/** The big battery reading: live percent, last known, or the connection state. */
 @Composable
-private fun VinRow(
-    vehicle: Vehicle?,
-    onEdit: () -> Unit,
+private fun SocBlock(
+    level: Int?,
+    lastKnown: BatterySample?,
+    stateText: String,
 ) {
-    Spacer(Modifier.height(12.dp))
-    HorizontalDivider()
-    Spacer(Modifier.height(4.dp))
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .clickable(onClick = onEdit)
-                .padding(vertical = 4.dp),
-    ) {
-        Text(
-            text = "VIN",
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(Modifier.width(12.dp))
-        Text(
-            text = vehicle?.maskedVin ?: "Not set",
-            style = MaterialTheme.typography.bodyMedium,
-            fontFamily = FontFamily.Monospace,
-            modifier = Modifier.weight(1f),
-        )
-        Icon(
-            imageVector = Icons.Filled.Edit,
-            contentDescription = "Edit VIN",
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(18.dp),
-        )
+    when {
+        level != null -> {
+            Row(verticalAlignment = Alignment.Bottom) {
+                Text(
+                    text = "$level",
+                    style = MaterialTheme.typography.displayLarge,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    text = "%",
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 6.dp),
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+            LinearProgressIndicator(
+                progress = { level / 100f },
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(8.dp)
+                        .clip(RoundedCornerShape(4.dp)),
+            )
+        }
+
+        lastKnown != null -> {
+            Row(verticalAlignment = Alignment.Bottom) {
+                Text(
+                    text = "${lastKnown.percent}",
+                    style = MaterialTheme.typography.displayLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    text = "%",
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 6.dp),
+                )
+            }
+            Spacer(Modifier.height(4.dp))
+            val age = System.currentTimeMillis() - lastKnown.timestampMillis
+            Text(
+                text =
+                    if (age < 60_000) {
+                        "Last known · just now"
+                    } else {
+                        "Last known · ${formatDuration(age)} ago"
+                    },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
+        else -> Text(text = stateText, style = MaterialTheme.typography.headlineSmall)
     }
 }
 
