@@ -77,12 +77,19 @@ class PairingKeyStore(context: Context) {
             return decrypted
         }
 
-        return runCatching {
+        val plaintext = runCatching {
             TeslaKeyPair(
                 privateKeyPkcs8 = Base64.decode(stored, Base64.NO_WRAP),
                 publicKeyRaw = Base64.decode(publicKey, Base64.NO_WRAP),
             )
-        }.getOrNull()
+        }.getOrNull() ?: return null
+
+        if (!isBackupEnabled()) {
+            // A plaintext key exists but the current mode is device-only:
+            // re-encrypt it under the Keystore key.
+            save(plaintext, backupEnabled = false)
+        }
+        return plaintext
     }
 
     private fun save(keyPair: TeslaKeyPair, backupEnabled: Boolean = isBackupEnabled()) {
