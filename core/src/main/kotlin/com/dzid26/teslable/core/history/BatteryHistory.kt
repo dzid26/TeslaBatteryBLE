@@ -14,8 +14,15 @@ data class BatterySample(
      * rows written before per-vehicle history existed.
      */
     val vehicleId: String = "",
+    /** Precise SOC the car reported; [percent] is its rounded form. */
+    val socPercent: Float? = null,
+    /** Estimated or rated range in miles; null when the car reported none. */
+    val rangeMiles: Float? = null,
 ) {
     val isCharging: Boolean get() = chargingState == "Charging"
+
+    /** [socPercent] when recorded, else the rounded [percent] (older rows). */
+    val bestSocPercent: Float get() = socPercent ?: percent.toFloat()
 }
 
 /** Time window for the battery graph. */
@@ -40,12 +47,12 @@ fun List<BatterySample>.within(
 /** Summary since the end of the last completed charging session. */
 data class ChargeStats(
     val sinceMillis: Long,
-    val startPercent: Int,
-    val currentPercent: Int,
-    val minPercent: Int,
-    val maxPercent: Int,
+    val startPercent: Float,
+    val currentPercent: Float,
+    val minPercent: Float,
+    val maxPercent: Float,
 ) {
-    val usedPercent: Int get() = (startPercent - currentPercent).coerceAtLeast(0)
+    val usedPercent: Float get() = (startPercent - currentPercent).coerceAtLeast(0f)
 }
 
 /**
@@ -62,9 +69,9 @@ fun chargeStats(samples: List<BatterySample>): ChargeStats? {
     val tail = samples.subList(startIndex, samples.size)
     return ChargeStats(
         sinceMillis = start.timestampMillis,
-        startPercent = start.percent,
-        currentPercent = tail.last().percent,
-        minPercent = tail.minOf { it.percent },
-        maxPercent = tail.maxOf { it.percent },
+        startPercent = start.bestSocPercent,
+        currentPercent = tail.last().bestSocPercent,
+        minPercent = tail.minOf { it.bestSocPercent },
+        maxPercent = tail.maxOf { it.bestSocPercent },
     )
 }
