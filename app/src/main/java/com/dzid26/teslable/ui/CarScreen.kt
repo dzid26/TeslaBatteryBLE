@@ -76,7 +76,6 @@ import com.dzid26.teslable.core.history.BatterySample
 import com.dzid26.teslable.core.history.HistoryRange
 import com.dzid26.teslable.core.history.chargeProjection
 import com.dzid26.teslable.core.history.chargeStats
-import com.dzid26.teslable.core.history.gapFlags
 import com.dzid26.teslable.core.history.within
 import com.dzid26.teslable.core.protocol.TeslaCommands
 import com.dzid26.teslable.core.reading.PreciseReading
@@ -694,7 +693,6 @@ private fun BatteryChart(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     val textMeasurer = rememberTextMeasurer()
-    val gaps = samples.gapFlags()
     val projection = chargeProjection(samples)
 
     Canvas(modifier) {
@@ -739,6 +737,7 @@ private fun BatteryChart(
             )
         }
 
+        // Constant narrow line; the dots below mark where measurements exist.
         for (index in 1 until samples.size) {
             val previous = samples[index - 1]
             val current = samples[index]
@@ -746,8 +745,18 @@ private fun BatteryChart(
                 color = if (current.isCharging) chargingColor else lineColor,
                 start = Offset(x(previous.timestampMillis), y(previous.percent)),
                 end = Offset(x(current.timestampMillis), y(current.percent)),
-                strokeWidth = (if (gaps[index - 1]) 1.dp else 2.dp).toPx(),
+                strokeWidth = 1.5.dp.toPx(),
                 cap = StrokeCap.Round,
+            )
+        }
+
+        // One dot per measurement, no decimation: dense samples overlap into a
+        // thick band, sparse ones read as separate dots.
+        samples.forEach { sample ->
+            drawCircle(
+                color = if (sample.isCharging) chargingColor else lineColor,
+                radius = 2.dp.toPx(),
+                center = Offset(x(sample.timestampMillis), y(sample.percent)),
             )
         }
 
@@ -764,14 +773,6 @@ private fun BatteryChart(
                         width = 2.dp.toPx(),
                         pathEffect = PathEffect.dashPathEffect(floatArrayOf(8.dp.toPx(), 6.dp.toPx())),
                     ),
-            )
-        }
-
-        if (samples.size == 1) {
-            drawCircle(
-                color = lineColor,
-                radius = 3.dp.toPx(),
-                center = Offset(x(samples.first().timestampMillis), y(samples.first().percent)),
             )
         }
 

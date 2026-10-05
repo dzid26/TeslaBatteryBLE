@@ -33,7 +33,8 @@ Dark mode:
 - **On-demand wake** — the car is only woken when you ask, never in the background
 - **Background tracking** via a foreground service: SOC timeline and connection state while parked or charging
 - **History graph** (6 h / 24 h / 7 d / all) with since-last-charge stats;
-  gaps in the data and the projected charge completion use distinct line styles
+  every measurement is a dot (dense samples form a thick band) and the
+  projected charge completion is dashed
 - **Simulated car** in debug builds for development without a vehicle or hardware (demo/screenshot mode)
 
 Everything is computed on-device. The app has no internet permission.
