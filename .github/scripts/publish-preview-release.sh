@@ -10,10 +10,11 @@ REPO="${GITHUB_REPOSITORY:?GITHUB_REPOSITORY is required}"
 SHA="${GITHUB_SHA:-$(git rev-parse HEAD)}"
 TAG="preview"
 TITLE="Preview build"
+SHORT_SHA="${SHA:0:7}"
 APK="dist/app-debug.apk"
-ASSET_APK="TeslaBatteryBLE-preview.apk"
+ASSET_APK="TeslaBatteryBLE-preview-${SHORT_SHA}.apk"
 SHEET="screenshots/screenshot-sheet.png"
-SHEET_NAME="$(basename "$SHEET")"
+SHEET_NAME="screenshot-sheet-${SHORT_SHA}.png"
 SHEET_URL="https://github.com/$REPO/releases/download/$TAG/$SHEET_NAME"
 
 [ -f "$APK" ] || { echo "missing $APK" >&2; exit 1; }
@@ -81,8 +82,9 @@ fi
 gh release create "$TAG" --title "$TITLE" --prerelease --notes-file preview-notes.md
 
 [ -f "$SHEET" ] || { echo "missing $SHEET (the capture step must succeed)" >&2; exit 1; }
+cp "$SHEET" "$SHEET_NAME"
 gh release upload "$TAG" "$ASSET_APK" --clobber
-gh release upload "$TAG" "$SHEET" --clobber
+gh release upload "$TAG" "$SHEET_NAME" --clobber
 
 # The release is not done until both assets are actually attached.
 assets="$(gh release view "$TAG" --json assets --jq '.assets[].name')"
