@@ -20,6 +20,43 @@ class BatteryChartTest {
     )
 
     @Test
+    fun dischargeProjectionNullWhileCharging() {
+        val samples = listOf(sample(0, 80, "Charging", limit = 90), sample(30, 70, "Charging", limit = 90))
+        assertNull(dischargeProjection(samples, windowMillis = 6 * 60 * 60_000L, nowMillis = 31 * 60_000L))
+    }
+
+    @Test
+    fun dischargeProjectionNullWhenTheLastSampleIsStale() {
+        val samples = listOf(sample(0, 80), sample(30, 70))
+        // The last sample is five hours old, past the window's freshness bound.
+        assertNull(dischargeProjection(samples, windowMillis = 6 * 60 * 60_000L, nowMillis = 330 * 60_000L))
+    }
+
+    @Test
+    fun dischargeProjectionNullWhenThePercentRose() {
+        val samples = listOf(sample(0, 70), sample(30, 75))
+        assertNull(dischargeProjection(samples, windowMillis = 6 * 60 * 60_000L, nowMillis = 31 * 60_000L))
+    }
+
+    @Test
+    fun dischargeProjectionCarriesTheWindowedRateForward() {
+        // 10 points over two hours -> 60 points lower over the 12 h horizon.
+        val samples = listOf(sample(0, 80), sample(60, 75), sample(120, 70))
+        val projection =
+            dischargeProjection(samples, windowMillis = 6 * 60 * 60_000L, nowMillis = 121 * 60_000L)!!
+        assertEquals(10, projection.projectedPercent)
+        assertEquals(120 * 60_000L + 12 * 60 * 60_000L, projection.projectedAtMillis)
+    }
+
+    @Test
+    fun projectionWindowScalesWithTheRange() {
+        assertEquals(2 * 60 * 60_000L, HistoryRange.SIX_HOURS.projectionWindowMillis())
+        assertEquals(6 * 60 * 60_000L, HistoryRange.DAY.projectionWindowMillis())
+        assertEquals(24 * 60 * 60_000L, HistoryRange.WEEK.projectionWindowMillis())
+        assertEquals(7 * 24 * 60 * 60_000L, HistoryRange.ALL.projectionWindowMillis())
+    }
+
+    @Test
     fun projectionNullWhenLastSampleIsNotCharging() {
         val samples =
             listOf(

@@ -8,6 +8,10 @@ All notable changes to this project are documented here. The format is based on
 
 ### Added
 
+- Discharge projection on the history chart: while parked, a dashed line and
+  caption ("Discharging · projected 71% by 09:20") carry the recent drain rate
+  over a trailing window scaled to the range (2 h / 6 h / 24 h / 7 d) twelve
+  hours ahead; the charge projection takes precedence while charging
 - About screen (Settings → About): version, links, support, licenses, and the
   Tesla, Inc. disclaimer, as tappable rows; version, licenses, and their links
   are flat and always visible
