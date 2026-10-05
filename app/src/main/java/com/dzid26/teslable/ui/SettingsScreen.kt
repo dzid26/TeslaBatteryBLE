@@ -263,20 +263,12 @@ private fun AboutCard(onOpenAbout: () -> Unit) {
             )
             Spacer(Modifier.height(8.dp))
             Text(
-                text = "TeslaBatteryBLE ${BuildConfig.VERSION_NAME}",
+                text = "TeslaBatteryBLE version: ${BuildConfig.VERSION_NAME}",
                 style = MaterialTheme.typography.bodyMedium,
-            )
-            Spacer(Modifier.height(4.dp))
-            Text(
-                text =
-                    "Your Tesla's battery, tracked locally over BLE. " +
-                        "No cloud, no account, nothing leaves the phone.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(8.dp))
             Text(
-                text = "Version, licenses, privacy, and support",
+                text = "More...",
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.primary,
             )
