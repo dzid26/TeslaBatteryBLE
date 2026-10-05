@@ -21,9 +21,9 @@ app, pair a key with an NFC card tap on the console, and read the car directly.
 
 Dark mode:
 
-| Overview | Car |
-| --- | --- |
-| ![Overview in dark mode](docs/images/01-overview-dark.png) | ![Car in dark mode](docs/images/03-car-dark.png) |
+| Overview | Scanning | Car | History | Settings |
+| --- | --- | --- | --- | --- |
+| ![Overview in dark mode](docs/images/01-overview-dark.png) | ![Scanning in dark mode](docs/images/02-scanning-dark.png) | ![Car in dark mode](docs/images/03-car-dark.png) | ![History in dark mode](docs/images/04-history-dark.png) | ![Settings in dark mode](docs/images/05-settings-dark.png) |
 
 ## Features
 
