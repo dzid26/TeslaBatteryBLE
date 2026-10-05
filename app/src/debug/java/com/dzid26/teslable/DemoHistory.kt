@@ -120,13 +120,10 @@ internal object DemoHistory {
         val added = point.chargeStartPercent?.let { point.percent - it }
         return BatterySample(
             timestampMillis = now - point.minutesAgo * MINUTE,
-            percent = point.percent,
+            batteryLevel = point.percent,
             chargingState = point.state,
             chargeLimit = CHARGE_LIMIT,
             vehicleId = vehicleId,
-            socPercent = point.percent.toFloat(),
-            rangeMiles = rated,
-            batteryLevel = point.percent,
             usableBatteryLevel = point.percent,
             ratedRangeMiles = rated,
             estRangeMiles = point.percent * ESTIMATED_MILES_PER_PERCENT,

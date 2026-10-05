@@ -14,7 +14,7 @@ class BatteryChartTest {
         limit: Int? = null,
     ) = BatterySample(
         timestampMillis = minutes * 60_000L,
-        percent = percent,
+        batteryLevel = percent,
         chargingState = state,
         chargeLimit = limit,
     )

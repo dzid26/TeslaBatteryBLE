@@ -340,7 +340,7 @@ private fun SocBlock(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            lastKnown.rangeMiles?.let { miles ->
+            lastKnown.ratedRangeMiles?.let { miles ->
                 Text(
                     text = "${formatRangeMiles(miles)} mi",
                     style = MaterialTheme.typography.bodySmall,

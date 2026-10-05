@@ -14,10 +14,8 @@ object TeslaCommands {
         val batteryLevel: Int?,
         val chargeLimit: Int?,
         val chargingState: String?,
-        /** Rated range in miles (`battery_range`); mirrors [batteryRange]. */
-        val range: Float?,
-        /** Rated range in miles (`battery_range`); defaults to [range]. */
-        val batteryRange: Float? = range,
+        /** Rated range in miles (`battery_range`). */
+        val batteryRange: Float? = null,
         /** Estimated range in miles (`est_battery_range`). */
         val estBatteryRange: Float? = null,
         /** Ideal range in miles (`ideal_battery_range`); absent on most newer cars. */
@@ -62,7 +60,7 @@ object TeslaCommands {
                         else -> null
                     }
                 },
-            range = charge.battery_range,
+            batteryRange = charge.battery_range,
             estBatteryRange = charge.est_battery_range,
             idealBatteryRange = charge.ideal_battery_range,
             usableBatteryLevel = charge.usable_battery_level,

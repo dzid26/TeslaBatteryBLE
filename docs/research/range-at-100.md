@@ -71,9 +71,9 @@ No range-at-100 signal. Fleet Telemetry also needs an owner account plus a self-
 
 `capacity ≈ energyAdded / (ΔSOC / 100)` over one charge session, or `charge_miles_added_rated / (ΔSOC / 100)` for a full-range estimate directly.
 
-- Losses inflate "added": BLE exposes one `charge_energy_added`; Tesla's cloud splits AC (charger-measured) from DC (battery-measured) and that distinction is lost over BLE. HVAC/sentry load during the session also counts.
+- `charge_energy_added` is measured at the battery (Tesla's TSV: `DCChargingEnergyIn`, l.41), so it excludes AC charging losses; what is lost over BLE is the cloud's separate AC (charger-measured) figure. HVAC/sentry load during the session still counts.
 - Small swings amplify SOC error: use ΔSOC ≥30–50%, rested endpoints, repeat and average (±3–5% per session, ±1–3% averaged).
-- `charge_miles_added_rated` is derived from energy added / rated constant, so it carries the same bias.
+- `charge_miles_added_rated` is understood to be energy added / rated constant (unverified; see section 5), so it tracks the same battery-measured energy.
 
 ### Cross-check
 
@@ -83,10 +83,10 @@ Average the range-method and energy-delta results; flag a gap >5 pp as a data-qu
 
 ### Fields to collect (all now logged per charge-state read)
 
-History CSV columns: `vehicleId,timestampMillis,percent,chargeLimit,chargingState,socPercent,rangeMiles,batteryLevel,usableBatteryLevel,ratedRangeMiles,estRangeMiles,idealRangeMiles,chargeEnergyAdded,chargeMilesAddedRated,chargeMilesAddedIdeal`.
+History CSV columns (raw car fields only): `vehicleId,timestampMillis,batteryLevel,chargeLimit,chargingState,usableBatteryLevel,ratedRangeMiles,estRangeMiles,idealRangeMiles,chargeEnergyAdded,chargeMilesAddedRated,chargeMilesAddedIdeal`.
 
-- `percent` is the rounded form of `socPercent`; `socPercent` is the displayed level (`battery_level`).
-- `rangeMiles` is the rated range (`battery_range`); the explicit columns carry the raw trio.
+- `batteryLevel` is the displayed level (`battery_level`); the chart, stats, and car view derive their display values from the raw fields at runtime.
+- `usableBatteryLevel` can sit below `batteryLevel`; the rated/est/ideal columns carry the range trio.
 - Identical percent+state readings within 60 s are skipped; the store keeps the newest 20k rows. Rows from the older CSV format are dropped on load (pre-1.0, no migration).
 
 Manually note per session: ambient temperature, minutes since the last drive or charge (rest), the car's displayed range and display mode (Rated / Estimated / Ideal), and firmware version.
@@ -115,7 +115,19 @@ One SOC convention reproduces the 100% anchor within ±2 mi across points, and t
 The app previously logged only `socPercent` and the est-preferred `rangeMiles`, so the raw rated/ideal ranges, both SOC variants, and the session counters were unavailable for calibration. This branch adds them end-to-end:
 
 - `TeslaCommands.Charge`: parses `ideal_battery_range`, `charge_energy_added`, `charge_miles_added_rated`, `charge_miles_added_ideal` (test: `TeslaCommandsTest`).
-- `BatterySample` + `BatteryHistoryCsv`: new nullable columns `batteryLevel`, `usableBatteryLevel`, `ratedRangeMiles`, `estRangeMiles`, `idealRangeMiles`, `chargeEnergyAdded`, `chargeMilesAddedRated`, `chargeMilesAddedIdeal`; 15-column format, older rows drop on load (no migration, pre-1.0).
+- `BatterySample` + `BatteryHistoryCsv`: raw car fields only, 12 columns (`batteryLevel`, `usableBatteryLevel`, `ratedRangeMiles`, `estRangeMiles`, `idealRangeMiles`, `chargeEnergyAdded`, `chargeMilesAddedRated`, `chargeMilesAddedIdeal`); older rows drop on load (no migration, pre-1.0).
 - `BatteryHistoryStore.record` copies every new field from the charge state.
 
-No UI change; the chart and stats keep using `rangeMiles`.
+The chart plots `percent`; the car view shows the displayed SOC and rated range, and stats derive the displayed level at runtime.
+
+## 5. Assumptions / unverified
+
+Secondhand or inferred; none of these are pinned to a Tesla source yet:
+
+- **Service-Mode conditions** (<20% SOC, AC ≤5 kW, up to 24 h; rate-limited): from in-car UI and secondhand reports.
+- **Buffer semantics** (`usable_battery_level` excludes a bottom buffer; rated miles follow usable energy): inferred from the field pair.
+- **`charge_miles_added_rated` derivation** (energy added / rated constant): inferred from the values.
+- **Error percentages** (±2–5% single reading, ±1–2% trended; ±3–5% per session, ±1–3% averaged): from `battery-health-methods.md`, itself secondhand.
+- **`NominalFullPackEnergyKwh`** (proto only, added for firmware 2026.32): inferred from the pinned proto and signal matrix; absent from Tesla's TSV.
+
+The 100% anchor and the sweep in section 3 can confirm the buffer semantics; the Service-Mode conditions and the firmware claim need a Tesla doc or an in-car check.
