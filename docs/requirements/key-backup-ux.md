@@ -21,27 +21,36 @@ no export/import, no deep links.
 - Forced a Google backup with `bmgr backupnow`; `settings get secure
   backup_auto_restore` = 1.
 - `adb uninstall` + `adb install` restored app data and the portable key
-  automatically: identical key bytes, `Phone key: Paired · slot 8`, history
-  intact, no NFC re-pair.
+  automatically: identical key bytes, `Phone key: Paired · slot 8`, no NFC
+  re-pair. Battery history is excluded from Android backup on purpose, so a
+  restored install starts with an empty history and no stale battery reading.
 - `bmgr restore <token> <package>` remains the fallback when automatic restore
   is off or the install did not restore.
 
 ## Decided against (for now)
 
 - Onboarding flow, "pairing not restored" card, in-app key export/import.
-- A danger-zone "forget key" action. The use cases are already covered, and a
-  local delete would overpromise:
-  - Selling or handing over the phone: the car's key list (Controls → Locks)
-    is the real revocation; uninstall or a factory reset removes the local
-    copy. An in-app delete cannot touch the car's whitelist.
-  - Key compromise or a lost phone: same car-side removal; a lost phone should
-    be locked or remotely wiped.
-  - Testing pairing: "Clear pairing cache" already resets the app's pairing
-    state, and re-pairing re-enrolls the same key.
-  - Getting the key out of Google backup: turn the setting off so the next
-    backup pass replaces the cloud copy, or `bmgr wipe` over adb for an
-    immediate purge. The app cannot verify the cloud copy, so a button would
-    give false confidence.
-  - Privacy "delete my data": uninstall or system "Clear storage" covers it.
-- Revisit if the app ever enrolls OWNER/DRIVER-scoped keys, where key loss has
-  a bigger blast radius.
+- A "restore now" button: apps cannot run `bmgr`, and there is no public
+  restore API (`BackupManager` can request a backup pass, not a restore).
+  Auto-restore at install covers the common case; the FAQ documents the adb
+  fallback.
+- A plain "forget key" action: uninstall or system "Clear storage" covers it.
+
+## Needed: replace the key after a theft
+
+Removing the key in the car (Controls → Locks) revokes it, but a restored
+backup brings the same key back. Pairing reuses the stored key
+(`loadOrCreate`), so tapping Pair re-enrolls the old public key and a stolen
+copy becomes valid again. The theft case is therefore different from the
+others:
+
+- Settings → Pairing gets a **Replace key** action: discard the stored key,
+  generate a fresh one, and keep cars/VIN/history. Pairing then enrolls only
+  the new key.
+- The confirmation must say: remove the old key in the car first; this does not
+  touch the car's whitelist or existing Google backup copies (turn backup off
+  and let a pass replace them, or `bmgr wipe` via adb).
+- FAQ: phone stolen → remove the key in the car → on the new phone replace the
+  key before pairing → re-enable backup.
+- Revisit scopes beyond CHARGING_MANAGER, where key loss has a bigger blast
+  radius.

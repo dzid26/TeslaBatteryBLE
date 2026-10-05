@@ -68,6 +68,7 @@ A trustworthy shell around the existing protocol work. No user-facing features.
 
 - [x] UX P0: permission rationale + pairing walkthrough (incl. NFC card tap), connection state clarity, last-known SOC, readable errors (2026-10-05).
 - [x] Key backup & restore UX: Settings-only wording shipped and restore verified on a real fresh install (2026-10-05); spec records what is intentionally out of scope: `docs/requirements/key-backup-ux.md`.
+- [ ] Replace vehicle key action for theft recovery (Settings → Pairing): `docs/requirements/key-backup-ux.md`.
 - [x] About screen: version, licenses, privacy statement, donation links (2026-10-05).
 - [ ] Dark theme + strings extracted to resources (translation-ready).
 - [x] Fake BLE transport + simulated car (`FakeCarProtocol`, round-trip tests, CI demo run).
