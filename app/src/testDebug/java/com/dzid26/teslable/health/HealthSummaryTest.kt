@@ -16,6 +16,7 @@ class HealthSummaryTest {
         limit: Int? = 85,
         ratedRangeMiles: Float? = null,
         energyAddedKwh: Float? = null,
+        milesAddedRated: Float? = null,
     ) = BatterySample(
         timestampMillis = minutes * 60_000L,
         batteryLevel = level,
@@ -24,6 +25,7 @@ class HealthSummaryTest {
         vehicleId = "Sdemo",
         ratedRangeMiles = ratedRangeMiles,
         chargeEnergyAdded = energyAddedKwh,
+        chargeMilesAddedRated = milesAddedRated,
     )
 
     @Test
@@ -51,14 +53,31 @@ class HealthSummaryTest {
             listOf(
                 sample(0, 20),
                 sample(10, 20, "Charging", energyAddedKwh = 0f),
-                sample(20, 40, "Charging", energyAddedKwh = 13.125f),
-                sample(30, 60, "Charging", energyAddedKwh = 26.25f),
+                sample(20, 40, "Charging", energyAddedKwh = 13.125f, milesAddedRated = 60f),
+                sample(30, 60, "Charging", energyAddedKwh = 26.25f, milesAddedRated = 120f),
                 sample(40, 60),
             )
         val summary = healthSummary(samples)
         assertNotNull(summary.capacityKwh)
         assertEquals(65.625f, summary.capacityKwh!!, 0.01f)
         assertEquals(40f, summary.capacitySwingPercent!!, 0.01f)
+        // The backbone constant: 26.25 kWh over 120 rated miles.
+        assertEquals(0.21875f, summary.ratedKwhPerMile!!, 0.0001f)
+        // Session scale: 120 miles over a 40% swing -> 300 miles full range.
+        assertEquals(300f, summary.fullRangeMiles!!, 0.01f)
+    }
+
+    @Test
+    fun `the session scale wins over a single rated reading`() {
+        val samples =
+            listOf(
+                sample(0, 20),
+                sample(10, 20, "Charging", energyAddedKwh = 0f),
+                sample(20, 60, "Charging", energyAddedKwh = 26.25f, milesAddedRated = 120f),
+                sample(30, 60, ratedRangeMiles = 174f),
+            )
+        // The single reading extrapolates to 290 mi; the session's scale wins.
+        assertEquals(300f, healthSummary(samples).fullRangeMiles!!, 0.01f)
     }
 
     @Test
@@ -74,7 +93,7 @@ class HealthSummaryTest {
             listOf(
                 sample(0, 20),
                 sample(10, 20, "Charging", energyAddedKwh = 0f),
-                sample(20, 60, "Charging", energyAddedKwh = 26.25f),
+                sample(20, 60, "Charging", energyAddedKwh = 26.25f, milesAddedRated = 120f),
                 sample(30, 60),
                 sample(40, 80, ratedRangeMiles = 216f),
             )

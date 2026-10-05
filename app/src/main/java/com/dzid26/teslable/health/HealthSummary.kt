@@ -19,8 +19,25 @@ data class ChargeSession(
     val startPercent: Float,
     val endPercent: Float,
     val energyAddedKwh: Float?,
+    val milesAddedRated: Float?,
 ) {
     val swingPercent: Float get() = endPercent - startPercent
+
+    /** The rated constant this session measured: kWh per rated mile. */
+    val kwhPerMile: Float?
+        get() {
+            val energy = energyAddedKwh ?: return null
+            val miles = milesAddedRated?.takeIf { it > 0f } ?: return null
+            return energy / miles
+        }
+
+    /** The full-range scale the session implies: miles added over its swing. */
+    val fullRangeMiles: Float?
+        get() {
+            val miles = milesAddedRated?.takeIf { it > 0f } ?: return null
+            if (swingPercent < MIN_SWING_PERCENT) return null
+            return miles / (swingPercent / 100f)
+        }
 }
 
 /**
@@ -35,6 +52,8 @@ data class HealthSummary(
     val sohSpreadPoints: Float?,
     val sohMismatch: Boolean,
     val capacityKwh: Float?,
+    /** The session's rated constant, kWh per rated mile. */
+    val ratedKwhPerMile: Float?,
     val capacitySwingPercent: Float?,
     val fullRangeMiles: Float?,
     val rangeSocPercent: Float?,
@@ -77,21 +96,40 @@ fun healthSummary(
 ): HealthSummary {
     val sessions = chargeSessions(samples)
     val lastSession = sessions.lastOrNull()
-    // The capacity estimate uses the most recent session with a meaningful
-    // swing; a session still in progress would otherwise hide it.
-    val capacitySession = sessions.lastOrNull { it.swingPercent >= MIN_SWING_PERCENT }
-    val capacity =
-        capacitySession?.let { session ->
-            session.energyAddedKwh?.let { energy ->
-                EnergyDeltaEstimator.estimate(
-                    energyAddedKwh = energy,
-                    socStartPercent = session.startPercent,
-                    socEndPercent = session.endPercent,
-                    newCapacityKwh = newCapacityKwh,
-                )
+    // Rated miles are the backbone (research: range-as-soc-signal section 6):
+    // a session that measured both energy added and rated miles added gives
+    // the rated constant (kWh/mi) and the full-range scale directly. A single
+    // rated-range reading is the fallback until such a session exists.
+    val backboneSession = sessions.lastOrNull { it.kwhPerMile != null && it.fullRangeMiles != null }
+    val energySession =
+        sessions.lastOrNull { it.energyAddedKwh != null && it.swingPercent >= MIN_SWING_PERCENT }
+    val rangeSample = samples.lastOrNull { it.ratedRangeMiles != null && it.batteryLevel > 0 }
+    val fullRangeMiles =
+        backboneSession?.fullRangeMiles
+            ?: rangeSample?.let { sample -> sample.ratedRangeMiles!! / (sample.batteryLevel / 100f) }
+    val ratedKwhPerMile = backboneSession?.kwhPerMile
+    val capacityKwh =
+        backboneSession?.let { session -> session.kwhPerMile!! * session.fullRangeMiles!! }
+            ?: energySession?.let { session ->
+                EnergyDeltaEstimator
+                    .estimate(
+                        energyAddedKwh = session.energyAddedKwh!!,
+                        socStartPercent = session.startPercent,
+                        socEndPercent = session.endPercent,
+                    )?.usableCapacityKwh
+            }
+    val deltaSoh =
+        energySession?.let { session ->
+            newCapacityKwh?.let { baseline ->
+                EnergyDeltaEstimator
+                    .estimate(
+                        energyAddedKwh = session.energyAddedKwh!!,
+                        socStartPercent = session.startPercent,
+                        socEndPercent = session.endPercent,
+                        newCapacityKwh = baseline,
+                    )?.sohPercent
             }
         }
-    val rangeSample = samples.lastOrNull { it.ratedRangeMiles != null && it.batteryLevel > 0 }
     val ratedSoh =
         rangeSample?.let { sample ->
             epaRatedRangeMiles?.let { epa ->
@@ -103,23 +141,20 @@ fun healthSummary(
                     )?.sohPercent
             }
         }
-    val fused = HealthFusion.fuse(ratedSoh, capacity?.sohPercent)
-    val fullRange =
-        rangeSample?.let { sample ->
-            sample.ratedRangeMiles!! / (sample.batteryLevel / 100f)
-        }
+    val fused = HealthFusion.fuse(ratedSoh, deltaSoh)
     return HealthSummary(
         sessions = sessions.size,
         learningTarget = LEARNING_SESSIONS,
         sohPercent = fused?.sohPercent,
         sohSpreadPoints = fused?.spreadPoints,
         sohMismatch = fused?.mismatch == true,
-        capacityKwh = capacity?.usableCapacityKwh,
-        capacitySwingPercent = capacity?.socDeltaPercent,
-        fullRangeMiles = fullRange,
+        capacityKwh = capacityKwh,
+        ratedKwhPerMile = ratedKwhPerMile,
+        capacitySwingPercent = (backboneSession ?: energySession)?.swingPercent,
+        fullRangeMiles = fullRangeMiles,
         rangeSocPercent = rangeSample?.batteryLevel?.toFloat(),
         confidence = confidenceFor(sessions.size),
-        qualityNote = qualityNote(capacitySession ?: lastSession, rangeSample),
+        qualityNote = qualityNote(backboneSession ?: energySession ?: lastSession, rangeSample),
     )
 }
 
@@ -131,6 +166,7 @@ private fun session(
         startPercent = start.batteryLevel.toFloat(),
         endPercent = last.batteryLevel.toFloat(),
         energyAddedKwh = last.chargeEnergyAdded?.takeIf { it > 0f },
+        milesAddedRated = last.chargeMilesAddedRated?.takeIf { it > 0f },
     )
 
 private fun confidenceFor(sessions: Int): HealthConfidence =

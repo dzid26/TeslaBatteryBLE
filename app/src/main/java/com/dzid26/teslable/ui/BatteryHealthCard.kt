@@ -57,7 +57,10 @@ internal fun BatteryHealthCard(summary: HealthSummary) {
                 EstimateRow(
                     label = "Usable capacity",
                     value = "~${(kwh * 10).roundToInt() / 10f} kWh",
-                    detail = "energy added over the last charge",
+                    detail =
+                        summary.ratedKwhPerMile?.let { constant ->
+                            "rated constant ${(constant * 100).roundToInt() / 100f} kWh/mi"
+                        } ?: "energy added over the last charge",
                 )
             }
             summary.fullRangeMiles?.let { miles ->
