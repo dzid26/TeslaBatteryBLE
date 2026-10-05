@@ -1,0 +1,38 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Post a comment on a pull request as the repository's automation identity
+# (github-actions[bot]) instead of the maintainer's personal account.
+#
+# Usage (from a checkout with gh authenticated):
+#   body_b64="$(printf '%s' "your comment" | base64 -w0)"
+#   gh workflow run agent-comment.yml -f pr=<number> -f body_b64="$body_b64"
+name: Agent comment
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: Pull request number
+        required: true
+        type: string
+      body_b64:
+        description: Base64-encoded comment body
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  comment:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Post comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ inputs.pr }}
+          BODY_B64: ${{ inputs.body_b64 }}
+        run: |
+          printf '%s' "$BODY_B64" | base64 -d > comment.md
+          gh pr comment "$PR" --body-file comment.md
