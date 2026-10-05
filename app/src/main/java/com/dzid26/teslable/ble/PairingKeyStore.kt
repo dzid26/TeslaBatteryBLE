@@ -26,9 +26,6 @@ import javax.crypto.spec.GCMParameterSpec
  * survive a phone change. The user can opt in to portable mode (one global
  * setting), which stores the private keys as plaintext PKCS#8 base64 so
  * Android's system backup can restore pairing on a new phone.
- *
- * Older installs held one global key shared by all cars; it is adopted as the
- * key of every known vehicle once, then removed.
  */
 class PairingKeyStore(
     context: Context,
@@ -64,63 +61,18 @@ class PairingKeyStore(
         return keyPair
     }
 
-    /**
-     * Adopts the pre-per-car global key as the key of every vehicle that does
-     * not have one yet, then removes the legacy entries. Does nothing while no
-     * vehicles are known, so the legacy key is not lost before they appear.
-     */
-    fun adoptLegacyKey(vehicleIds: Collection<String>) {
-        if (vehicleIds.isEmpty()) return
-        val legacy = loadLegacy() ?: return
-        vehicleIds.filter { loadInternal(it) == null }.forEach { save(it, legacy) }
-        prefs
-            .edit()
-            .remove(KEY_PUBLIC)
-            .remove(KEY_PRIVATE)
-            .remove(KEY_IV)
-            .apply()
-    }
-
-    private fun loadLegacy(): TeslaKeyPair? {
-        val publicKey = prefs.getString(KEY_PUBLIC, null) ?: return null
-        val stored = prefs.getString(KEY_PRIVATE, null) ?: return null
-        val iv = prefs.getString(KEY_IV, null)
-        if (iv != null) {
-            val decrypted = decryptWithKeystore(stored, publicKey, iv)
-            if (decrypted == null) {
-                // Keystore material restored from another device cannot be
-                // decrypted; drop it so a fresh key can be generated.
-                prefs
-                    .edit()
-                    .remove(KEY_PUBLIC)
-                    .remove(KEY_PRIVATE)
-                    .remove(KEY_IV)
-                    .apply()
-                return null
-            }
-            return decrypted
-        }
-        return runCatching {
-            TeslaKeyPair(
-                privateKeyPkcs8 = Base64.decode(stored, Base64.NO_WRAP),
-                publicKeyRaw = Base64.decode(publicKey, Base64.NO_WRAP),
-            )
-        }.getOrNull()
-    }
-
     private fun loadInternal(vehicleId: String): TeslaKeyPair? {
-        val publicKey = prefs.getString(key(vehicleId, KEY_PUBLIC), null) ?: return null
-        val stored = prefs.getString(key(vehicleId, KEY_PRIVATE), null) ?: return null
-        val iv = prefs.getString(key(vehicleId, KEY_IV), null)
+        val publicKey = prefs.getString(key(vehicleId, SUFFIX_PUBLIC), null) ?: return null
+        val stored = prefs.getString(key(vehicleId, SUFFIX_PRIVATE), null) ?: return null
+        val iv = prefs.getString(key(vehicleId, SUFFIX_IV), null)
 
         if (iv != null) {
-            // Keystore-encrypted material: decrypt, then migrate to the current mode.
+            // Device-only material. A Keystore-wrapped key restored from another
+            // device cannot be decrypted; drop it so pairing can start fresh.
             val decrypted = decryptWithKeystore(stored, publicKey, iv)
             if (decrypted == null) {
                 remove(vehicleId)
-                return null
             }
-            save(vehicleId, decrypted)
             return decrypted
         }
 
@@ -133,8 +85,8 @@ class PairingKeyStore(
             }.getOrNull() ?: return null
 
         if (!isBackupEnabled()) {
-            // A plaintext key exists but the current mode is device-only:
-            // re-encrypt it under the Keystore key.
+            // A restored plaintext key must not stay readable while the user
+            // has backup off.
             save(vehicleId, plaintext, backupEnabled = false)
         }
         return plaintext
@@ -148,16 +100,16 @@ class PairingKeyStore(
         val editor =
             prefs
                 .edit()
-                .putString(key(vehicleId, KEY_PUBLIC), Base64.encodeToString(keyPair.publicKeyRaw, Base64.NO_WRAP))
+                .putString(key(vehicleId, SUFFIX_PUBLIC), Base64.encodeToString(keyPair.publicKeyRaw, Base64.NO_WRAP))
         if (backupEnabled) {
             editor
-                .putString(key(vehicleId, KEY_PRIVATE), Base64.encodeToString(keyPair.privateKeyPkcs8, Base64.NO_WRAP))
-                .remove(key(vehicleId, KEY_IV))
+                .putString(key(vehicleId, SUFFIX_PRIVATE), Base64.encodeToString(keyPair.privateKeyPkcs8, Base64.NO_WRAP))
+                .remove(key(vehicleId, SUFFIX_IV))
         } else {
             val (iv, ciphertext) = encryptWithKeystore(keyPair.privateKeyPkcs8)
             editor
-                .putString(key(vehicleId, KEY_PRIVATE), Base64.encodeToString(ciphertext, Base64.NO_WRAP))
-                .putString(key(vehicleId, KEY_IV), Base64.encodeToString(iv, Base64.NO_WRAP))
+                .putString(key(vehicleId, SUFFIX_PRIVATE), Base64.encodeToString(ciphertext, Base64.NO_WRAP))
+                .putString(key(vehicleId, SUFFIX_IV), Base64.encodeToString(iv, Base64.NO_WRAP))
         }
         editor.apply()
         if (backupEnabled) {
@@ -170,9 +122,9 @@ class PairingKeyStore(
     private fun remove(vehicleId: String) {
         prefs
             .edit()
-            .remove(key(vehicleId, KEY_PUBLIC))
-            .remove(key(vehicleId, KEY_PRIVATE))
-            .remove(key(vehicleId, KEY_IV))
+            .remove(key(vehicleId, SUFFIX_PUBLIC))
+            .remove(key(vehicleId, SUFFIX_PRIVATE))
+            .remove(key(vehicleId, SUFFIX_IV))
             .apply()
     }
 
@@ -180,8 +132,8 @@ class PairingKeyStore(
     private fun storedVehicleIds(): Set<String> =
         prefs.all.keys
             .mapNotNull { prefKey ->
-                if (prefKey.startsWith(PREFIX) && prefKey.endsWith(".$KEY_PUBLIC")) {
-                    prefKey.removePrefix(PREFIX).removeSuffix(".$KEY_PUBLIC").takeIf { it.isNotEmpty() }
+                if (prefKey.startsWith(PREFIX) && prefKey.endsWith(".$SUFFIX_PUBLIC")) {
+                    prefKey.removePrefix(PREFIX).removeSuffix(".$SUFFIX_PUBLIC").takeIf { it.isNotEmpty() }
                 } else {
                     null
                 }
@@ -246,9 +198,9 @@ class PairingKeyStore(
         const val PREFS = "pairing_key"
         const val KEY_BACKUP_ENABLED = "key_backup_enabled"
         const val PREFIX = "key."
-        const val KEY_IV = "iv"
-        const val KEY_PRIVATE = "private"
-        const val KEY_PUBLIC = "public"
+        const val SUFFIX_IV = "iv"
+        const val SUFFIX_PRIVATE = "private"
+        const val SUFFIX_PUBLIC = "public"
         const val ALIAS = "teslable-pairing-key"
         const val ANDROID_KEYSTORE = "AndroidKeyStore"
         const val TRANSFORMATION = "AES/GCM/NoPadding"

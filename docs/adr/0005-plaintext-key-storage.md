@@ -34,10 +34,9 @@ Date: 2026-10-05
 - Keep the encryption-gated backup rules: on Android 12+, cloud backup is allowed
   only when client-side encryption is available (`disableIfNoEncryptionCapabilities`);
   on Android 11 and below the keys are excluded from backup.
-- Adopt the pre-per-car global key as each known vehicle's key once on first
-  load, then drop it. Keep the legacy Keystore-encrypted per-key format readable
-  for one release cycle and migrate it transparently on first load into the
-  currently selected mode.
+- Re-save every stored key when the backup mode changes, so keys always match
+  the selected mode. There is no reader for the pre-per-car global format: the
+  owner's single install was converted to per-car keys once.
 
 ## Consequences
 

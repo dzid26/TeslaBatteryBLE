@@ -89,9 +89,6 @@ class TeslaBleController(
 
     init {
         vehicleStore.load().forEach { vehicles[it.bleName] = it }
-        // One-time adoption of the pre-per-car global key: it was enrolled in
-        // every car this install knows, so make it each car's key first.
-        keyStore.adoptLegacyKey(vehicles.keys)
         // A restored backup can carry cached key slots for a key this device
         // does not have (device-only keys never leave the phone). Enrollment is
         // re-verified on connect, so drop the stale cache.
