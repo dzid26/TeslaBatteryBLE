@@ -34,8 +34,12 @@ class TeslaSessionTest {
             clock_time = clockTime,
         ).encode()
 
-    private fun createSession(clock: () -> Long = { 0 }): TeslaSession? {
-        val info = sessionInfo()
+    private fun createSession(
+        clock: () -> Long = { 0 },
+        counter: Int = 7,
+        clockTime: Int = 100,
+    ): TeslaSession? {
+        val info = sessionInfo(counter, clockTime)
         val tag = TeslaSession.sessionInfoHmac(sessionKey, vin, challenge, info)
         return TeslaSession.import(
             privateKeyPkcs8 = client.privateKeyPkcs8,
