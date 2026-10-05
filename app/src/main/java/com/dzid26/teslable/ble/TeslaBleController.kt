@@ -299,7 +299,12 @@ class TeslaBleController(
     }
 
     fun wakeVehicle(bleName: String? = null) {
-        val link = (bleName ?: selectedBleName)?.let(links::get) ?: return
+        val target = bleName ?: selectedBleName
+        val link = target?.let(links::get)
+        if (link == null) {
+            log("No connected car to wake")
+            return
+        }
         link.wake()
     }
 
@@ -612,6 +617,7 @@ class TeslaBleController(
         private val pendingSessions = mutableMapOf<String, PendingSession>()
         private val pendingCommands = mutableMapOf<String, PendingCommand>()
         private var chargeAfterSession = false
+        private var wakeAfterSession = false
         private var sessionRetryAttempts = 0
         var reconnectAttempts = 0
         private var wakeRefreshAttempts = 0
@@ -661,7 +667,10 @@ class TeslaBleController(
                     ) {
                         return
                     }
-                    if (wakeRefreshAttempts++ >= WAKE_REFRESH_MAX_ATTEMPTS) return
+                    if (wakeRefreshAttempts++ >= WAKE_REFRESH_MAX_ATTEMPTS) {
+                        log("${name()}: wake not confirmed; the car may be out of range")
+                        return
+                    }
                     requestStatus()
                     handler.postDelayed(this, WAKE_REFRESH_MS)
                 }
@@ -761,6 +770,7 @@ class TeslaBleController(
             pendingCommands.clear()
             keySlotQueue = emptyList()
             chargeAfterSession = false
+            wakeAfterSession = false
             pendingPairCheck = false
             updateConnection(address) {
                 it.copy(phase = ConnectionPhase.IDLE, sessions = emptyList())
@@ -774,6 +784,7 @@ class TeslaBleController(
             pendingCommands.clear()
             keySlotQueue = emptyList()
             pendingPairCheck = false
+            wakeAfterSession = false
             pairingPhase = PairingPhase.IDLE
             pairingKeyId = null
             updateConnection(address) {
@@ -952,6 +963,10 @@ class TeslaBleController(
                 chargeAfterSession = false
                 requestChargeState()
             }
+            if (pending.domain == Domain.DOMAIN_VEHICLE_SECURITY && wakeAfterSession) {
+                wakeAfterSession = false
+                sendWake()
+            }
             return true
         }
 
@@ -963,6 +978,23 @@ class TeslaBleController(
                 log("${name()}: car is already awake")
                 return
             }
+            wakeRefreshAttempts = 0
+            handler.removeCallbacks(wakeRefresh)
+            handler.postDelayed(wakeRefresh, WAKE_REFRESH_MS)
+            // A long-sleeping car rotates its session; a command encrypted with
+            // the old one is dropped without a reply, so handshake again first.
+            if (sessions.containsKey(Domain.DOMAIN_VEHICLE_SECURITY)) {
+                sessions.remove(Domain.DOMAIN_VEHICLE_SECURITY)
+                updateConnection(address) {
+                    it.copy(sessions = sessions.keys.map { domain -> domain.name }.sorted())
+                }
+            }
+            wakeAfterSession = true
+            log("${name()}: waking with a fresh session")
+            startSession()
+        }
+
+        private fun sendWake() {
             if (!sessions.containsKey(Domain.DOMAIN_VEHICLE_SECURITY)) {
                 log("${name()}: no VCSEC session to wake with")
                 return
@@ -974,10 +1006,9 @@ class TeslaBleController(
                 )
             ) {
                 log("${name()}: failed to send wake request")
+            } else {
+                log("${name()}: wake requested")
             }
-            wakeRefreshAttempts = 0
-            handler.removeCallbacks(wakeRefresh)
-            handler.postDelayed(wakeRefresh, WAKE_REFRESH_MS)
         }
 
         fun requestChargeState() {

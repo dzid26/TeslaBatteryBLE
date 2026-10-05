@@ -63,6 +63,7 @@ import com.dzid26.teslable.ble.chargingStateText
 import com.dzid26.teslable.ble.connectionDisplay
 import com.dzid26.teslable.ble.vehicleStatusText
 import com.dzid26.teslable.core.history.BatterySample
+import com.dzid26.teslable.core.history.ChargeProjection
 import com.dzid26.teslable.core.history.HistoryRange
 import com.dzid26.teslable.core.history.chargeProjection
 import com.dzid26.teslable.core.history.chargeStats
@@ -508,8 +509,13 @@ private fun BatteryHistoryCard(samples: List<BatterySample>) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             } else {
+                // The projection is derived from every sample, not just the
+                // visible window, so a charge that started before the selected
+                // range still projects.
+                val projection = chargeProjection(samples)
                 BatteryChart(
                     samples = visible,
+                    projection = projection,
                     windowStart =
                         range.durationMillis?.let { now - it }
                             ?: visible.first().timestampMillis,
@@ -520,6 +526,16 @@ private fun BatteryHistoryCard(samples: List<BatterySample>) {
                             .fillMaxWidth()
                             .height(140.dp),
                 )
+                projection?.let {
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text =
+                            "Charging · projected ${it.targetPercent}% around " +
+                                formatTime(it.completionMillis, showDate = true),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = chargingChartColor,
+                    )
+                }
             }
             stats?.let {
                 Spacer(Modifier.height(8.dp))
@@ -542,20 +558,20 @@ private fun BatteryHistoryCard(samples: List<BatterySample>) {
 @Composable
 private fun BatteryChart(
     samples: List<BatterySample>,
+    projection: ChargeProjection?,
     windowStart: Long,
     windowEnd: Long,
     showDate: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val lineColor = MaterialTheme.colorScheme.primary
-    val chargingColor = Color(0xFF43A047)
+    val chargingColor = chargingChartColor
     val gridColor = MaterialTheme.colorScheme.outlineVariant
     val labelStyle =
         MaterialTheme.typography.labelSmall.copy(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     val textMeasurer = rememberTextMeasurer()
-    val projection = chargeProjection(samples)
 
     Canvas(modifier) {
         val left = 36.dp.toPx()
@@ -623,18 +639,30 @@ private fun BatteryChart(
         }
 
         projection?.let { target ->
+            val end =
+                Offset(
+                    x(target.completionMillis),
+                    y(target.targetPercent),
+                )
             drawPath(
                 path =
                     Path().apply {
                         moveTo(x(target.from.timestampMillis), y(target.from.percent))
-                        lineTo(x(target.completionMillis), y(target.targetPercent))
+                        lineTo(end.x, end.y)
                     },
-                color = chargingColor,
+                color = chargingColor.copy(alpha = 0.65f),
                 style =
                     Stroke(
                         width = 2.dp.toPx(),
                         pathEffect = PathEffect.dashPathEffect(floatArrayOf(8.dp.toPx(), 6.dp.toPx())),
                     ),
+            )
+            // The projected endpoint sits at the right edge (it is in the
+            // future); a dot marks the target so the line reads as a target.
+            drawCircle(
+                color = chargingColor,
+                radius = 3.dp.toPx(),
+                center = end,
             )
         }
 
@@ -660,6 +688,9 @@ private fun HistoryRange.label(): String =
     }
 
 private const val REFRESH_FEEDBACK_MS = 2500L
+
+/** Green shared by charging segments, dots, and the projected line. */
+private val chargingChartColor = Color(0xFF43A047)
 
 private val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 private val dateTimeFormatter = DateTimeFormatter.ofPattern("dd MMM HH:mm")

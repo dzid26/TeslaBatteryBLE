@@ -78,7 +78,7 @@ fun MainScreen(
     onOpenRequestConsumed: () -> Unit,
     onPairKey: (String) -> Unit,
     onSaveVin: (String, String) -> Unit,
-    onWake: () -> Unit,
+    onWake: (String?) -> Unit,
     onReadSoc: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
@@ -130,7 +130,7 @@ fun MainScreen(
                 val connection = state.connections[address]
                 when {
                     connection?.phase != ConnectionPhase.READY -> onOpenVehicle(address)
-                    connection.status?.asleep != false -> onWake()
+                    connection.status?.asleep != false -> onWake(null)
                     else -> onReadSoc()
                 }
             },
@@ -164,6 +164,7 @@ fun MainScreen(
                 }
             },
             onEditVin = { name -> vinTarget = name },
+            onWake = onWake,
             onOpenSettings = onOpenSettings,
         )
     }
@@ -256,6 +257,7 @@ private fun ConnectionsScreen(
     onOpen: (String, String) -> Unit,
     onPair: (String, String, Boolean) -> Unit,
     onEditVin: (String) -> Unit,
+    onWake: (String) -> Unit,
     onOpenSettings: () -> Unit,
 ) {
     val rows = vehicleRows(state, history)
@@ -370,6 +372,7 @@ private fun ConnectionsScreen(
                     onOpen = onOpen,
                     onPair = onPair,
                     onEditVin = onEditVin,
+                    onWake = onWake,
                     modifier = Modifier.weight(1f),
                 )
                 Spacer(Modifier.height(8.dp))
@@ -388,6 +391,7 @@ private fun VehicleList(
     onOpen: (String, String) -> Unit,
     onPair: (String, String, Boolean) -> Unit,
     onEditVin: (String) -> Unit,
+    onWake: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     if (rows.isEmpty()) {
@@ -434,6 +438,7 @@ private fun VehicleList(
                         )
                     },
                     onEditVin = { onEditVin(row.bleName) },
+                    onWake = { onWake(row.bleName) },
                 )
             }
         }
@@ -472,9 +477,13 @@ private fun VehicleCard(
     onOpen: () -> Unit,
     onPair: () -> Unit,
     onEditVin: () -> Unit,
+    onWake: () -> Unit,
 ) {
     val display = connectionDisplay(row.connection, row.advert, vehicle = row.vehicle)
     val reading = batteryPercent(row.connection, row.lastKnown, System.currentTimeMillis())
+    val canWake =
+        row.connection?.status?.asleep == true &&
+            row.connection?.sessions?.contains("DOMAIN_VEHICLE_SECURITY") == true
     val paired =
         row.vehicle?.keySlot != null ||
             row.connection?.keySlot != null ||
@@ -539,6 +548,14 @@ private fun VehicleCard(
                 }
             }
             DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                DropdownMenuItem(
+                    text = { Text("Wake") },
+                    enabled = canWake,
+                    onClick = {
+                        menuOpen = false
+                        onWake()
+                    },
+                )
                 DropdownMenuItem(
                     text = { Text(if (vin == null) "Add VIN" else "Edit VIN") },
                     onClick = {
