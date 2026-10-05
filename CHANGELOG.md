@@ -10,10 +10,11 @@ All notable changes to this project are documented here. The format is based on
 
 - About screen (Settings → About): version, links, support, licenses, and the
   Tesla, Inc. disclaimer, as tappable rows
-- Permission wizard: one step per missing permission explaining what it is for
-  and what the user has to do, with an app-settings fallback when Android stops
-  asking; the cars list keeps a short rationale card and a location-services
-  prompt that opens system settings
+- Permission wizard: full-screen Material pages with a greeting, then one page
+  per missing permission explaining what it is for and what the user has to do,
+  with an app-settings fallback when Android stops asking; the cars list keeps a
+  compact fallback card and lands there instead of the restored car view when
+  permissions are missing
 
 ### Changed
 

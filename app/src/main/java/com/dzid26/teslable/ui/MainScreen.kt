@@ -76,15 +76,17 @@ fun MainScreen(
     LaunchedEffect(Unit) {
         if (!initialised) {
             initialised = true
-            // The controller already restored the last opened car from disk.
-            viewingBleName = state.selectedBleName
+            // The controller already restored the last opened car from disk;
+            // without permissions the cars list is where the fallback button
+            // lives, so start there instead of on the car view.
+            viewingBleName = if (permissionsGranted) state.selectedBleName else null
         }
     }
     // A notification tap (or any external open request) switches to that car.
     LaunchedEffect(state.openVehicleRequest) {
         val requested = state.openVehicleRequest
         if (requested != null) {
-            viewingBleName = requested
+            if (permissionsGranted) viewingBleName = requested
             onOpenRequestConsumed()
         }
     }

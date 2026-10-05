@@ -6,12 +6,15 @@ import android.net.Uri
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import com.dzid26.teslable.ble.hasBlePermissions
 import com.dzid26.teslable.ble.isLocationEnabled
@@ -39,6 +42,7 @@ internal fun PermissionWizardHost(
     var permissionsGranted by remember { mutableStateOf(hasBlePermissions(context)) }
     var locationServicesEnabled by remember { mutableStateOf(isLocationEnabled(context)) }
     var wizardOpen by remember { mutableStateOf(false) }
+    var introDone by remember { mutableStateOf(false) }
     var denied by remember { mutableStateOf(false) }
     var deniedForever by remember { mutableStateOf(false) }
 
@@ -71,34 +75,50 @@ internal fun PermissionWizardHost(
         }
     }
 
-    val allSteps = permissionSteps(requiredBlePermissions())
-    val nextStep = allSteps.firstOrNull { it.permission in missingBlePermissions(context) }
-    if (wizardOpen && nextStep != null) {
-        PermissionWizardDialog(
-            step = nextStep,
-            index = allSteps.indexOf(nextStep),
-            total = allSteps.size,
-            denied = denied,
-            deniedForever = deniedForever,
-            onAllow = {
-                if (deniedForever) {
-                    context.startActivity(appSettingsIntent)
-                } else {
-                    launcher.launch(nextStep.permission)
-                }
-            },
-            onDismiss = { wizardOpen = false },
-        )
-    }
-
     val requestPermissions: () -> Unit = {
         if (permissionsGranted) {
             onGranted()
         } else {
+            // The full-screen wizard is the guided path; the cars-list card
+            // remains the fallback entry point whenever a permission is missing.
             wizardOpen = true
+            introDone = false
             denied = false
             deniedForever = false
         }
     }
-    content(permissionsGranted, locationServicesEnabled, requestPermissions)
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        content(permissionsGranted, locationServicesEnabled, requestPermissions)
+
+        if (wizardOpen && !introDone) {
+            PermissionWizardGreeting(
+                onContinue = { introDone = true },
+                onDismiss = { wizardOpen = false },
+            )
+        } else if (wizardOpen) {
+            val allSteps = permissionSteps(requiredBlePermissions())
+            val nextStep =
+                allSteps.firstOrNull { step ->
+                    step.permission in missingBlePermissions(context)
+                }
+            if (nextStep != null) {
+                PermissionWizardPage(
+                    step = nextStep,
+                    index = allSteps.indexOf(nextStep),
+                    total = allSteps.size,
+                    denied = denied,
+                    deniedForever = deniedForever,
+                    onAllow = {
+                        if (deniedForever) {
+                            context.startActivity(appSettingsIntent)
+                        } else {
+                            launcher.launch(nextStep.permission)
+                        }
+                    },
+                    onDismiss = { wizardOpen = false },
+                )
+            }
+        }
+    }
 }
