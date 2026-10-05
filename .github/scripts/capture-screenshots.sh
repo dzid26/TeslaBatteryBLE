@@ -60,6 +60,8 @@ for _ in $(seq 1 30); do
 done
 adb shell input keyevent KEYCODE_WAKEUP || true
 adb shell wm dismiss-keyguard || true
+# Close any notification shade left open by a previous gesture.
+adb shell cmd statusbar collapse || true
 
 installed=false
 for _ in 1 2 3; do
@@ -208,7 +210,10 @@ tap_and_wait() {
 # Pull the current screen down to refresh: the cars list scans, and the car
 # view reconnects, wakes, or reads the battery based on its state.
 pull_refresh() {
-  adb shell input swipe 540 600 540 1600 800
+  # Material3's pull-to-refresh needs a held drag, not a fast fling; the old
+  # quick swipe is ignored. Stay inside the screen bounds (works on 1080x1920
+  # emulators and 1080x2400 phones alike).
+  adb shell input swipe 540 1200 540 1800 2000
 }
 
 # Pull until the target text appears (one pull is one refresh action).
@@ -286,11 +291,11 @@ if [ "$focused" != true ]; then
 fi
 sleep 2
 
-# 02 — the scan finding the simulated cars. A pull on the cars list starts it;
+# 02 - the scan finding the simulated cars. A pull on the cars list starts it;
 # without Bluetooth hardware the app keeps running and reports it in the log,
-# so this works on emulators too.
-pull_refresh
-if wait_for_text "Scanning:" 20 && wait_for_text "AA:BB:CC:DD:EE:01" 20; then
+# so this works on emulators too. The scan can finish before "Scanning:" is
+# ever dumped, and one pull may not take, so retry until the address appears.
+if pull_until_text "AA:BB:CC:DD:EE:01" 3 20; then
   sleep 1
   capture 02-scanning.png
 else
@@ -367,10 +372,9 @@ if adb shell cmd uimode night yes > /dev/null 2>&1; then
     sleep 1
     capture 01-overview-dark.png
 
-    # 02 — the scan, with the simulated car already known from the light pass
+    # 02 - the scan, with the simulated car already known from the light pass
     # (its address is no longer shown, so wait for the other car's address).
-    pull_refresh
-    if wait_for_text "Scanning:" 20 && wait_for_text "AA:BB:CC:DD:EE:02" 20; then
+    if pull_until_text "AA:BB:CC:DD:EE:02" 3 20; then
       sleep 1
       capture 02-scanning-dark.png
     else
