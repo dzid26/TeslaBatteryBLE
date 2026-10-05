@@ -45,6 +45,7 @@ enum class ConnectionPhase {
 
 enum class PairingPhase {
     IDLE,
+    CHECKING,
     SENDING,
     WAITING_FOR_CARD,
     OK,

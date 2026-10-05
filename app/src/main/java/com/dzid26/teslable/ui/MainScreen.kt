@@ -335,7 +335,8 @@ private fun VehicleCard(
                 )
                 if (explicitScan && !paired && row.connection != null) {
                     val pairingInProgress =
-                        row.connection.pairing == PairingPhase.SENDING ||
+                        row.connection.pairing == PairingPhase.CHECKING ||
+                            row.connection.pairing == PairingPhase.SENDING ||
                             row.connection.pairing == PairingPhase.WAITING_FOR_CARD
                     TextButton(
                         onClick = onPair,

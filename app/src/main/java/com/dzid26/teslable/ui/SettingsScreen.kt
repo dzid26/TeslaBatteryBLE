@@ -16,7 +16,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -42,7 +41,7 @@ import com.dzid26.teslable.ble.PairingKeyStore
 @Composable
 fun SettingsScreen(
     keyStore: PairingKeyStore,
-    onResetPairedState: () -> Unit,
+    onClearPairingCache: () -> Unit,
     onBack: () -> Unit,
 ) {
     BackHandler { onBack() }
@@ -51,7 +50,7 @@ fun SettingsScreen(
     var keyId by remember { mutableStateOf(keyStore.load()?.keyId?.toHex()) }
     var showEnableDialog by remember { mutableStateOf(false) }
     var showDisableDialog by remember { mutableStateOf(false) }
-    var showResetDialog by remember { mutableStateOf(false) }
+    var showClearCacheDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -89,7 +88,7 @@ fun SettingsScreen(
             Spacer(Modifier.height(16.dp))
             PairingCard(
                 keyId = keyId,
-                onReset = { showResetDialog = true },
+                onClearCache = { showClearCacheDialog = true },
             )
         }
     }
@@ -116,13 +115,13 @@ fun SettingsScreen(
         )
     }
 
-    if (showResetDialog) {
-        ResetPairedStateDialog(
+    if (showClearCacheDialog) {
+        ClearPairingCacheDialog(
             onConfirm = {
-                showResetDialog = false
-                onResetPairedState()
+                showClearCacheDialog = false
+                onClearPairingCache()
             },
-            onDismiss = { showResetDialog = false },
+            onDismiss = { showClearCacheDialog = false },
         )
     }
 }
@@ -176,7 +175,7 @@ private fun VehicleKeysCard(
 @Composable
 private fun PairingCard(
     keyId: String?,
-    onReset: () -> Unit,
+    onClearCache: () -> Unit,
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
@@ -193,23 +192,18 @@ private fun PairingCard(
             Spacer(Modifier.height(8.dp))
             Text(
                 text =
-                    "Resetting forgets the cached paired state (key slots and sessions) so the " +
-                        "pairing flow can be tested again. The stored key is kept, and the car still " +
-                        "has it in its whitelist, so the next whitelist check may mark it paired again.",
+                    "Clearing the cache forgets the cached key slots and sessions so the pairing " +
+                        "flow can be tested again. The stored key is kept, and the car still has it " +
+                        "in its whitelist, so the next whitelist check may mark it paired again.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(12.dp))
             Button(
-                onClick = onReset,
+                onClick = onClearCache,
                 enabled = keyId != null,
-                colors =
-                    ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer,
-                        contentColor = MaterialTheme.colorScheme.onErrorContainer,
-                    ),
             ) {
-                Text("Reset paired state")
+                Text("Clear pairing cache")
             }
         }
     }
@@ -268,23 +262,22 @@ private fun DisableBackupDialog(
 }
 
 @Composable
-private fun ResetPairedStateDialog(
+private fun ClearPairingCacheDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Reset paired state?") },
+        title = { Text("Clear pairing cache?") },
         text = {
             Text(
-                "The app forgets which key slot each car reported and drops its sessions, so the " +
-                    "pairing flow can be tested again. The stored key is kept and pairing again reuses " +
-                    "it. If the car still has the key in its whitelist, the next whitelist check may " +
-                    "mark it paired again.",
+                "The app forgets the cached key slots and sessions so the pairing flow can be " +
+                    "tested again. The stored key is kept and pairing again reuses it. If the car " +
+                    "still has the key in its whitelist, the next whitelist check may mark it paired again.",
             )
         },
         confirmButton = {
-            TextButton(onClick = onConfirm) { Text("Reset") }
+            TextButton(onClick = onConfirm) { Text("Clear cache") }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("Cancel") }

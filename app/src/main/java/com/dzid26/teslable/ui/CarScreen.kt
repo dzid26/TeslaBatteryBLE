@@ -260,7 +260,10 @@ private fun PhoneKeyCard(
     val keySlot = connection?.keySlot ?: vehicle?.keySlot
     val paired = keySlot != null || connection?.pairing == PairingPhase.OK
     val pairing = connection?.pairing ?: PairingPhase.IDLE
-    val pairingInProgress = pairing == PairingPhase.SENDING || pairing == PairingPhase.WAITING_FOR_CARD
+    val pairingInProgress =
+        pairing == PairingPhase.CHECKING ||
+            pairing == PairingPhase.SENDING ||
+            pairing == PairingPhase.WAITING_FOR_CARD
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -299,7 +302,10 @@ private fun PairingStatus(
     pairing: PairingPhase,
     keyId: String?,
 ) {
-    val inProgress = pairing == PairingPhase.SENDING || pairing == PairingPhase.WAITING_FOR_CARD
+    val inProgress =
+        pairing == PairingPhase.CHECKING ||
+            pairing == PairingPhase.SENDING ||
+            pairing == PairingPhase.WAITING_FOR_CARD
     Row(verticalAlignment = Alignment.CenterVertically) {
         if (inProgress) {
             CircularProgressIndicator(
@@ -319,9 +325,9 @@ private fun PairingStatus(
                         else -> MaterialTheme.colorScheme.onSurfaceVariant
                     },
             )
-            if (inProgress) {
+            pairingDetailText(pairing)?.let { detail ->
                 Text(
-                    text = "Waiting for the car to confirm the key...",
+                    text = detail,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -335,13 +341,23 @@ private fun pairingStatusText(
     keyId: String?,
 ): String =
     when (pairing) {
+        PairingPhase.CHECKING -> "Checking whether this phone is already paired…"
         PairingPhase.SENDING -> "Pairing request sent — waiting for the car."
         PairingPhase.WAITING_FOR_CARD ->
             "Tap your NFC card on the center console and confirm on the car screen."
 
-        PairingPhase.OK -> "Key paired: $keyId — rename the Phone Key in Controls > Locks."
-        PairingPhase.ERROR -> "Pairing failed. Check the car screen and try again."
+        PairingPhase.OK -> "Key paired: $keyId"
+        PairingPhase.ERROR ->
+            "Pairing not confirmed. Hold the NFC card on the center console and try again."
+
         PairingPhase.IDLE -> ""
+    }
+
+private fun pairingDetailText(pairing: PairingPhase): String? =
+    when (pairing) {
+        PairingPhase.SENDING, PairingPhase.WAITING_FOR_CARD -> "Waiting for the car to confirm the key..."
+        PairingPhase.OK -> "Rename the Phone Key in Controls > Locks on the Tesla screen."
+        else -> null
     }
 
 @Composable
