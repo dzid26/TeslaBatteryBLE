@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 package com.dzid26.teslable.ble
 
+import com.dzid26.teslable.core.history.BatterySample
 import com.dzid26.teslable.core.protocol.TeslaCommands
 import com.dzid26.teslable.core.protocol.TeslaVcsec
 import java.util.UUID
@@ -99,6 +100,33 @@ fun BleUiState.shouldTrack(): Boolean =
                         connection.sessions.isNotEmpty()
                 )
         }
+
+/** How old a reading may be before the UI treats it as last known, not live. */
+const val STALE_READING_MS = 5 * 60_000L
+
+/** A battery percentage with its freshness: live, or the last stored sample. */
+data class BatteryPercent(
+    val value: Int,
+    val stale: Boolean,
+)
+
+/**
+ * The percentage to show for a car: the live charge when there is one,
+ * otherwise the newest stored sample. [BatteryPercent.stale] marks anything
+ * not read within [STALE_READING_MS], including every stored fallback.
+ */
+fun batteryPercent(
+    connection: TeslaConnection?,
+    lastKnown: BatterySample?,
+    nowMillis: Long,
+): BatteryPercent? {
+    val live = connection?.charge?.batteryLevel
+    if (live != null) {
+        val readAt = connection.chargeAtMillis
+        return BatteryPercent(live, readAt == null || nowMillis - readAt > STALE_READING_MS)
+    }
+    return lastKnown?.let { BatteryPercent(it.percent, stale = true) }
+}
 
 /** The title and status line both the app list and the notification show for a car. */
 data class ConnectionDisplay(

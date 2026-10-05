@@ -57,6 +57,7 @@ import com.dzid26.teslable.ble.PairingPhase
 import com.dzid26.teslable.ble.TeslaAdvert
 import com.dzid26.teslable.ble.TeslaConnection
 import com.dzid26.teslable.ble.Vehicle
+import com.dzid26.teslable.ble.batteryPercent
 import com.dzid26.teslable.ble.connectionDisplay
 import com.dzid26.teslable.core.history.BatterySample
 
@@ -139,6 +140,7 @@ fun MainScreen(
     } else {
         ConnectionsScreen(
             state = state,
+            history = history,
             permissionsGranted = permissionsGranted,
             locationServicesEnabled = locationServicesEnabled,
             onRequestPermissions = onRequestPermissions,
@@ -204,9 +206,13 @@ private data class VehicleRow(
     val vehicle: Vehicle?,
     val connection: TeslaConnection?,
     val advert: TeslaAdvert?,
+    val lastKnown: BatterySample?,
 )
 
-private fun vehicleRows(state: BleUiState): List<VehicleRow> {
+private fun vehicleRows(
+    state: BleUiState,
+    history: List<BatterySample>,
+): List<VehicleRow> {
     val known =
         state.vehicles.map { vehicle ->
             VehicleRow(
@@ -216,6 +222,7 @@ private fun vehicleRows(state: BleUiState): List<VehicleRow> {
                 vehicle = vehicle,
                 connection = state.connections[vehicle.address],
                 advert = state.devices.firstOrNull { it.name == vehicle.bleName },
+                lastKnown = history.lastOrNull { it.vehicleId == vehicle.bleName },
             )
         }
     val discovered =
@@ -230,6 +237,7 @@ private fun vehicleRows(state: BleUiState): List<VehicleRow> {
                     vehicle = null,
                     connection = state.connections[device.address],
                     advert = device,
+                    lastKnown = null,
                 )
             }
     return known + discovered
@@ -239,6 +247,7 @@ private fun vehicleRows(state: BleUiState): List<VehicleRow> {
 @Composable
 private fun ConnectionsScreen(
     state: BleUiState,
+    history: List<BatterySample>,
     permissionsGranted: Boolean,
     locationServicesEnabled: Boolean,
     onRequestPermissions: () -> Unit,
@@ -249,7 +258,14 @@ private fun ConnectionsScreen(
     onEditVin: (String) -> Unit,
     onOpenSettings: () -> Unit,
 ) {
-    val rows = vehicleRows(state)
+    val rows = vehicleRows(state, history)
+    // A fresh install has nothing to show, so start the scan it would ask for;
+    // the global Enable toggle still gates it.
+    LaunchedEffect(Unit) {
+        if (rows.isEmpty() && permissionsGranted && state.trackingEnabled) {
+            onToggleScan()
+        }
+    }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -349,49 +365,59 @@ private fun ConnectionsScreen(
 
                 VehicleList(
                     rows = rows,
-                    log = state.log,
                     explicitScan = state.explicitScan,
+                    scanning = state.scanning,
                     onOpen = onOpen,
                     onPair = onPair,
                     onEditVin = onEditVin,
+                    modifier = Modifier.weight(1f),
                 )
+                Spacer(Modifier.height(8.dp))
+                LogCard(state.log)
             }
         }
     }
 }
 
-/** The empty state or the car cards, followed by the app-wide log. */
+/** The empty state or the car cards; the log sits pinned below this list. */
 @Composable
 private fun VehicleList(
     rows: List<VehicleRow>,
-    log: List<LogEntry>,
     explicitScan: Boolean,
+    scanning: Boolean,
     onOpen: (String, String) -> Unit,
     onPair: (String, String, Boolean) -> Unit,
     onEditVin: (String) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     if (rows.isEmpty()) {
         Column(
             modifier =
-                Modifier
+                modifier
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Spacer(Modifier.height(48.dp))
-            Text("No cars yet", style = MaterialTheme.typography.titleMedium)
+            Text(
+                text = if (scanning) "Looking for your cars…" else "No cars yet",
+                style = MaterialTheme.typography.titleMedium,
+            )
             Spacer(Modifier.height(4.dp))
             Text(
-                text = "Pull down to scan for your first Tesla.",
+                text =
+                    if (scanning) {
+                        "Keep the app open and stay near the car."
+                    } else {
+                        "Pull down to scan."
+                    },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Spacer(Modifier.height(24.dp))
-            LogCard(log)
         }
     } else {
         LazyColumn(
-            modifier = Modifier.fillMaxSize(),
+            modifier = modifier.fillMaxSize(),
             verticalArrangement = Arrangement.spacedBy(8.dp),
             contentPadding = PaddingValues(bottom = 16.dp),
         ) {
@@ -409,9 +435,6 @@ private fun VehicleList(
                     },
                     onEditVin = { onEditVin(row.bleName) },
                 )
-            }
-            item {
-                LogCard(log)
             }
         }
     }
@@ -451,7 +474,7 @@ private fun VehicleCard(
     onEditVin: () -> Unit,
 ) {
     val display = connectionDisplay(row.connection, row.advert, vehicle = row.vehicle)
-    val level = row.connection?.charge?.batteryLevel
+    val reading = batteryPercent(row.connection, row.lastKnown, System.currentTimeMillis())
     val paired =
         row.vehicle?.keySlot != null ||
             row.connection?.keySlot != null ||
@@ -499,12 +522,17 @@ private fun VehicleCard(
                         }
                     }
                 }
-                if (level != null) {
+                if (reading != null) {
                     Text(
-                        text = "$level%",
+                        text = "${reading.value}%",
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.primary,
+                        color =
+                            if (reading.stale) {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            } else {
+                                MaterialTheme.colorScheme.primary
+                            },
                     )
                 } else {
                     StatusPill(row.connection)

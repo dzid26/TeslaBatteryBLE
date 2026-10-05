@@ -20,12 +20,14 @@ import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import com.dzid26.teslable.MainActivity
 import com.dzid26.teslable.R
+import com.dzid26.teslable.core.history.BatterySample
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
 /**
@@ -53,14 +55,18 @@ class BleTrackingService : Service() {
         createChannel()
         val controller = BleControllerHolder.get(this)
         scope.launch {
-            controller.state.collect { state -> publish(modelsFor(state)) }
+            combine(controller.state, controller.batteryHistory) { state, history ->
+                state to history
+            }.collect { (state, history) ->
+                publish(modelsFor(state, history))
+            }
         }
         // The charge reading ages between state changes; re-evaluate every
         // minute so the percentage can turn gray at the staleness boundary.
         scope.launch {
             while (true) {
                 delay(STALENESS_TICK_MS)
-                publish(modelsFor(controller.state.value))
+                publish(modelsFor(controller.state.value, controller.batteryHistory.value))
             }
         }
     }
@@ -74,7 +80,7 @@ class BleTrackingService : Service() {
         if (intent?.action == ACTION_WAKE) {
             controller.wakeVehicle(intent.getStringExtra(EXTRA_BLE_NAME))
         }
-        publish(modelsFor(controller.state.value))
+        publish(modelsFor(controller.state.value, controller.batteryHistory.value))
         // START_STICKY may restart us after a process kill; find the cars again.
         controller.ensureConnected()
         return START_STICKY
@@ -89,25 +95,25 @@ class BleTrackingService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     /** One model per tracked car, in the controller's (last-seen) order. */
-    private fun modelsFor(state: BleUiState): List<NotificationModel> =
+    private fun modelsFor(
+        state: BleUiState,
+        history: List<BatterySample>,
+    ): List<NotificationModel> =
         state.vehicles.mapNotNull { vehicle ->
             val connection = state.connections[vehicle.address] ?: return@mapNotNull null
             if (connection.phase == ConnectionPhase.IDLE) return@mapNotNull null
             val advert = state.devices.firstOrNull { it.address == vehicle.address }
             val display = connectionDisplay(connection, advert, vehicle = vehicle)
-            val percent = connection.charge?.batteryLevel
-            val readAt = connection.chargeAtMillis
-            val percentStale =
-                percent != null &&
-                    (readAt == null || System.currentTimeMillis() - readAt > STALE_READING_MS)
+            val lastKnown = history.lastOrNull { it.vehicleId == vehicle.bleName }
+            val reading = batteryPercent(connection, lastKnown, System.currentTimeMillis())
             NotificationModel(
                 bleName = vehicle.bleName,
                 title = display.title,
                 status = display.status,
                 stateText = display.stateText,
                 rssi = display.rssi,
-                percent = percent,
-                percentStale = percentStale,
+                percent = reading?.value,
+                percentStale = reading?.stale == true,
                 showWake =
                     connection.status?.asleep == true &&
                         connection.sessions.contains("DOMAIN_VEHICLE_SECURITY"),
@@ -353,8 +359,7 @@ class BleTrackingService : Service() {
         private const val REQUEST_OPEN_APP = 0
         private const val RSSI_NOTIFICATION_STEP = 5
 
-        /** A reading older than this is shown grayed out in the notification. */
-        private const val STALE_READING_MS = 5 * 60_000L
+        /** How often notification text is re-evaluated as readings age. */
         private const val STALENESS_TICK_MS = 60_000L
         private const val STALE_TEXT_COLOR = 0xFF9E9E9E.toInt()
 

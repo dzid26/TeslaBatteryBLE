@@ -38,6 +38,11 @@ All notable changes to this project are documented here. The format is based on
   reading, instead of only a connection state
 - Unpaired car view explains the NFC-card walkthrough before pairing
 - RSSI is shown only while connected
+- The cars list and the ongoing notification fall back to the last stored
+  percentage when the car is asleep, shown gray so it cannot pass for fresh
+- The log panel is pinned to the bottom of the cars screen
+- An empty cars list starts scanning on its own; the Enable toggle still
+  disables scanning, and pull-to-refresh remains the manual path
 - The log panel moved from the car view to the cars screen, where it shows
   every car's activity
 - The notification grays out the last known percentage once its reading is
