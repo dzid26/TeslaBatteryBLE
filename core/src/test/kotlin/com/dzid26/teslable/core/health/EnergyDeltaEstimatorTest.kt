@@ -8,33 +8,33 @@ import org.junit.Test
 class EnergyDeltaEstimatorTest {
     @Test
     fun `computes capacity and soh from a charge session`() {
-        val result = EnergyDeltaEstimator.estimate(26.25, 20.0, 60.0, 75.0)!!
-        assertEquals(65.625, result.usableCapacityKwh, 1e-9)
-        assertEquals(87.5, result.sohPercent!!, 1e-9)
-        assertEquals(40.0, result.socDeltaPercent, 1e-9)
+        val result = EnergyDeltaEstimator.estimate(26.25f, 20f, 60f, 75f)!!
+        assertEquals(65.625f, result.usableCapacityKwh, 0.001f)
+        assertEquals(87.5f, result.sohPercent!!, 0.001f)
+        assertEquals(40f, result.socDeltaPercent, 0.001f)
     }
 
     @Test
     fun `soh is null without a when-new baseline`() {
-        val result = EnergyDeltaEstimator.estimate(26.25, 20.0, 60.0)!!
-        assertEquals(65.625, result.usableCapacityKwh, 1e-9)
+        val result = EnergyDeltaEstimator.estimate(26.25f, 20f, 60f)!!
+        assertEquals(65.625f, result.usableCapacityKwh, 0.001f)
         assertNull(result.sohPercent)
     }
 
     @Test
     fun `accepts a delta of exactly five percent`() {
-        val result = EnergyDeltaEstimator.estimate(3.0, 20.0, 25.0, 75.0)!!
-        assertEquals(60.0, result.usableCapacityKwh, 1e-9)
+        val result = EnergyDeltaEstimator.estimate(3f, 20f, 25f, 75f)!!
+        assertEquals(60f, result.usableCapacityKwh, 0.001f)
     }
 
     @Test
     fun `rejects invalid sessions`() {
-        assertNull(EnergyDeltaEstimator.estimate(0.0, 20.0, 60.0, 75.0))
-        assertNull(EnergyDeltaEstimator.estimate(26.25, 20.0, 23.0, 75.0))
-        assertNull(EnergyDeltaEstimator.estimate(26.25, 60.0, 20.0, 75.0))
-        assertNull(EnergyDeltaEstimator.estimate(26.25, -1.0, 60.0, 75.0))
-        assertNull(EnergyDeltaEstimator.estimate(26.25, 20.0, 101.0, 75.0))
-        assertNull(EnergyDeltaEstimator.estimate(26.25, 20.0, 60.0, 0.0))
-        assertNull(EnergyDeltaEstimator.estimate(Double.NaN, 20.0, 60.0, 75.0))
+        assertNull(EnergyDeltaEstimator.estimate(0f, 20f, 60f, 75f))
+        assertNull(EnergyDeltaEstimator.estimate(26.25f, 20f, 23f, 75f))
+        assertNull(EnergyDeltaEstimator.estimate(26.25f, 60f, 20f, 75f))
+        assertNull(EnergyDeltaEstimator.estimate(26.25f, -1f, 60f, 75f))
+        assertNull(EnergyDeltaEstimator.estimate(26.25f, 20f, 101f, 75f))
+        assertNull(EnergyDeltaEstimator.estimate(26.25f, 20f, 60f, 0f))
+        assertNull(EnergyDeltaEstimator.estimate(Float.NaN, 20f, 60f, 75f))
     }
 }

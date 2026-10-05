@@ -8,38 +8,38 @@ package com.dzid26.teslable.core.health
  * rested endpoints are preferred.
  */
 data class CapacityEstimate(
-    val usableCapacityKwh: Double,
-    val sohPercent: Double?,
-    val socDeltaPercent: Double,
+    val usableCapacityKwh: Float,
+    val sohPercent: Float?,
+    val socDeltaPercent: Float,
 )
 
 object EnergyDeltaEstimator {
     fun estimate(
-        energyAddedKwh: Double,
-        socStartPercent: Double,
-        socEndPercent: Double,
-        newCapacityKwh: Double? = null,
+        energyAddedKwh: Float,
+        socStartPercent: Float,
+        socEndPercent: Float,
+        newCapacityKwh: Float? = null,
     ): CapacityEstimate? {
         if (!isValidInputs(energyAddedKwh, socStartPercent, socEndPercent, newCapacityKwh)) return null
         val delta = socEndPercent - socStartPercent
-        if (delta < 5.0) return null
-        val usableCapacity = energyAddedKwh / (delta / 100.0)
-        val soh = newCapacityKwh?.let { usableCapacity / it * 100.0 }
+        if (delta < 5f) return null
+        val usableCapacity = energyAddedKwh / (delta / 100f)
+        val soh = newCapacityKwh?.let { usableCapacity / it * 100f }
         return CapacityEstimate(usableCapacity, soh, delta)
     }
 
     private fun isValidInputs(
-        energyAddedKwh: Double,
-        socStartPercent: Double,
-        socEndPercent: Double,
-        newCapacityKwh: Double?,
+        energyAddedKwh: Float,
+        socStartPercent: Float,
+        socEndPercent: Float,
+        newCapacityKwh: Float?,
     ): Boolean =
         energyAddedKwh.isFinite() &&
-            energyAddedKwh > 0.0 &&
+            energyAddedKwh > 0f &&
             socStartPercent.isFinite() &&
-            socStartPercent >= 0.0 &&
+            socStartPercent >= 0f &&
             socEndPercent.isFinite() &&
-            socEndPercent <= 100.0 &&
+            socEndPercent <= 100f &&
             socStartPercent < socEndPercent &&
-            (newCapacityKwh == null || (newCapacityKwh.isFinite() && newCapacityKwh > 0.0))
+            (newCapacityKwh == null || (newCapacityKwh.isFinite() && newCapacityKwh > 0f))
 }
