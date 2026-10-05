@@ -18,7 +18,7 @@ else
   exit 1
 fi
 
-light=() dark=() file
+light=() dark=()
 for file in "$DIR"/*.png; do
   [ -e "$file" ] || continue
   case "$(basename "$file")" in
