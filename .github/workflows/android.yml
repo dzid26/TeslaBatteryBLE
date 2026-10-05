@@ -124,42 +124,8 @@ jobs:
           name: teslable-debug-apk
           path: dist
 
-      - name: Set up JDK 21
-        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6
-        with:
-          distribution: temurin
-          java-version: '21'
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6
-
-      - name: Make gradlew executable
-        run: chmod +x gradlew
-
-      # Screenshots use the simulated car so they show realistic data; the
-      # release asset stays the plain debug APK downloaded above.
-      - name: Build the demo APK for screenshots
-        run: ./gradlew :app:assembleDebug -PdemoCar=true
-
-      - name: Enable KVM
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
-
-      - name: Capture screenshots on emulator
-        continue-on-error: true
-        timeout-minutes: 15
-        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
-        with:
-          api-level: 30
-          target: google_apis
-          arch: x86_64
-          profile: pixel_2
-          emulator-boot-timeout: 420
-          disable-animations: true
-          script: bash .github/scripts/capture-screenshots.sh app/build/outputs/apk/debug/app-debug.apk screenshots
-
+      # Screenshots in the release notes come from the deployed site
+      # (website/images), so the preview job no longer runs an emulator.
       - name: Publish preview release
         env:
           GH_TOKEN: ${{ github.token }}
