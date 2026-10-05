@@ -58,10 +58,13 @@ side by side with a future stable release, but do not treat them as production-s
 
 1. Open [Obtainium](https://github.com/ImranR98/Obtainium) → **Add App**
 2. URL: `https://github.com/dzid26/TeslaBatteryBLE`
-3. Enable **Include prereleases** (the preview channel is a prerelease)
-4. Install and let Obtainium track new previews
+3. Obtainium tracks stable releases by default. To follow the rolling preview
+   channel instead, also enable **Include prereleases**.
+4. Install and let Obtainium keep it updated
 
-Signed stable releases and F-Droid are on the [roadmap](docs/master-plan.md).
+No stable release has shipped yet, so the preview channel is currently the only
+one available. Signed stable releases and F-Droid are on the
+[roadmap](docs/master-plan.md).
 
 ## Build from source
 
