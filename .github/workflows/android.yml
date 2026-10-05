@@ -104,7 +104,9 @@ jobs:
           sudo udevadm trigger --name-match=kvm
 
       - name: Capture screenshots
+        id: capture
         if: startsWith(github.ref, 'refs/tags/')
+        continue-on-error: true
         uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
         with:
           api-level: 34
@@ -114,6 +116,23 @@ jobs:
           emulator-boot-timeout: 420
           disable-animations: true
           script: bash .github/scripts/capture-screenshots.sh app/build/outputs/apk/debug/app-debug.apk screenshots
+
+      # Emulator flakes (GL context preemption, adb daemon) are common on CI
+      # runners; give the capture one fresh attempt. The compose step below
+      # still fails the job when no complete set is produced, so a release is
+      # never published without its screenshots.
+      - name: Retry the capture once
+        if: startsWith(github.ref, 'refs/tags/') && steps.capture.outcome == 'failure'
+        continue-on-error: true
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          emulator-boot-timeout: 420
+          disable-animations: true
+          script: rm -rf screenshots && bash .github/scripts/capture-screenshots.sh app/build/outputs/apk/debug/app-debug.apk screenshots
 
       - name: Compose the screenshot sheet
         if: startsWith(github.ref, 'refs/tags/')
@@ -174,6 +193,8 @@ jobs:
           sudo udevadm trigger --name-match=kvm
 
       - name: Capture screenshots
+        id: capture
+        continue-on-error: true
         uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
         with:
           api-level: 34
@@ -183,6 +204,23 @@ jobs:
           emulator-boot-timeout: 420
           disable-animations: true
           script: bash .github/scripts/capture-screenshots.sh app/build/outputs/apk/debug/app-debug.apk screenshots
+
+      # Emulator flakes (GL context preemption, adb daemon) are common on CI
+      # runners; give the capture one fresh attempt. The compose step below
+      # still fails the job when no complete set is produced, so a release is
+      # never published without its screenshots.
+      - name: Retry the capture once
+        if: steps.capture.outcome == 'failure'
+        continue-on-error: true
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          emulator-boot-timeout: 420
+          disable-animations: true
+          script: rm -rf screenshots && bash .github/scripts/capture-screenshots.sh app/build/outputs/apk/debug/app-debug.apk screenshots
 
       - name: Compose the screenshot sheet
         run: bash .github/scripts/build-screenshot-sheet.sh screenshots screenshots/screenshot-sheet.png
