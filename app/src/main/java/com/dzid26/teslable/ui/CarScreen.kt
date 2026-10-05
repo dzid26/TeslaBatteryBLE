@@ -64,9 +64,12 @@ import com.dzid26.teslable.ble.connectionDisplay
 import com.dzid26.teslable.ble.vehicleStatusText
 import com.dzid26.teslable.core.history.BatterySample
 import com.dzid26.teslable.core.history.ChargeProjection
+import com.dzid26.teslable.core.history.DischargeProjection
 import com.dzid26.teslable.core.history.HistoryRange
 import com.dzid26.teslable.core.history.chargeProjection
 import com.dzid26.teslable.core.history.chargeStats
+import com.dzid26.teslable.core.history.dischargeProjection
+import com.dzid26.teslable.core.history.projectionWindowMillis
 import com.dzid26.teslable.core.history.within
 import com.dzid26.teslable.core.protocol.TeslaCommands
 import kotlinx.coroutines.delay
@@ -509,13 +512,20 @@ private fun BatteryHistoryCard(samples: List<BatterySample>) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             } else {
-                // The projection is derived from every sample, not just the
-                // visible window, so a charge that started before the selected
+                // Projections are derived from every sample, not just the
+                // visible window, so a run that started before the selected
                 // range still projects.
-                val projection = chargeProjection(samples)
+                val charge = chargeProjection(samples)
+                val discharge =
+                    if (charge == null) {
+                        dischargeProjection(samples, range.projectionWindowMillis(), now)
+                    } else {
+                        null
+                    }
                 BatteryChart(
                     samples = visible,
-                    projection = projection,
+                    charge = charge,
+                    discharge = discharge,
                     windowStart =
                         range.durationMillis?.let { now - it }
                             ?: visible.first().timestampMillis,
@@ -526,7 +536,7 @@ private fun BatteryHistoryCard(samples: List<BatterySample>) {
                             .fillMaxWidth()
                             .height(140.dp),
                 )
-                projection?.let {
+                charge?.let {
                     Spacer(Modifier.height(6.dp))
                     Text(
                         text =
@@ -534,6 +544,16 @@ private fun BatteryHistoryCard(samples: List<BatterySample>) {
                                 formatTime(it.completionMillis, showDate = true),
                         style = MaterialTheme.typography.bodySmall,
                         color = chargingChartColor,
+                    )
+                }
+                discharge?.let {
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text =
+                            "Discharging · projected ${it.projectedPercent}% by " +
+                                formatTime(it.projectedAtMillis, showDate = true),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
@@ -558,7 +578,8 @@ private fun BatteryHistoryCard(samples: List<BatterySample>) {
 @Composable
 private fun BatteryChart(
     samples: List<BatterySample>,
-    projection: ChargeProjection?,
+    charge: ChargeProjection?,
+    discharge: DischargeProjection?,
     windowStart: Long,
     windowEnd: Long,
     showDate: Boolean,
@@ -582,8 +603,8 @@ private fun BatteryChart(
         val height = size.height - top - bottom
         if (width <= 0f || height <= 0f) return@Canvas
 
-        val minPercent = samples.minOf { it.percent }
-        val maxPercent = maxOf(samples.maxOf { it.percent }, projection?.targetPercent ?: 0)
+        val minPercent = minOf(samples.minOf { it.percent }, discharge?.projectedPercent ?: 100)
+        val maxPercent = maxOf(samples.maxOf { it.percent }, charge?.targetPercent ?: 0)
         var yMin = ((minPercent - 2).coerceAtLeast(0) / 5) * 5
         var yMax = (((maxPercent + 2).coerceAtMost(100) + 4) / 5) * 5
         if (yMax <= yMin) {
@@ -638,7 +659,7 @@ private fun BatteryChart(
             )
         }
 
-        projection?.let { target ->
+        charge?.let { target ->
             val end =
                 Offset(
                     x(target.completionMillis),
@@ -661,6 +682,32 @@ private fun BatteryChart(
             // future); a dot marks the target so the line reads as a target.
             drawCircle(
                 color = chargingColor,
+                radius = 3.dp.toPx(),
+                center = end,
+            )
+        }
+
+        discharge?.let { target ->
+            val end =
+                Offset(
+                    x(target.projectedAtMillis),
+                    y(target.projectedPercent),
+                )
+            drawPath(
+                path =
+                    Path().apply {
+                        moveTo(x(target.from.timestampMillis), y(target.from.percent))
+                        lineTo(end.x, end.y)
+                    },
+                color = lineColor.copy(alpha = 0.65f),
+                style =
+                    Stroke(
+                        width = 2.dp.toPx(),
+                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(8.dp.toPx(), 6.dp.toPx())),
+                    ),
+            )
+            drawCircle(
+                color = lineColor,
                 radius = 3.dp.toPx(),
                 center = end,
             )
