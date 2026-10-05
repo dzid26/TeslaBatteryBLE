@@ -4,9 +4,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="TeslaBatteryBLE: your Tesla's battery, tracked locally over Bluetooth LE. No cloud, no account, nothing leaves the phone.">
+  <meta name="description" content="An Android app that reads battery state from a Tesla over Bluetooth LE and keeps a local history.">
   <meta name="color-scheme" content="light dark">
-  <title>TeslaBatteryBLE — Local Tesla battery tracking over BLE</title>
+  <title>TeslaBatteryBLE — Tesla battery data over Bluetooth LE</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -15,7 +15,7 @@
   <header>
     <div class="container">
       <h1>TeslaBatteryBLE</h1>
-      <p class="tagline">Your Tesla's battery, tracked locally over Bluetooth LE. No cloud. No account. Nothing leaves the phone.</p>
+      <p class="tagline">An Android app that talks to a Tesla over Bluetooth LE: battery state, charge state, and a local history. Keys are enrolled on the car; there is no account and no server.</p>
       <div class="badges">
         <a class="badge" href="https://github.com/dzid26/TeslaBatteryBLE/actions/workflows/android.yml">Android CI</a>
         <a class="badge" href="https://github.com/dzid26/TeslaBatteryBLE/blob/main/LICENSE">AGPL-3.0-only</a>
@@ -55,28 +55,28 @@
         <h2 id="features-heading">Features</h2>
         <ul class="feature-grid">
           <li>
-            <h3>Scan &amp; pair</h3>
-            <p>Find nearby Teslas by advertised BLE name and pair a key with an NFC card tap on the console.</p>
+            <h3>Scanning and pairing</h3>
+            <p>Finds cars by their advertised BLE name and enrolls a key with an NFC card tap on the console.</p>
           </li>
           <li>
-            <h3>Encrypted session</h3>
-            <p>Read battery SOC and charge state over an authenticated, encrypted BLE session.</p>
+            <h3>Sessions</h3>
+            <p>Battery and charge data are read over the protocol's authenticated, encrypted session.</p>
           </li>
           <li>
-            <h3>On-demand wake</h3>
-            <p>The car is only woken when you ask — never in the background.</p>
+            <h3>Waking</h3>
+            <p>The car is woken only on request, not in the background.</p>
           </li>
           <li>
             <h3>Background tracking</h3>
-            <p>A foreground service keeps the connection alive while parked or charging, updating the SOC timeline.</p>
+            <p>A foreground service keeps the connection and the SOC timeline updated while parked or charging.</p>
           </li>
           <li>
-            <h3>SOC history graph</h3>
-            <p>View 6 h / 24 h / 7 d / all-time charge history with since-last-charge stats.</p>
+            <h3>History</h3>
+            <p>6 h / 24 h / 7 d / all-time views with since-last-charge stats.</p>
           </li>
           <li>
             <h3>Simulated car</h3>
-            <p>Debug builds include a simulated vehicle for development and screenshots without a real car.</p>
+            <p>Debug builds include a simulated vehicle, so development and screenshots don't need a car.</p>
           </li>
         </ul>
       </div>
@@ -85,14 +85,14 @@
     <section aria-labelledby="privacy-heading">
       <div class="container">
         <h2 id="privacy-heading">Privacy</h2>
-        <p>TeslaBatteryBLE is local-first. The app has <strong>no internet permission</strong> and sends nothing anywhere.</p>
+        <p>The app has no internet permission; it only talks to the car over Bluetooth.</p>
         <ul class="privacy-list">
-          <li>Vehicle keys stay in device-only app storage by default.</li>
-          <li>Opt-in encrypted Android backup is available in Settings; on Android 12+ it requires your device lock secret.</li>
-          <li>Known cars, SOC history, and settings live in a local database on your phone.</li>
-          <li>No analytics, crash reporting, ads, accounts, or telemetry.</li>
+          <li>Vehicle keys are kept in app-private storage; by default they are encrypted with the device Keystore and left out of backups.</li>
+          <li>Including the keys in Android backup is opt-in in Settings; on Android 12+ it requires encrypted backup.</li>
+          <li>Known cars, SOC history, and settings are stored in a local database.</li>
+          <li>There are no accounts, analytics, ads, or telemetry.</li>
         </ul>
-        <p>Read the full <a href="https://github.com/dzid26/TeslaBatteryBLE/blob/main/PRIVACY.md">privacy statement</a>.</p>
+        <p>The full privacy statement is in the <a href="https://github.com/dzid26/TeslaBatteryBLE/blob/main/PRIVACY.md">repository</a>.</p>
       </div>
     </section>
 
@@ -125,8 +125,8 @@
     <section class="status" aria-labelledby="status-heading">
       <div class="container">
         <h2 id="status-heading">Status &amp; roadmap</h2>
-        <p>TeslaBatteryBLE is in <strong>beta</strong>. The rolling preview is rebuilt from <code>main</code> on every push. Signed stable releases and F-Droid are on the roadmap.</p>
-        <p>See the <a href="https://github.com/dzid26/TeslaBatteryBLE/blob/main/docs/master-plan.md">master plan</a> for phases, scope, and what's coming next.</p>
+        <p>The app is in <strong>beta</strong>. The rolling preview release is rebuilt from <code>main</code> on every push; signed stable releases and F-Droid are planned.</p>
+        <p>The <a href="https://github.com/dzid26/TeslaBatteryBLE/blob/main/docs/master-plan.md">master plan</a> lists what's next.</p>
       </div>
     </section>
   </main>
