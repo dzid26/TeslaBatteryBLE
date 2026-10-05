@@ -33,6 +33,7 @@ import com.dzid26.teslable.ble.TeslaBleController
 import com.dzid26.teslable.ble.hasBlePermissions
 import com.dzid26.teslable.ble.isLocationEnabled
 import com.dzid26.teslable.ble.requiredBlePermissions
+import com.dzid26.teslable.ui.AboutScreen
 import com.dzid26.teslable.ui.MainScreen
 import com.dzid26.teslable.ui.PermissionState
 import com.dzid26.teslable.ui.SettingsScreen
@@ -69,7 +70,7 @@ class MainActivity : ComponentActivity() {
                 var permissionsGranted by remember { mutableStateOf(hasBlePermissions(context)) }
                 var permissionsDeniedForever by remember { mutableStateOf(false) }
                 var locationEnabled by remember { mutableStateOf(isLocationEnabled(context)) }
-                var showSettings by rememberSaveable { mutableStateOf(false) }
+                var screen by rememberSaveable { mutableStateOf(AppScreen.MAIN) }
 
                 val permissionLauncher =
                     rememberLauncherForActivityResult(
@@ -120,46 +121,52 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                if (showSettings) {
-                    SettingsScreen(
-                        keyStore = remember { PairingKeyStore(context) },
-                        onClearPairingCache = controller::clearPairingCache,
-                        onBack = { showSettings = false },
-                    )
-                } else {
-                    MainScreen(
-                        state = state,
-                        history = batteryHistory,
-                        permissionState =
-                            when {
-                                permissionsGranted -> PermissionState.GRANTED
-                                permissionsDeniedForever -> PermissionState.DENIED_FOREVER
-                                else -> PermissionState.MISSING
-                            },
-                        locationServicesEnabled = locationEnabled,
-                        onRequestPermissions = requestPermissions,
-                        onToggleScan = {
-                            if (state.scanning) {
-                                controller.stopScan()
-                            } else {
-                                permissionsGranted = hasBlePermissions(context)
-                                locationEnabled = isLocationEnabled(context)
-                                if (permissionsGranted) {
-                                    controller.startScan()
+                when (screen) {
+                    AppScreen.SETTINGS ->
+                        SettingsScreen(
+                            keyStore = remember { PairingKeyStore(context) },
+                            onClearPairingCache = controller::clearPairingCache,
+                            onOpenAbout = { screen = AppScreen.ABOUT },
+                            onBack = { screen = AppScreen.MAIN },
+                        )
+
+                    AppScreen.ABOUT ->
+                        AboutScreen(onBack = { screen = AppScreen.SETTINGS })
+
+                    AppScreen.MAIN ->
+                        MainScreen(
+                            state = state,
+                            history = batteryHistory,
+                            permissionState =
+                                when {
+                                    permissionsGranted -> PermissionState.GRANTED
+                                    permissionsDeniedForever -> PermissionState.DENIED_FOREVER
+                                    else -> PermissionState.MISSING
+                                },
+                            locationServicesEnabled = locationEnabled,
+                            onRequestPermissions = requestPermissions,
+                            onToggleScan = {
+                                if (state.scanning) {
+                                    controller.stopScan()
                                 } else {
-                                    requestPermissions()
+                                    permissionsGranted = hasBlePermissions(context)
+                                    locationEnabled = isLocationEnabled(context)
+                                    if (permissionsGranted) {
+                                        controller.startScan()
+                                    } else {
+                                        requestPermissions()
+                                    }
                                 }
-                            }
-                        },
-                        onToggleTracking = controller::setTrackingEnabled,
-                        onOpenVehicle = controller::openVehicle,
-                        onOpenRequestConsumed = controller::consumeOpenVehicleRequest,
-                        onPairKey = controller::pairKey,
-                        onVinChange = controller::setVinInput,
-                        onWake = { controller.wakeVehicle() },
-                        onReadSoc = { controller.requestChargeState() },
-                        onOpenSettings = { showSettings = true },
-                    )
+                            },
+                            onToggleTracking = controller::setTrackingEnabled,
+                            onOpenVehicle = controller::openVehicle,
+                            onOpenRequestConsumed = controller::consumeOpenVehicleRequest,
+                            onPairKey = controller::pairKey,
+                            onVinChange = controller::setVinInput,
+                            onWake = { controller.wakeVehicle() },
+                            onReadSoc = { controller.requestChargeState() },
+                            onOpenSettings = { screen = AppScreen.SETTINGS },
+                        )
                 }
             }
         }
@@ -181,6 +188,13 @@ class MainActivity : ComponentActivity() {
             BleTrackingService.start(this)
         }
     }
+}
+
+/** Top-level surfaces; the car list is the default and the back destination. */
+private enum class AppScreen {
+    MAIN,
+    SETTINGS,
+    ABOUT,
 }
 
 private fun hasNotificationPermission(context: Context): Boolean =
