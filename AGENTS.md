@@ -28,6 +28,12 @@ Master plan: `docs/master-plan.md` — read it first and update its checkboxes w
 - User-visible changes update README/CHANGELOG; architecture decisions get an ADR in `docs/adr/`.
 - Specs, plans, and product docs never name competitor products; competitive research lives in `docs/research/` only.
 
+## GitHub comments
+
+- Post agent comments as `github-actions[bot]` through the `Agent comment` workflow instead of the maintainer account:
+  `body_b64="$(printf '%s' "comment" | base64 -w0)"; gh workflow run agent-comment.yml -f pr=<n> -f body_b64="$body_b64"`
+- Pushes, merges, and commits stay on the maintainer account (commits need DCO sign-off).
+
 ## Do not
 
 - Commit secrets, keystores, or `local.properties`.
