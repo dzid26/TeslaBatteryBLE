@@ -57,3 +57,9 @@ key-storage details.
   implementation; CI diffs them against `expected.txt`.
 - **Simulated car**: debug builds include a fake transport/protocol so the full
   scan → pair → read flow runs on the JVM and on emulators.
+
+## See also
+
+- [`../reference/fleet-telemetry-vs-ble.md`](../reference/fleet-telemetry-vs-ble.md) —
+  generated cloud-vs-BLE signal matrix: every Fleet Telemetry field and whether
+  it is readable over BLE.

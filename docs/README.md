@@ -13,8 +13,9 @@ Where things go, so agents and humans file docs in the right place.
   implement them, and ADRs link back to the requirement.
 - [`protocol/`](protocol/) — wire protocol notes: transport, session/pairing,
   domains.
-- [`reference/`](reference/) — external references (Fleet Telemetry vs BLE,
-  signal matrix).
+- [`reference/fleet-telemetry-vs-ble.md`](reference/fleet-telemetry-vs-ble.md) —
+  generated cloud-vs-BLE signal matrix (what Tesla data is readable over BLE);
+  refreshed weekly by the signal-matrix workflow.
 - [`research/`](research/) — competitive and exploratory research. The only
   place competitor names appear.
 - Screenshots live in [`website/images/`](../website/images/) — one set shared by
