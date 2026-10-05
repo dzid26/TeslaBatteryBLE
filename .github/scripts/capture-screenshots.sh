@@ -205,6 +205,26 @@ tap_and_wait() {
   return 1
 }
 
+# Pull the current screen down to refresh: the cars list scans, and the car
+# view reconnects, wakes, or reads the battery based on its state.
+pull_refresh() {
+  adb shell input swipe 540 600 540 1600 800
+}
+
+# Pull until the target text appears (one pull is one refresh action).
+pull_until_text() {
+  local wait="$1" attempts="${2:-3}" timeout="${3:-15}" attempt
+  for attempt in $(seq 1 "$attempts"); do
+    pull_refresh
+    if wait_for_text "$wait" "$timeout"; then
+      return 0
+    fi
+    echo "  ... pull did not lead to '$wait' (attempt $attempt)" >&2
+    sleep 1
+  done
+  return 1
+}
+
 # Scroll until the text node sits in the upper part of the screen, so the card
 # below it is framed. Swipes are slow so flings cannot overshoot the end of the
 # content, and a card that sits near the bottom is accepted once it is high
@@ -266,17 +286,15 @@ if [ "$focused" != true ]; then
 fi
 sleep 2
 
-# 02 — the scan finding the simulated cars. Without Bluetooth hardware the app
-# keeps running and reports it in the log, so this works on emulators too.
-if tap_text "Scan for Teslas"; then
-  if wait_for_text "Scanning:" 20 && wait_for_text "AA:BB:CC:DD:EE:01" 20; then
-    sleep 1
-    capture 02-scanning.png
-  else
-    echo "  ! scan results never appeared" >&2
-  fi
+# 02 — the scan finding the simulated cars. A pull on the cars list starts it;
+# without Bluetooth hardware the app keeps running and reports it in the log,
+# so this works on emulators too.
+pull_refresh
+if wait_for_text "Scanning:" 20 && wait_for_text "AA:BB:CC:DD:EE:01" 20; then
+  sleep 1
+  capture 02-scanning.png
 else
-  echo "  ! could not start a scan" >&2
+  echo "  ! scan results never appeared" >&2
 fi
 
 # Open the simulated car and drive the demo flow. These steps are skipped
@@ -284,8 +302,10 @@ fi
 if tap_text "AA:BB:CC:DD:EE:01"; then
   if wait_for_text "Pair key" 30; then
     tap_and_wait "Pair key" "Paired" 30 || echo "  ! pairing did not finish" >&2
-    tap_and_wait "Wake vehicle" "Awake" 25 || echo "  ! car never reported awake" >&2
-    if tap_and_wait "Read SOC" "Charge limit" 25; then
+    # Pull-to-refresh replaced the Wake and Read buttons: one pull wakes the
+    # car, the next reads the battery once the status refresh lands.
+    pull_until_text "Awake" 2 || echo "  ! car never reported awake" >&2
+    if pull_until_text "Charge limit" 3; then
       sleep 1
       capture 03-car.png
     else
@@ -349,22 +369,19 @@ if adb shell cmd uimode night yes > /dev/null 2>&1; then
 
     # 02 — the scan, with the simulated car already known from the light pass
     # (its address is no longer shown, so wait for the other car's address).
-    if tap_text "Scan for Teslas" 20; then
-      if wait_for_text "Scanning:" 20 && wait_for_text "AA:BB:CC:DD:EE:02" 20; then
-        sleep 1
-        capture 02-scanning-dark.png
-      else
-        echo "  ! dark scan results never appeared" >&2
-      fi
+    pull_refresh
+    if wait_for_text "Scanning:" 20 && wait_for_text "AA:BB:CC:DD:EE:02" 20; then
+      sleep 1
+      capture 02-scanning-dark.png
     else
-      echo "  ! could not start a dark scan" >&2
+      echo "  ! dark scan results never appeared" >&2
     fi
 
     # 03 — the car detail; after a process restart the car is asleep again.
     if tap_text "Demo Tesla" 20; then
       if ! wait_for_text "Charge limit" 5; then
-        tap_and_wait "Wake vehicle" "Awake" 15 || true
-        tap_and_wait "Read SOC" "Charge limit" 15 || true
+        pull_until_text "Awake" 2 || true
+        pull_until_text "Charge limit" 3 || true
       fi
       if wait_for_text "Charge limit" 10; then
         sleep 1
