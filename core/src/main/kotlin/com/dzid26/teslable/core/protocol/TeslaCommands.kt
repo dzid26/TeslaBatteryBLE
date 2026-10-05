@@ -14,7 +14,14 @@ object TeslaCommands {
         val batteryLevel: Int?,
         val chargeLimit: Int?,
         val chargingState: String?,
+        /** Rated range in miles (`battery_range`); mirrors [batteryRange]. */
         val range: Float?,
+        /** Rated range in miles (`battery_range`); defaults to [range]. */
+        val batteryRange: Float? = range,
+        /** Estimated range in miles (`est_battery_range`). */
+        val estBatteryRange: Float? = null,
+        /** Usable SOC (`usable_battery_level`); can sit below [batteryLevel]. */
+        val usableBatteryLevel: Int? = null,
     )
 
     fun buildWakeRequest(): ByteArray = UnsignedMessage(RKEAction = RKEAction_E.RKE_ACTION_WAKE_VEHICLE).encode()
@@ -48,6 +55,8 @@ object TeslaCommands {
                     }
                 },
             range = charge.battery_range,
+            estBatteryRange = charge.est_battery_range,
+            usableBatteryLevel = charge.usable_battery_level,
         )
     }
 
