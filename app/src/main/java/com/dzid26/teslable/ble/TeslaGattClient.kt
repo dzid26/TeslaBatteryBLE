@@ -87,6 +87,7 @@ class TeslaGattClient(
         gatt?.readRemoteRssi()
     }
 
+    @SuppressLint("MissingPermission")
     private fun processWriteQueue() {
         if (writeInProgress) return
         val gatt = gatt ?: return
@@ -145,6 +146,7 @@ class TeslaGattClient(
             }
         }
 
+        @SuppressLint("MissingPermission")
         override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
             if (status != BluetoothGatt.GATT_SUCCESS) {
                 listener.onLog("Service discovery failed with status $status")
