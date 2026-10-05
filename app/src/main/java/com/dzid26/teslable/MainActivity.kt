@@ -127,6 +127,7 @@ class MainActivity : ComponentActivity() {
                 if (showSettings) {
                     SettingsScreen(
                         keyStore = remember { PairingKeyStore(context) },
+                        onResetPairedState = controller::resetPairedState,
                         onBack = { showSettings = false },
                     )
                 } else {

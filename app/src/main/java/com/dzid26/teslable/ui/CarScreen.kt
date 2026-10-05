@@ -258,10 +258,7 @@ private fun PhoneKeyCard(
 ) {
     // The stored slot proves enrollment even before the car answers.
     val keySlot = connection?.keySlot ?: vehicle?.keySlot
-    val paired =
-        keySlot != null ||
-            connection?.sessions?.isNotEmpty() == true ||
-            connection?.pairing == PairingPhase.OK
+    val paired = keySlot != null || connection?.pairing == PairingPhase.OK
     val pairing = connection?.pairing ?: PairingPhase.IDLE
     val pairingInProgress = pairing == PairingPhase.SENDING || pairing == PairingPhase.WAITING_FOR_CARD
     Card(modifier = Modifier.fillMaxWidth()) {

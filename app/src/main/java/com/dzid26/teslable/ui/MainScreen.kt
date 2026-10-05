@@ -309,7 +309,6 @@ private fun VehicleCard(
     val paired =
         row.vehicle?.keySlot != null ||
             row.connection?.keySlot != null ||
-            row.connection?.sessions?.isNotEmpty() == true ||
             row.connection?.pairing == PairingPhase.OK
 
     Card(

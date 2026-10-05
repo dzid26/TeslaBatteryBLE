@@ -188,6 +188,24 @@ class TeslaBleController(
         _state.update { it.copy(openVehicleRequest = null) }
     }
 
+    /**
+     * Forgets the cached paired state (key slots and sessions) so the pairing
+     * flow can be exercised again. The stored key is kept, and the car still
+     * has it in its whitelist, so the next whitelist check may mark the car
+     * paired again.
+     */
+    fun resetPairedState() {
+        vehicles.values.forEach { vehicle ->
+            if (vehicle.keySlot != null) {
+                vehicles[vehicle.bleName] = vehicle.copy(keySlot = null)
+            }
+        }
+        vehicleStore.save(vehicles.values)
+        publishVehicles()
+        links.values.forEach { it.forgetPairedState() }
+        log("Paired state cleared; the stored key is kept")
+    }
+
     private fun openVehicle(
         bleName: String,
         address: String,
@@ -771,6 +789,24 @@ class TeslaBleController(
             chargeAfterSession = false
             updateConnection(address) {
                 it.copy(phase = ConnectionPhase.IDLE, sessions = emptyList())
+            }
+        }
+
+        /** Drops the cached key slot and sessions after the paired state was cleared. */
+        fun forgetPairedState() {
+            sessions.clear()
+            pendingSessions.clear()
+            pendingCommands.clear()
+            keySlotQueue = emptyList()
+            pairingPhase = PairingPhase.IDLE
+            pairingKeyId = null
+            updateConnection(address) {
+                it.copy(
+                    keySlot = null,
+                    sessions = emptyList(),
+                    pairing = PairingPhase.IDLE,
+                    pairingKeyId = null,
+                )
             }
         }
 

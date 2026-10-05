@@ -15,6 +15,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -32,6 +34,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import com.dzid26.teslable.ble.PairingKeyStore
 
@@ -39,13 +42,16 @@ import com.dzid26.teslable.ble.PairingKeyStore
 @Composable
 fun SettingsScreen(
     keyStore: PairingKeyStore,
+    onResetPairedState: () -> Unit,
     onBack: () -> Unit,
 ) {
     BackHandler { onBack() }
 
     var backupEnabled by remember { mutableStateOf(keyStore.isBackupEnabled()) }
+    var keyId by remember { mutableStateOf(keyStore.load()?.keyId?.toHex()) }
     var showEnableDialog by remember { mutableStateOf(false) }
     var showDisableDialog by remember { mutableStateOf(false) }
+    var showResetDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -70,51 +76,21 @@ fun SettingsScreen(
                     .padding(innerPadding)
                     .padding(16.dp),
         ) {
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp)) {
-                    Text(
-                        text = "Vehicle keys",
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-                    Spacer(Modifier.height(12.dp))
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text(
-                            text = "Include vehicle keys in Android backup",
-                            style = MaterialTheme.typography.bodyLarge,
-                            modifier = Modifier.weight(1f),
-                        )
-                        Spacer(Modifier.width(12.dp))
-                        Switch(
-                            checked = backupEnabled,
-                            onCheckedChange = { checked ->
-                                if (checked) {
-                                    showEnableDialog = true
-                                } else {
-                                    showDisableDialog = true
-                                }
-                            },
-                        )
+            VehicleKeysCard(
+                backupEnabled = backupEnabled,
+                onToggleBackup = { checked ->
+                    if (checked) {
+                        showEnableDialog = true
+                    } else {
+                        showDisableDialog = true
                     }
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        text =
-                            if (backupEnabled) {
-                                "Currently: vehicle keys are stored so Android can back them up. " +
-                                    "Google backups are encrypted with your Google account and device lock, " +
-                                    "so a new phone can restore pairing from them."
-                            } else {
-                                "Currently: vehicle keys are encrypted with this device's hardware-backed " +
-                                    "Keystore (AES) and stay out of Android backups. On a new phone you re-pair " +
-                                    "with an NFC card tap."
-                            },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
+                },
+            )
+            Spacer(Modifier.height(16.dp))
+            PairingCard(
+                keyId = keyId,
+                onReset = { showResetDialog = true },
+            )
         }
     }
 
@@ -138,6 +114,104 @@ fun SettingsScreen(
             },
             onDismiss = { showDisableDialog = false },
         )
+    }
+
+    if (showResetDialog) {
+        ResetPairedStateDialog(
+            onConfirm = {
+                showResetDialog = false
+                onResetPairedState()
+            },
+            onDismiss = { showResetDialog = false },
+        )
+    }
+}
+
+@Composable
+private fun VehicleKeysCard(
+    backupEnabled: Boolean,
+    onToggleBackup: (Boolean) -> Unit,
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp)) {
+            Text(
+                text = "Vehicle keys",
+                style = MaterialTheme.typography.titleMedium,
+            )
+            Spacer(Modifier.height(12.dp))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    text = "Include vehicle keys in Android backup",
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.weight(1f),
+                )
+                Spacer(Modifier.width(12.dp))
+                Switch(
+                    checked = backupEnabled,
+                    onCheckedChange = onToggleBackup,
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text =
+                    if (backupEnabled) {
+                        "Currently: vehicle keys are stored so Android can back them up. " +
+                            "Google backups are encrypted with your Google account and device lock, " +
+                            "so a new phone can restore pairing from them."
+                    } else {
+                        "Currently: vehicle keys are encrypted with this device's hardware-backed " +
+                            "Keystore (AES) and stay out of Android backups. On a new phone you re-pair " +
+                            "with an NFC card tap."
+                    },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun PairingCard(
+    keyId: String?,
+    onReset: () -> Unit,
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp)) {
+            Text(
+                text = "Pairing",
+                style = MaterialTheme.typography.titleMedium,
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = keyId?.let { "Key ${it.take(8)}…" } ?: "No key stored",
+                style = MaterialTheme.typography.bodyMedium,
+                fontFamily = FontFamily.Monospace,
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text =
+                    "Resetting forgets the cached paired state (key slots and sessions) so the " +
+                        "pairing flow can be tested again. The stored key is kept, and the car still " +
+                        "has it in its whitelist, so the next whitelist check may mark it paired again.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(12.dp))
+            Button(
+                onClick = onReset,
+                enabled = keyId != null,
+                colors =
+                    ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer,
+                        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                    ),
+            ) {
+                Text("Reset paired state")
+            }
+        }
     }
 }
 
@@ -192,3 +266,30 @@ private fun DisableBackupDialog(
         },
     )
 }
+
+@Composable
+private fun ResetPairedStateDialog(
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Reset paired state?") },
+        text = {
+            Text(
+                "The app forgets which key slot each car reported and drops its sessions, so the " +
+                    "pairing flow can be tested again. The stored key is kept and pairing again reuses " +
+                    "it. If the car still has the key in its whitelist, the next whitelist check may " +
+                    "mark it paired again.",
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm) { Text("Reset") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        },
+    )
+}
+
+private fun ByteArray.toHex(): String = joinToString("") { byte -> (byte.toInt() and 0xFF).toString(16).padStart(2, '0') }
