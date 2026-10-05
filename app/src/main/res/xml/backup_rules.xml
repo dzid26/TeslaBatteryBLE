@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- API 26-30 cannot require client-side encryption for backup, so keep the
+     vehicle key out of backup here; re-pair with an NFC card tap instead. -->
+<full-backup-content>
+    <exclude domain="sharedpref" path="pairing_key.xml" />
+</full-backup-content>

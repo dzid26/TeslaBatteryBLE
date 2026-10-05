@@ -17,9 +17,9 @@ All notable changes to this project are documented here. The format is based on
 
 ### Changed
 
-- Vehicle key now stored in app-private storage and included in Android backup so
-  pairing survives a device change (ADR-0005); legacy Keystore-encrypted keys migrate
-  automatically
+- Vehicle key now stored in app-private storage; on Android 12+ it is included in
+  cloud backup only when encrypted backup is available, and it stays excluded on
+  older versions (ADR-0005). Legacy Keystore-encrypted keys migrate automatically
 - CI: concurrency cancellation, least-privilege permissions, Android lint and app
   unit tests in the pipeline
 
