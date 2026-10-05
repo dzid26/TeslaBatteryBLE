@@ -307,10 +307,15 @@ class BleTrackingService : Service() {
         var isRunning: Boolean = false
 
         fun start(context: Context) {
-            ContextCompat.startForegroundService(
-                context,
-                Intent(context, BleTrackingService::class.java).setAction(ACTION_START),
-            )
+            try {
+                ContextCompat.startForegroundService(
+                    context,
+                    Intent(context, BleTrackingService::class.java).setAction(ACTION_START),
+                )
+            } catch (_: IllegalStateException) {
+                // ForegroundServiceStartNotAllowedException (API 31+): Android
+                // forbids starting from the background. The UI retries on resume.
+            }
         }
 
         fun stop(context: Context) {

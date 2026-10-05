@@ -249,6 +249,20 @@ class TeslaBleController(
         link.pairKey()
     }
 
+    /** True when an enrolled car is connected, so the tracking service should run. */
+    fun shouldTrack(): Boolean {
+        val state = _state.value
+        return state.trackingEnabled &&
+            state.connections.values.any { connection ->
+                connection.phase == ConnectionPhase.READY &&
+                    (
+                        connection.pairing == PairingPhase.OK ||
+                            connection.keySlot != null ||
+                            connection.sessions.isNotEmpty()
+                    )
+            }
+    }
+
     /** Master switch: off tears everything down, on reconnects to paired cars. */
     fun setTrackingEnabled(enabled: Boolean) {
         if (_state.value.trackingEnabled == enabled) return

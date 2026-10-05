@@ -28,9 +28,7 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.dzid26.teslable.ble.BleControllerHolder
 import com.dzid26.teslable.ble.BleTrackingService
-import com.dzid26.teslable.ble.ConnectionPhase
 import com.dzid26.teslable.ble.PairingKeyStore
-import com.dzid26.teslable.ble.PairingPhase
 import com.dzid26.teslable.ble.TeslaBleController
 import com.dzid26.teslable.ble.hasBlePermissions
 import com.dzid26.teslable.ble.isLocationEnabled
@@ -116,16 +114,7 @@ class MainActivity : ComponentActivity() {
 
                 // Once a car with an enrolled key is connected, hand off to the
                 // foreground service so BLE keeps running with the app backgrounded.
-                val trackingNeeded =
-                    state.trackingEnabled &&
-                        state.connections.values.any { connection ->
-                            connection.phase == ConnectionPhase.READY &&
-                                (
-                                    connection.pairing == PairingPhase.OK ||
-                                        connection.keySlot != null ||
-                                        connection.sessions.isNotEmpty()
-                                )
-                        }
+                val trackingNeeded = controller.shouldTrack()
                 LaunchedEffect(trackingNeeded) {
                     if (!trackingNeeded || BleTrackingService.isRunning) return@LaunchedEffect
                     if (!hasNotificationPermission(context)) {
@@ -180,6 +169,15 @@ class MainActivity : ComponentActivity() {
         intent
             .getStringExtra(BleTrackingService.EXTRA_BLE_NAME)
             ?.let(controller::openVehicleByBleName)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Android forbids starting a foreground service from the background;
+        // retry on resume so tracking comes up after a denied attempt.
+        if (!BleTrackingService.isRunning && controller.shouldTrack()) {
+            BleTrackingService.start(this)
+        }
     }
 }
 
