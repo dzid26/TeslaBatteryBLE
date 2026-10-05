@@ -97,6 +97,7 @@ A trustworthy shell around the existing protocol work. No user-facing features.
 - [ ] **Battery health v1 (loose, BLE-only)**: rated-range + energy-delta capacity estimates fused with confidence + data-quality flag; session-count "Learning" gate; Service-Mode health-test result logging; habit cards (charge-limit share, AC/DC mix, deep discharges); charge taper / balancing-sawtooth detection; static reference bands from published studies. Never claim cell imbalance, pack temperatures, or month-quantified lifespan without pack-level data.
 - [x] **Float-precision readings** (2026-10-05): parse `battery_range` / `est_battery_range` (and `usable_battery_level`) into the charge model and history samples; core `PreciseReading` helper with documented fallbacks, used by the car hero and history stats and ready for the estimators. Old CSV rows are dropped, not migrated (pre-1.0 hygiene).
 - [ ] Units choice in Settings: System default / Metric / Imperial (one global setting), defaulting to the device's measurement system (`android.icu.util.LocaleData.getMeasurementSystem`: US → imperial, SI → metric, UK → miles + °C); display-only conversion from canonical miles, with core conversion helpers + tests.
+- [ ] **History storage decision** (before expanding logged values): replace the append-only CSV with an evolution-friendly store — protobuf append-log vs Room/SQLite — implemented behind `BatteryHistoryStore`; additive schema evolution so new fields never drop old rows, and no more one-off device fixes for format changes.
 - [ ] Notifications: charge complete, SOC thresholds, **vampire-drain alert**.
 - [ ] Widget (Glance), automation intents (Tasker), CSV/JSON export.
 - [ ] Multiple cars: storage, per-vehicle links, VIN, per-car notifications and the cars/car UI landed (ADR-0004); share redacted diagnostics open. Requirements: `docs/requirements/multi-vehicle.md`.
@@ -128,6 +129,7 @@ A trustworthy shell around the existing protocol work. No user-facing features.
 ## 10. Open decisions (defaults so nothing blocks)
 
 - Display name before store submission (default: keep `TeslaBatteryBLE`); `applicationId com.dzid26.teslable` is frozen.
+- History storage format (default: protobuf append-log; decide before logging more value types).
 - Library name + publication target (Phase 3).
 - Play go/no-go (Phase 2).
 - Library docs site repo/hosting (Phase 3).
