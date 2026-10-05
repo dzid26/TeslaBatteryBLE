@@ -26,9 +26,18 @@ cp "$APK" "$ASSET_APK"
 
 git fetch --tags origin
 
-# Most recent release that is not the rolling preview itself.
-PREV_TAG="$(gh release list --limit 100 --json tagName,createdAt \
-  --jq '[.[] | select(.tagName != "preview")] | sort_by(.createdAt) | reverse | .[0].tagName // empty')"
+# Most recent release that is not the rolling preview itself and not cut from
+# this commit (the newest tag is often on the same commit as the preview).
+PREV_TAG=""
+while read -r candidate; do
+  [ -n "$candidate" ] || continue
+  candidate_sha="$(git rev-parse -q --verify "refs/tags/$candidate^{commit}" 2>/dev/null || true)"
+  if [ -n "$candidate_sha" ] && [ "$candidate_sha" != "$SHA" ]; then
+    PREV_TAG="$candidate"
+    break
+  fi
+done < <(gh release list --limit 100 --json tagName,createdAt \
+  --jq '[.[] | select(.tagName != "preview")] | sort_by(.createdAt) | reverse | .[].tagName')
 
 # Move the rolling tag to this build.
 git tag -f "$TAG" "$SHA"
