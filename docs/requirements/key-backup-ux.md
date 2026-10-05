@@ -36,21 +36,17 @@ no export/import, no deep links.
   fallback.
 - A plain "forget key" action: uninstall or system "Clear storage" covers it.
 
-## Needed: replace the key after a theft
+## Theft recovery: per-car keys, fresh key on pairing (implemented 2026-10-05)
 
 Removing the key in the car (Controls → Locks) revokes it, but a restored
-backup brings the same key back. Pairing reuses the stored key
-(`loadOrCreate`), so tapping Pair re-enrolls the old public key and a stolen
-copy becomes valid again. The theft case is therefore different from the
-others:
+backup brings the same key back. Pairing used to reuse the stored key, so
+tapping Pair could re-enroll the old public key and re-arm a stolen copy.
 
-- Settings → Pairing gets a **Replace key** action: discard the stored key,
-  generate a fresh one, and keep cars/VIN/history. Pairing then enrolls only
-  the new key.
-- The confirmation must say: remove the old key in the car first; this does not
-  touch the car's whitelist or existing Google backup copies (turn backup off
-  and let a pass replace them, or `bmgr wipe` via adb).
-- FAQ: phone stolen → remove the key in the car → on the new phone replace the
-  key before pairing → re-enable backup.
+- Each car now owns its key pair, and pairing always enrolls a freshly
+  generated key for that car. A key the car no longer has is never re-enrolled.
+- The app cannot edit the car's key list; removing the old entry stays a manual
+  step in Controls → Locks, and old Google backup copies need a backup pass (or
+  `bmgr wipe` via adb) to be replaced.
+- No manual "Replace key" button is needed; the pairing flow handles it.
 - Revisit scopes beyond CHARGING_MANAGER, where key loss has a bigger blast
   radius.

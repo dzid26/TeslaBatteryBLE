@@ -56,7 +56,11 @@ fun SettingsScreen(
     val vehicleKeys =
         remember(vehicles) {
             vehicles.mapNotNull { vehicle ->
-                keyStore.load(vehicle.bleName)?.keyId?.toHex()?.let { id -> vehicle.title to id }
+                keyStore
+                    .load(vehicle.bleName)
+                    ?.keyId
+                    ?.toHex()
+                    ?.let { id -> vehicle.title to id }
             }
         }
     var showEnableDialog by remember { mutableStateOf(false) }

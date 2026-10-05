@@ -26,6 +26,9 @@ All notable changes to this project are documented here. The format is based on
 - Battery history is excluded from Android backup, so a restored install never
   shows a stale "last known" percentage; cached key slots are dropped when the
   key is missing after a restore
+- Vehicle keys are per car now, and pairing always enrolls a freshly generated
+  key; a key the car no longer has is never re-enrolled, so a restored key from
+  a stolen phone cannot be re-armed
 - Settings explains when Android runs backups and how to check or trigger one;
   enabling key backup nudges the system so the key is stored sooner
 - Pairing starts with a whitelist check: a key the car already has is marked

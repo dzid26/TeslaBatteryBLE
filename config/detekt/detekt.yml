@@ -27,6 +27,12 @@ complexity:
   # BLE message dispatchers and UI-state mappers are inherently branchy.
   CyclomaticComplexMethod:
     threshold: 20
+  # VehicleLink is one cohesive per-car state machine (transport, sessions,
+  # pairing, polling, retries) whose state only makes sense together; splitting
+  # it would scatter that state across helper objects. The rule still catches
+  # anything growing past 700 lines of code.
+  LargeClass:
+    threshold: 700
 
 style:
   # Protocol parsers and BLE handlers use guard-clause early returns; the

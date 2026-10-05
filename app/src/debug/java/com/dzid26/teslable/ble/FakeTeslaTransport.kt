@@ -5,6 +5,7 @@ package com.dzid26.teslable.ble
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import com.dzid26.teslable.core.TeslaNames
 import kotlin.random.Random
 
 /**
@@ -25,7 +26,7 @@ class FakeTeslaTransport(
             ?: DemoMode.DEMO_VIN
     private val protocol =
         FakeCarProtocol(vin).apply {
-            setEnrolledKey(PairingKeyStore(context).load()?.publicKeyRaw)
+            setEnrolledKey(PairingKeyStore(context).load(TeslaNames.bleName(vin))?.publicKeyRaw)
         }
 
     private var connected = false

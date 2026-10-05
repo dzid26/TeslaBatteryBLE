@@ -73,7 +73,8 @@ class PairingKeyStore(
         if (vehicleIds.isEmpty()) return
         val legacy = loadLegacy() ?: return
         vehicleIds.filter { loadInternal(it) == null }.forEach { save(it, legacy) }
-        prefs.edit()
+        prefs
+            .edit()
             .remove(KEY_PUBLIC)
             .remove(KEY_PRIVATE)
             .remove(KEY_IV)
@@ -89,7 +90,8 @@ class PairingKeyStore(
             if (decrypted == null) {
                 // Keystore material restored from another device cannot be
                 // decrypted; drop it so a fresh key can be generated.
-                prefs.edit()
+                prefs
+                    .edit()
                     .remove(KEY_PUBLIC)
                     .remove(KEY_PRIVATE)
                     .remove(KEY_IV)
@@ -185,7 +187,10 @@ class PairingKeyStore(
                 }
             }.toSet()
 
-    private fun key(vehicleId: String, suffix: String): String = "$PREFIX$vehicleId.$suffix"
+    private fun key(
+        vehicleId: String,
+        suffix: String,
+    ): String = "$PREFIX$vehicleId.$suffix"
 
     /** Encrypts bytes with the Keystore AES-GCM key, returning IV and ciphertext. */
     private fun encryptWithKeystore(plaintext: ByteArray): Pair<ByteArray, ByteArray> {

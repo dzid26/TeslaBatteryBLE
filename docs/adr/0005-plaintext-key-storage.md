@@ -21,6 +21,11 @@ Date: 2026-10-05
 - Default to device-only storage: vehicle keys (P-256) are encrypted with an AES
   key held in the hardware-backed Android Keystore, so they are not readable from
   a backup and do not survive a phone change.
+- Keep one key pair per vehicle, not one global key: each car's key is generated
+  when that car is paired, so cars can be revoked or re-keyed independently.
+- Never re-enroll a key a car no longer has. Pairing always enrolls a freshly
+  generated key for that car, so a key removed in the car (for example after a
+  phone theft) stays dead even when app data is restored from backup.
 - Offer one global in-app opt-in setting (not per car), "Include vehicle keys in
   Android backup". When enabled, the private keys are stored as PKCS#8 base64 in
   app-private SharedPreferences so Android backup can restore pairing on a new
@@ -29,8 +34,10 @@ Date: 2026-10-05
 - Keep the encryption-gated backup rules: on Android 12+, cloud backup is allowed
   only when client-side encryption is available (`disableIfNoEncryptionCapabilities`);
   on Android 11 and below the keys are excluded from backup.
-- Keep the legacy Keystore-encrypted format readable for one release cycle and
-  migrate it transparently on first load into the currently selected mode.
+- Adopt the pre-per-car global key as each known vehicle's key once on first
+  load, then drop it. Keep the legacy Keystore-encrypted per-key format readable
+  for one release cycle and migrate it transparently on first load into the
+  currently selected mode.
 
 ## Consequences
 
