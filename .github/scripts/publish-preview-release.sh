@@ -3,8 +3,8 @@
 # Create or update the rolling "preview" release for the current commit.
 #
 # Run from a checkout of the repository with `dist/app-debug.apk` already built.
-# Screenshots are embedded from the deployed GitHub Pages site (`website/images/`
-# in the repo) instead of being uploaded as release assets.
+# Screenshots ship as release assets: one composed sheet when ImageMagick is
+# available, otherwise the individual images.
 set -euo pipefail
 
 REPO="${GITHUB_REPOSITORY:?GITHUB_REPOSITORY is required}"
@@ -15,11 +15,18 @@ TITLE="Preview build"
 APK="dist/app-debug.apk"
 ASSET_APK="TeslaBatteryBLE-preview-$SHORT_SHA.apk"
 SITE_IMAGES_DIR="website/images"
+SHEET="screenshot-sheet.png"
 
-# GitHub Pages origin for the deployed site images (owner is lowercased).
-OWNER="${REPO%/*}"
-NAME="${REPO#*/}"
-PAGES_ORIGIN="https://$(printf '%s' "$OWNER" | tr '[:upper:]' '[:lower:]').github.io/$NAME"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=./screenshot-sections.sh
+source "$SCRIPT_DIR/screenshot-sections.sh"
+
+SCREENSHOT_BASE_URL="https://github.com/$REPO/releases/download/$TAG"
+SHEET_OK="false"
+if bash "$SCRIPT_DIR/build-screenshot-sheet.sh" "$SHEET"; then
+  SHEET_OK="true"
+  SCREENSHOT_SHEET_URL="$SCREENSHOT_BASE_URL/$SHEET"
+fi
 
 [ -f "$APK" ] || { echo "missing $APK" >&2; exit 1; }
 cp "$APK" "$ASSET_APK"
@@ -70,31 +77,13 @@ git push origin "refs/tags/$TAG" --force
     echo
     echo "**Full diff**: https://github.com/$REPO/compare/$PREV_TAG...$TAG"
   fi
-  if [ -d "$SITE_IMAGES_DIR" ]; then
-    # Light screenshots first, then dark variants; glob order is alphabetical,
-    # which would interleave them.
-    screenshots=()
-    for file in "$SITE_IMAGES_DIR"/*.png; do
-      [ -e "$file" ] || continue
-      case "$(basename "$file")" in
-        *-dark.png) ;;
-        *) screenshots+=("$file") ;;
-      esac
-    done
-    for file in "$SITE_IMAGES_DIR"/*-dark.png; do
-      [ -e "$file" ] || continue
-      screenshots+=("$file")
-    done
-
-    if [ "${#screenshots[@]}" -gt 0 ]; then
-      echo
-      echo "## Screenshots"
-      echo
-      for screenshot in "${screenshots[@]}"; do
-        name="$(basename "$screenshot")"
-        echo "<img src=\"$PAGES_ORIGIN/images/$name\" width=\"360\" alt=\"${name%.png}\">"
-      done
-    fi
+  if [ "$SHEET_OK" = "true" ]; then
+    echo
+    echo "## Screenshots"
+    echo
+    echo "![App screenshots: light and dark]($SCREENSHOT_SHEET_URL)"
+  else
+    emit_screenshots "$SCREENSHOT_BASE_URL"
   fi
 } > preview-notes.md
 
@@ -110,3 +99,8 @@ else
 fi
 
 gh release upload "$TAG" "$ASSET_APK" --clobber
+if [ "$SHEET_OK" = "true" ]; then
+  gh release upload "$TAG" "$SHEET" --clobber
+elif compgen -G "$SITE_IMAGES_DIR/*.png" > /dev/null; then
+  gh release upload "$TAG" "$SITE_IMAGES_DIR"/*.png --clobber
+fi
