@@ -33,16 +33,18 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -70,6 +72,7 @@ import com.dzid26.teslable.core.history.BatterySample
 import com.dzid26.teslable.core.history.HistoryRange
 import com.dzid26.teslable.core.history.chargeStats
 import com.dzid26.teslable.core.history.within
+import kotlinx.coroutines.delay
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -88,8 +91,7 @@ internal fun CarScreen(
     onBack: () -> Unit,
     onPair: () -> Unit,
     onVinChange: (String) -> Unit,
-    onWake: () -> Unit,
-    onReadSoc: () -> Unit,
+    onRefresh: () -> Unit,
     onOpenSettings: () -> Unit,
     onToggleTracking: (Boolean) -> Unit,
 ) {
@@ -103,6 +105,26 @@ internal fun CarScreen(
         }
     val paired = isPaired(connection, vehicle)
     var editingVin by rememberSaveable(bleName) { mutableStateOf(false) }
+    // What a pull on this screen will do, and the feedback while it runs.
+    val pullLabel =
+        when {
+            connection?.phase != ConnectionPhase.READY -> "Reconnect"
+            connection.status?.asleep != false -> "Wake car"
+            else -> "Read battery"
+        }
+    val refreshingLabel =
+        when {
+            connection?.phase != ConnectionPhase.READY -> "Reconnecting…"
+            connection.status?.asleep != false -> "Waking…"
+            else -> "Reading…"
+        }
+    var refreshing by remember { mutableStateOf(false) }
+    LaunchedEffect(refreshing) {
+        if (refreshing) {
+            delay(REFRESH_FEEDBACK_MS)
+            refreshing = false
+        }
+    }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -132,30 +154,50 @@ internal fun CarScreen(
             )
         },
     ) { innerPadding ->
-        Column(
+        val pullState = rememberPullToRefreshState()
+        PullToRefreshBox(
+            isRefreshing = refreshing,
+            onRefresh = {
+                refreshing = true
+                onRefresh()
+            },
+            state = pullState,
             modifier =
                 Modifier
                     .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(innerPadding)
-                    .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+                    .padding(innerPadding),
+            indicator = {
+                RefreshIndicator(
+                    state = pullState,
+                    isRefreshing = refreshing,
+                    label = if (refreshing) refreshingLabel else pullLabel,
+                )
+            },
         ) {
-            HeroCard(
-                connection = connection,
-                advert = advert,
-                vehicle = vehicle,
-                history = vehicleHistory,
-                onEditVin = { editingVin = true },
-            )
-            ActionsRow(connection, onWake, onReadSoc)
-            // Once the app key is enrolled the hero carries its status; the card
-            // only exists for pairing, so it disappears when there is nothing to do.
-            if (!paired) {
-                KeyCard(connection, vehicle, onPair)
+            Column(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                HeroCard(
+                    connection = connection,
+                    advert = advert,
+                    vehicle = vehicle,
+                    history = vehicleHistory,
+                    onEditVin = { editingVin = true },
+                )
+                // Once the app key is enrolled the hero carries its status; the
+                // card only exists for pairing, so it disappears when there is
+                // nothing to do.
+                if (!paired) {
+                    KeyCard(connection, vehicle, onPair)
+                }
+                BatteryHistoryCard(vehicleHistory)
+                LogCard(bleName = bleName, log = state.log)
             }
-            BatteryHistoryCard(vehicleHistory)
-            LogCard(bleName = bleName, log = state.log)
         }
     }
 
@@ -337,32 +379,6 @@ private fun VinRow(
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.size(18.dp),
         )
-    }
-}
-
-@Composable
-private fun ActionsRow(
-    connection: TeslaConnection?,
-    onWake: () -> Unit,
-    onReadSoc: () -> Unit,
-) {
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Button(
-            onClick = onWake,
-            enabled =
-                connection?.sessions?.contains("DOMAIN_VEHICLE_SECURITY") == true &&
-                    connection.status?.asleep == true,
-        ) {
-            Text("Wake vehicle")
-        }
-        OutlinedButton(
-            onClick = onReadSoc,
-            enabled =
-                connection?.phase == ConnectionPhase.READY &&
-                    connection.status?.asleep == false,
-        ) {
-            Text("Read SOC")
-        }
     }
 }
 
@@ -748,6 +764,7 @@ private fun HistoryRange.label(): String =
     }
 
 private const val VIN_LENGTH = 17
+private const val REFRESH_FEEDBACK_MS = 2500L
 
 private val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 private val dateTimeFormatter = DateTimeFormatter.ofPattern("dd MMM HH:mm")

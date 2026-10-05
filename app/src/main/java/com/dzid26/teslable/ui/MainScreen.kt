@@ -15,7 +15,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
@@ -30,6 +32,8 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -114,8 +118,16 @@ fun MainScreen(
             onBack = { viewingBleName = null },
             onPair = { onPairKey(address) },
             onVinChange = onVinChange,
-            onWake = onWake,
-            onReadSoc = onReadSoc,
+            onRefresh = {
+                // One pull does the right thing for the current state: reconnect,
+                // wake the car, or read the battery.
+                val connection = state.connections[address]
+                when {
+                    connection?.phase != ConnectionPhase.READY -> onOpenVehicle(address)
+                    connection.status?.asleep != false -> onWake()
+                    else -> onReadSoc()
+                }
+            },
             onOpenSettings = onOpenSettings,
             onToggleTracking = onToggleTracking,
         )
@@ -222,93 +234,139 @@ private fun ConnectionsScreen(
             )
         },
     ) { innerPadding ->
-        Column(
+        val pullState = rememberPullToRefreshState()
+        PullToRefreshBox(
+            isRefreshing = state.scanning,
+            onRefresh = {
+                if (!permissionsGranted) {
+                    onRequestPermissions()
+                } else if (!state.scanning) {
+                    onToggleScan()
+                }
+            },
+            state = pullState,
             modifier =
                 Modifier
                     .fillMaxSize()
-                    .padding(innerPadding)
-                    .padding(horizontal = 16.dp),
+                    .padding(innerPadding),
+            indicator = {
+                RefreshIndicator(
+                    state = pullState,
+                    isRefreshing = state.scanning,
+                    label = if (state.scanning) "Scanning…" else "Scan for cars",
+                )
+            },
         ) {
-            if (!permissionsGranted) {
-                PermissionCard(
-                    title = "Allow Bluetooth access",
-                    body =
-                        "TeslaBatteryBLE finds and talks to your Tesla over Bluetooth. " +
-                            "Android also requires location permission for BLE scans; the app " +
-                            "never reads your location and nothing leaves the phone.",
-                    button = "Grant permissions",
-                    onClick = onRequestPermissions,
+            Column(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 16.dp),
+            ) {
+                if (!permissionsGranted) {
+                    PermissionCard(
+                        title = "Allow Bluetooth access",
+                        body =
+                            "TeslaBatteryBLE finds and talks to your Tesla over Bluetooth. " +
+                                "Android also requires location permission for BLE scans; the app " +
+                                "never reads your location and nothing leaves the phone.",
+                        button = "Grant permissions",
+                        onClick = onRequestPermissions,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                }
+                if (!locationServicesEnabled) {
+                    Text(
+                        text = "Location services are off. BLE scans return no results until it is enabled.",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                }
+
+                val connectedCount = state.connections.values.count { it.phase == ConnectionPhase.READY }
+                val statusText =
+                    when {
+                        state.scanning ->
+                            "Scanning: ${state.devices.size} Tesla(s), $connectedCount connected"
+
+                        state.discovering ->
+                            "Looking for your cars..."
+
+                        rows.isNotEmpty() ->
+                            "${rows.size} car(s), $connectedCount connected"
+
+                        else -> "No scan yet"
+                    }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = statusText,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (state.scanning) {
+                        TextButton(onClick = onToggleScan) { Text("Stop") }
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
+
+                VehicleList(
+                    rows = rows,
+                    explicitScan = state.explicitScan,
+                    onOpen = onOpen,
+                    onPair = onPair,
                 )
-                Spacer(Modifier.height(8.dp))
             }
-            if (!locationServicesEnabled) {
+        }
+    }
+}
+
+/** The empty state or the car cards; split out to keep the screen readable. */
+@Composable
+private fun VehicleList(
+    rows: List<VehicleRow>,
+    explicitScan: Boolean,
+    onOpen: (String, String) -> Unit,
+    onPair: (String, String, Boolean) -> Unit,
+) {
+    if (rows.isEmpty()) {
+        Box(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState()),
+            contentAlignment = Alignment.Center,
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("No cars yet", style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.height(4.dp))
                 Text(
-                    text = "Location services are off. BLE scans return no results until it is enabled.",
-                    color = MaterialTheme.colorScheme.error,
+                    text = "Pull down to scan for your first Tesla.",
                     style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                Spacer(Modifier.height(8.dp))
             }
-
-            Button(onClick = onToggleScan, enabled = state.trackingEnabled) {
-                Text(if (state.scanning) "Stop scan" else "Scan for Teslas")
-            }
-            Spacer(Modifier.height(8.dp))
-
-            val connectedCount = state.connections.values.count { it.phase == ConnectionPhase.READY }
-            val statusText =
-                when {
-                    state.scanning ->
-                        "Scanning: ${state.devices.size} Tesla(s), $connectedCount connected"
-
-                    state.discovering ->
-                        "Looking for your cars..."
-
-                    rows.isNotEmpty() ->
-                        "${rows.size} car(s), $connectedCount connected"
-
-                    else -> "No scan yet"
-                }
-            Text(
-                text = statusText,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.height(12.dp))
-
-            if (rows.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("No cars yet", style = MaterialTheme.typography.titleMedium)
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            text = "Scan to add your first Tesla.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        }
+    } else {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            contentPadding = PaddingValues(bottom = 16.dp),
+        ) {
+            items(rows, key = { it.bleName }) { row ->
+                VehicleCard(
+                    row = row,
+                    explicitScan = explicitScan,
+                    onOpen = { onOpen(row.bleName, row.address) },
+                    onPair = {
+                        onPair(
+                            row.bleName,
+                            row.address,
+                            row.connection?.phase == ConnectionPhase.READY,
                         )
-                    }
-                }
-            } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    contentPadding = PaddingValues(bottom = 16.dp),
-                ) {
-                    items(rows, key = { it.bleName }) { row ->
-                        VehicleCard(
-                            row = row,
-                            explicitScan = state.explicitScan,
-                            onOpen = { onOpen(row.bleName, row.address) },
-                            onPair = {
-                                onPair(
-                                    row.bleName,
-                                    row.address,
-                                    row.connection?.phase == ConnectionPhase.READY,
-                                )
-                            },
-                        )
-                    }
-                }
+                    },
+                )
             }
         }
     }

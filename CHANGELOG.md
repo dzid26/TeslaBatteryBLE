@@ -38,6 +38,9 @@ All notable changes to this project are documented here. The format is based on
   reading, instead of only a connection state
 - Unpaired car view explains the NFC-card walkthrough before pairing
 - RSSI is shown only while connected
+- Cars list and car view refresh by pulling down; the pull label says what will
+  happen (Scan for cars / Wake car / Read battery), replacing the Scan, Wake
+  and Read buttons; a Stop action appears while scanning
 - Wake and command send failures are logged instead of failing silently
 - Release screenshots are captured from the simulated car automatically in CI
   and attached to each release as one `screenshot-sheet.png`; tag releases are
