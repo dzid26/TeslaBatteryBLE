@@ -21,6 +21,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.app.ActivityCompat
@@ -28,12 +29,14 @@ import androidx.core.content.ContextCompat
 import com.dzid26.teslable.ble.BleControllerHolder
 import com.dzid26.teslable.ble.BleTrackingService
 import com.dzid26.teslable.ble.ConnectionPhase
+import com.dzid26.teslable.ble.PairingKeyStore
 import com.dzid26.teslable.ble.PairingPhase
 import com.dzid26.teslable.ble.TeslaBleController
 import com.dzid26.teslable.ble.hasBlePermissions
 import com.dzid26.teslable.ble.isLocationEnabled
 import com.dzid26.teslable.ble.requiredBlePermissions
 import com.dzid26.teslable.ui.MainScreen
+import com.dzid26.teslable.ui.SettingsScreen
 import com.dzid26.teslable.ui.TeslaBleTheme
 
 class MainActivity : ComponentActivity() {
@@ -67,6 +70,7 @@ class MainActivity : ComponentActivity() {
                 var permissionsGranted by remember { mutableStateOf(hasBlePermissions(context)) }
                 var locationEnabled by remember { mutableStateOf(isLocationEnabled(context)) }
                 var requestedOnce by remember { mutableStateOf(false) }
+                var showSettings by rememberSaveable { mutableStateOf(false) }
 
                 val permissionLauncher = rememberLauncherForActivityResult(
                     ActivityResultContracts.RequestMultiplePermissions()
@@ -125,33 +129,41 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                MainScreen(
-                    state = state,
-                    history = batteryHistory,
-                    permissionsGranted = permissionsGranted,
-                    locationServicesEnabled = locationEnabled,
-                    onRequestPermissions = requestPermissions,
-                    onToggleScan = {
-                        if (state.scanning) {
-                            controller.stopScan()
-                        } else {
-                            permissionsGranted = hasBlePermissions(context)
-                            locationEnabled = isLocationEnabled(context)
-                            if (permissionsGranted) {
-                                controller.startScan()
+                if (showSettings) {
+                    SettingsScreen(
+                        keyStore = remember { PairingKeyStore(context) },
+                        onBack = { showSettings = false },
+                    )
+                } else {
+                    MainScreen(
+                        state = state,
+                        history = batteryHistory,
+                        permissionsGranted = permissionsGranted,
+                        locationServicesEnabled = locationEnabled,
+                        onRequestPermissions = requestPermissions,
+                        onToggleScan = {
+                            if (state.scanning) {
+                                controller.stopScan()
                             } else {
-                                requestPermissions()
+                                permissionsGranted = hasBlePermissions(context)
+                                locationEnabled = isLocationEnabled(context)
+                                if (permissionsGranted) {
+                                    controller.startScan()
+                                } else {
+                                    requestPermissions()
+                                }
                             }
-                        }
-                    },
-                    onToggleTracking = controller::setTrackingEnabled,
-                    onOpenVehicle = controller::openVehicle,
-                    onOpenRequestConsumed = controller::consumeOpenVehicleRequest,
-                    onPairKey = controller::pairKey,
-                    onVinChange = controller::setVinInput,
-                    onWake = { controller.wakeVehicle() },
-                    onReadSoc = { controller.requestChargeState() },
-                )
+                        },
+                        onToggleTracking = controller::setTrackingEnabled,
+                        onOpenVehicle = controller::openVehicle,
+                        onOpenRequestConsumed = controller::consumeOpenVehicleRequest,
+                        onPairKey = controller::pairKey,
+                        onVinChange = controller::setVinInput,
+                        onWake = { controller.wakeVehicle() },
+                        onReadSoc = { controller.requestChargeState() },
+                        onOpenSettings = { showSettings = true },
+                    )
+                }
             }
         }
     }

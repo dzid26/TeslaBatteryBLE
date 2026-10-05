@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -93,6 +94,7 @@ fun MainScreen(
     onVinChange: (String) -> Unit,
     onWake: () -> Unit,
     onReadSoc: () -> Unit,
+    onOpenSettings: () -> Unit,
 ) {
     var viewingBleName by rememberSaveable { mutableStateOf<String?>(null) }
     var initialised by rememberSaveable { mutableStateOf(false) }
@@ -132,6 +134,7 @@ fun MainScreen(
             onVinChange = onVinChange,
             onWake = onWake,
             onReadSoc = onReadSoc,
+            onOpenSettings = onOpenSettings,
         )
     } else {
         ConnectionsScreen(
@@ -149,6 +152,7 @@ fun MainScreen(
                 viewingBleName = name
                 if (ready) onPairKey(rowAddress) else onOpenVehicle(rowAddress)
             },
+            onOpenSettings = onOpenSettings,
         )
     }
 }
@@ -202,6 +206,7 @@ private fun ConnectionsScreen(
     onToggleTracking: (Boolean) -> Unit,
     onOpen: (String, String) -> Unit,
     onPair: (String, String, Boolean) -> Unit,
+    onOpenSettings: () -> Unit,
 ) {
     val rows = vehicleRows(state)
     Scaffold(
@@ -209,6 +214,12 @@ private fun ConnectionsScreen(
             TopAppBar(
                 title = { Text("Cars") },
                 actions = {
+                    IconButton(onClick = onOpenSettings) {
+                        Icon(
+                            imageVector = Icons.Filled.Settings,
+                            contentDescription = "Settings",
+                        )
+                    }
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.padding(end = 8.dp),
@@ -376,6 +387,7 @@ private fun CarScreen(
     onVinChange: (String) -> Unit,
     onWake: () -> Unit,
     onReadSoc: () -> Unit,
+    onOpenSettings: () -> Unit,
 ) {
     BackHandler { onBack() }
     val connection = state.connections[address]
@@ -397,6 +409,14 @@ private fun CarScreen(
                 },
                 title = {
                     Text(vehicle?.title ?: connection?.gattDeviceName ?: advert?.name ?: "Car")
+                },
+                actions = {
+                    IconButton(onClick = onOpenSettings) {
+                        Icon(
+                            imageVector = Icons.Filled.Settings,
+                            contentDescription = "Settings",
+                        )
+                    }
                 },
             )
         },
