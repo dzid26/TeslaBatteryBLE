@@ -26,18 +26,24 @@ cp "$APK" "$ASSET_APK"
 
 git fetch --tags origin
 
-# Most recent release that is not the rolling preview itself and not cut from
-# this commit (the newest tag is often on the same commit as the preview).
-PREV_TAG=""
-while read -r candidate; do
-  [ -n "$candidate" ] || continue
-  candidate_sha="$(git rev-parse -q --verify "refs/tags/$candidate^{commit}" 2>/dev/null || true)"
-  if [ -n "$candidate_sha" ] && [ "$candidate_sha" != "$SHA" ]; then
-    PREV_TAG="$candidate"
-    break
+# Most recent release that is not the rolling preview itself.
+PREV_TAG="$(gh release list --limit 100 --json tagName,createdAt \
+  --jq '[.[] | select(.tagName != "preview")] | sort_by(.createdAt) | reverse | .[0].tagName // empty')"
+
+# If the newest release is cut from this commit there are no un-released
+# changes: drop the rolling preview instead of publishing an empty one.
+if [ -n "$PREV_TAG" ]; then
+  prev_sha="$(git rev-parse -q --verify "refs/tags/$PREV_TAG^{commit}" 2>/dev/null || true)"
+  if [ -n "$prev_sha" ] && [ "$prev_sha" = "$SHA" ]; then
+    if gh release view "$TAG" > /dev/null 2>&1; then
+      gh release delete "$TAG" --yes --cleanup-tag || true
+      echo "No un-released changes since $PREV_TAG; removed the rolling preview."
+    else
+      echo "No un-released changes since $PREV_TAG; nothing to publish."
+    fi
+    exit 0
   fi
-done < <(gh release list --limit 100 --json tagName,createdAt \
-  --jq '[.[] | select(.tagName != "preview")] | sort_by(.createdAt) | reverse | .[].tagName')
+fi
 
 # Move the rolling tag to this build.
 git tag -f "$TAG" "$SHA"
