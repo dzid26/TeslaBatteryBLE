@@ -62,6 +62,13 @@ class BatteryHistoryCsvTest {
                 "Se1f0941734830fe7C,1700000000000,78,80,Charging,77.6,232.75",
             ),
         )
+        // 15-column rows from the intermediate format are dropped too, not shifted
+        // into this layout (their columns would land on the wrong fields).
+        assertNull(
+            BatteryHistoryCsv.parse(
+                "Se1f0941734830fe7C,1700000000000,78,80,Charging,77.0,206.94,78,77,206.94,,206.94,38.98,159.0,159.0",
+            ),
+        )
     }
 
     @Test

@@ -32,7 +32,7 @@ object BatteryHistoryCsv {
     /** Parses one data line; returns null for the header, a malformed row, or an old-format row. */
     fun parse(line: String): BatterySample? {
         val parts = line.split(',')
-        if (parts.size < COLUMNS) return null
+        if (parts.size != COLUMNS) return null
         val timestamp = parts[1].toLongOrNull() ?: return null
         val batteryLevel = parts[2].toIntOrNull() ?: return null
         return BatterySample(
