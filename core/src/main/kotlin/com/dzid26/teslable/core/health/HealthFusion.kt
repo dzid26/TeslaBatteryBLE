@@ -10,27 +10,27 @@ import kotlin.math.abs
  * mismatch so the UI can ask the user to check the input data.
  */
 data class FusedSoH(
-    val sohPercent: Double,
-    val spreadPoints: Double,
+    val sohPercent: Float,
+    val spreadPoints: Float,
     val sources: Int,
     val mismatch: Boolean,
 )
 
 object HealthFusion {
     fun fuse(
-        ratedRangeSohPercent: Double?,
-        energyDeltaSohPercent: Double?,
+        ratedRangeSohPercent: Float?,
+        energyDeltaSohPercent: Float?,
     ): FusedSoH? {
         val rated = ratedRangeSohPercent?.takeUnless { it.isNaN() }
         val delta = energyDeltaSohPercent?.takeUnless { it.isNaN() }
         if (rated == null && delta == null) return null
         if (rated != null && delta == null) {
-            return FusedSoH(rated, 0.0, 1, false)
+            return FusedSoH(rated, 0f, 1, false)
         }
         if (rated == null && delta != null) {
-            return FusedSoH(delta, 0.0, 1, false)
+            return FusedSoH(delta, 0f, 1, false)
         }
         val spread = abs(rated!! - delta!!)
-        return FusedSoH((rated + delta) / 2.0, spread, 2, spread > 5.0)
+        return FusedSoH((rated + delta) / 2f, spread, 2, spread > 5f)
     }
 }
