@@ -273,11 +273,3 @@ footer ul {
     grid-template-columns: 1fr;
   }
 }
-
-@media (prefers-color-scheme: dark) {
-  /* Only screenshots with a matching dark variant are shown; light-only shots
-     would glare against the dark page. */
-  .screenshot.light-only {
-    display: none;
-  }
-}
