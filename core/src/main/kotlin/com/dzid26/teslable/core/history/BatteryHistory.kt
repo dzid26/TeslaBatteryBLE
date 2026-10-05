@@ -33,6 +33,10 @@ data class BatterySample(
     val chargeMilesAddedRated: Float? = null,
     /** `charge_miles_added_ideal`: ideal miles added so far this session. */
     val chargeMilesAddedIdeal: Float? = null,
+    /** `charge_rate_mph`: charging speed in miles per hour (int field). */
+    val chargeRateMph: Int? = null,
+    /** `charge_rate_mph_float`: charging speed in miles per hour (float field). */
+    val chargeRateMphFloat: Float? = null,
 ) {
     /** The displayed level, derived for the chart, stats, and car view. */
     val percent: Int get() = batteryLevel

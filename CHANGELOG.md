@@ -60,6 +60,11 @@ All notable changes to this project are documented here. The format is based on
   an AC charge) with every raw field filled, and the live demo drain slows to
   about a percent an hour, so the chart, green segments, and both projections
   read realistically in demos and screenshots
+- Battery history moved to an append-only protobuf log (ADR-0006): new fields
+  no longer reset the history, the existing raw-only CSV is imported once on
+  first run and the CSV is no longer written, and charge-rate fields are now
+  logged; rows from older CSV formats are dropped, so pre-store installs start
+  from their raw-only rows
 - The log panel moved from the car view to the cars screen, where it shows
   every car's activity
 - The notification grays out the last known percentage once its reading is

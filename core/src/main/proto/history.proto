@@ -1,0 +1,26 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+syntax = "proto3";
+
+package teslable.history;
+
+option java_package = "com.dzid26.teslable.core.history.log";
+
+// One battery reading in the append-only history log (ADR-0006). Fields are
+// only ever added and readers ignore unknown ones, so a new field never drops
+// old rows; absent optional fields decode as null.
+message BatterySampleRecord {
+  optional int64 timestamp_millis = 1;
+  optional int32 battery_level = 2;
+  optional string charging_state = 3;
+  optional int32 charge_limit = 4;
+  optional string vehicle_id = 5;
+  optional int32 usable_battery_level = 6;
+  optional float rated_range_miles = 7;
+  optional float est_range_miles = 8;
+  optional float ideal_range_miles = 9;
+  optional float charge_energy_added = 10;
+  optional float charge_miles_added_rated = 11;
+  optional float charge_miles_added_ideal = 12;
+  optional int32 charge_rate_mph = 13;
+  optional float charge_rate_mph_float = 14;
+}

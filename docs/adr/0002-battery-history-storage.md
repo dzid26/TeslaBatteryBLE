@@ -1,6 +1,6 @@
 # ADR-0002: Battery history storage
 
-Status: Accepted
+Status: Superseded by ADR-0006 (protobuf log)
 Date: 2026-10-04
 
 ## Context

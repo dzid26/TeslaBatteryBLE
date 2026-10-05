@@ -29,6 +29,9 @@ object BatteryHistoryCsv {
             sample.chargeMilesAddedIdeal?.toString() ?: "",
         ).joinToString(",")
 
+    /** Parses a whole legacy CSV body; the header and any other-format rows are skipped. */
+    fun parseAll(text: String): List<BatterySample> = text.lineSequence().mapNotNull(::parse).toList()
+
     /** Parses one data line; returns null for the header, a malformed row, or an old-format row. */
     fun parse(line: String): BatterySample? {
         val parts = line.split(',')

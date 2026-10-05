@@ -100,7 +100,7 @@ A trustworthy shell around the existing protocol work. No user-facing features.
 - [ ] Units choice in Settings: System default / Metric / Imperial (one global setting), defaulting to the device's measurement system (`android.icu.util.LocaleData.getMeasurementSystem`: US → imperial, SI → metric, UK → miles + °C); display-only conversion from canonical miles, with core conversion helpers + tests.
 - [ ] **Range backbone** (owner direction 2026-10-05): canonical unit is rated miles; parse `charge_rate_mph` / `charge_rate_mph_float` as the charging slope; stats, charge projection, and drain run in miles; SOC is derived from the learned full-range scale for display only, falling back to the raw int until the scale is pinned. Respects the units setting (display-only conversion from canonical miles). Core landed 2026-10-05: rate parsing, miles-first charge projection, learned full-range scale; stats/drain and display wiring next.
 - [ ] Dual range/SOC display: switchable axes and two value hints (miles + SOC) on the car view and history chart.
-- [ ] **History storage decision** (before expanding logged values): replace the append-only CSV with an evolution-friendly store — protobuf append-log vs Room/SQLite — implemented behind `BatteryHistoryStore`; additive schema evolution so new fields never drop old rows, and no more one-off device fixes for format changes.
+- [x] **History storage decision** (2026-10-05): protobuf append-log (ADR-0006) behind `BatteryHistoryStore`; additive schema evolution so new fields never drop old rows; the raw-only CSV is imported once on first run and no longer written, and the charge-rate fields are now logged.
 - [ ] Notifications: charge complete, SOC thresholds, **vampire-drain alert**.
 - [ ] Widget (Glance), automation intents (Tasker), CSV/JSON export.
 - [ ] Multiple cars: storage, per-vehicle links, VIN, per-car notifications and the cars/car UI landed (ADR-0004); share redacted diagnostics open. Requirements: `docs/requirements/multi-vehicle.md`.
@@ -132,7 +132,6 @@ A trustworthy shell around the existing protocol work. No user-facing features.
 ## 10. Open decisions (defaults so nothing blocks)
 
 - Display name before store submission (default: keep `TeslaBatteryBLE`); `applicationId com.dzid26.teslable` is frozen.
-- History storage format (default: protobuf append-log; decide before logging more value types).
 - Library name + publication target (Phase 3).
 - Play go/no-go (Phase 2).
 - Library docs site repo/hosting (Phase 3).

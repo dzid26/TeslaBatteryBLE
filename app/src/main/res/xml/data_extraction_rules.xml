@@ -4,9 +4,13 @@
      Battery readings are live state, not settings: they stay on the device. -->
 <data-extraction-rules>
     <cloud-backup disableIfNoEncryptionCapabilities="true">
+        <exclude domain="file" path="battery-history.pb" />
         <exclude domain="file" path="battery-history.csv" />
+        <exclude domain="file" path="battery-history.csv.imported" />
     </cloud-backup>
     <device-transfer>
+        <exclude domain="file" path="battery-history.pb" />
         <exclude domain="file" path="battery-history.csv" />
+        <exclude domain="file" path="battery-history.csv.imported" />
     </device-transfer>
 </data-extraction-rules>

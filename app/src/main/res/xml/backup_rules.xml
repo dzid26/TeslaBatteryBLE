@@ -4,5 +4,7 @@
      Battery readings are live state, not settings: they stay on the device. -->
 <full-backup-content>
     <exclude domain="sharedpref" path="pairing_key.xml" />
+    <exclude domain="file" path="battery-history.pb" />
     <exclude domain="file" path="battery-history.csv" />
+    <exclude domain="file" path="battery-history.csv.imported" />
 </full-backup-content>

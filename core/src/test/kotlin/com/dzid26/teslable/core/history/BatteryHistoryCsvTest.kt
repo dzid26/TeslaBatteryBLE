@@ -72,6 +72,20 @@ class BatteryHistoryCsvTest {
     }
 
     @Test
+    fun parseAllKeepsOnlyRawOnlyRows() {
+        val text =
+            "vehicleId,timestampMillis,batteryLevel,chargeLimit,chargingState,usableBatteryLevel," +
+                "ratedRangeMiles,estRangeMiles,idealRangeMiles,chargeEnergyAdded,chargeMilesAddedRated," +
+                "chargeMilesAddedIdeal\n" +
+                "Se1f0941734830fe7C,1700000000000,78,80,Charging,77,234.56,232.75,260.12,12.3,41.5,45.25\n" +
+                "Se1f0941734830fe7C,1700000000000,78,80,Charging,77.6,232.75\n"
+        val samples = BatteryHistoryCsv.parseAll(text)
+        assertEquals(1, samples.size)
+        assertEquals(78, samples.single().batteryLevel)
+        assertEquals(234.56f, samples.single().ratedRangeMiles)
+    }
+
+    @Test
     fun chargingStateWithCommasIsSanitised() {
         val messy = sample.copy(chargingState = "Starting, please wait")
         val encoded = BatteryHistoryCsv.encode(messy)
