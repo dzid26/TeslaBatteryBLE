@@ -77,7 +77,7 @@ A trustworthy shell around the existing protocol work. No user-facing features.
 - [x] Static analysis zero baseline: Android lint + ktlint + detekt in CI.
 - [ ] R8 + resource shrinking; Baseline Profile; LeakCanary (debug only).
 - [x] Screenshots in `docs/images/` (captured in CI, shown in README).
-- [ ] Social preview image.
+- [x] Social preview image rendered (`docs/images/social-preview.png`); upload in GitHub repo settings pending (owner action).
 - [x] Website v1 on GitHub Pages (plain, install-focused landing: https://dzid26.github.io/TeslaBatteryBLE/).
 - [x] Obtainium instructions (README); F-Droid metadata (`fastlane/`).
 - [ ] F-Droid submission; IzzyOnDroid submission; document GitHub→F-Droid signature migration (blocked on signed releases).
