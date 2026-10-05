@@ -3,7 +3,7 @@
 Date: 2026-10-05
 Related: `docs/research/battery-health-methods.md` (method taxonomy), `docs/reference/fleet-telemetry-vs-ble.md` (signal matrix), `docs/research/tesla-ble-capabilities.md` (BLE field catalogue).
 
-Question: can the float rated range give sub-percent SOC online, without charging to 100%? This rework supersedes the earlier range-at-100 framing for `bestSocPercent`: active 100% calibration is out of scope (owner decision 2026-10-05). The range-at-100 question stays answered below as a by-product.
+Question: can the float rated range give sub-percent SOC online, without charging to 100%? This rework supersedes the earlier range-at-100 framing for `bestSocPercent`: active 100% calibration is out of scope (owner decision 2026-10-05). The range-at-100 question stays answered below as a by-product. Owner direction (2026-10-05) broadens this: rated miles become the backbone unit (section 6), with SOC derived at display time.
 
 ## 1. What the car reports (raw inventory)
 
@@ -63,7 +63,7 @@ No range-at-100 signal. Fleet Telemetry also needs an owner account plus a self-
 
 ### 2.3 The scale (`fullRatedRange`) without a 100% charge
 
-The car never reports its 100% range, and the new-car EPA figure is the SoH denominator, not the scale the car uses to render today's rated range — do not use it for this inversion. Learn the scale online instead:
+The car never reports its 100% range, and the new-car EPA figure is the SoH denominator, not the scale the car uses to render today's rated range — do not use it for this inversion. Worked example: the observed ~268 mi scale (section 2.1) against a 2019 Model 3 Performance's EPA-new 310 mi (18-inch wheels; ~299 with the 20-inch option, EPA via fueleconomy.gov) is ~86–90% of new. Learn the scale online instead:
 
 - Track `r = ratedRange / (level / 100)` over time. The integer level makes r fluctuate with rounding; the true scale k sits at:
   - the minimum r if the level is floor-rounded (r ≥ k),
@@ -130,7 +130,40 @@ Secondhand or inferred; none of these are pinned to a Tesla statement yet:
 
 Verified raw, for contrast: field numbers and decimal annotations (proto lines above), the TSV descriptions, the firmware 2026.32 note (proto L288), and `charge_energy_added` measured at the battery (TSV L41).
 
-## 6. Raw sources
+## 6. Range as the backbone (owner direction)
+
+Owner direction 2026-10-05: make rated miles the primary unit everywhere — stored, derived, trended — and convert to SOC only at display time. `charge_rate_mph` / `charge_rate_mph_float` (proto L339 / L378) is the car-reported charging slope in miles per hour, so charging progress does not need to be differentiated from integer SOC. A follow-up UI can switch axes or show both units (dual axes, two value hints).
+
+### Why it fits
+
+- Rated range is already the finest raw signal (section 2.1: sub-percent movement observed); SOC ints are the coarse, derived quantity.
+- The car's default display is Rated, so the backbone matches what the owner sees and sidesteps the usable-vs-displayed SOC convention for trend math.
+- Charging slope is reported directly: `charge_rate_mph_float` (float) with the int `charge_rate_mph` as fallback; no sample differencing needed for an ETA.
+- `charge_energy_added / charge_miles_added_rated` gives the rated constant (kWh/mi) directly, and `charge_miles_added_rated / ΔSOC` gives the full-range scale — both already logged raw.
+- It respects the planned units setting: canonical miles internally, display-only conversion (the units item's rule).
+
+### Design
+
+1. **Storage stays raw** (no format change now): rated/est/ideal miles, both SOC ints, session energy and miles-added. Add `chargeRateMph` / `chargeRateMphFloat` to raw logging with the storage rework (or a deliberate format bump), not in the frozen PR #74 format.
+2. **Model**: parse `charge_rate_mph` / `charge_rate_mph_float` on `TeslaCommands.Charge` (float preferred, int fallback, null when absent or implausible). Keep SOC ints for anchors and the rounding verdict.
+3. **Stats and projections in miles**:
+   - `ChargeStats`: start/current/min/max in rated miles (Float), `usedMiles` instead of `usedPercent`.
+   - `ChargeProjection`: ETA from `charge_rate_mph_float` when charging and plausible, else from ΔratedRange/Δt over the trailing run; target = `chargeLimit / 100 × fullRatedRange` miles (needs the learned scale; keep the percent-based projection as fallback until it is pinned).
+   - Drain/vampire tracking: mi/h from rated-range deltas.
+4. **Display**: canonical miles; the units setting converts to km for metric (charge rate mi/h ↔ km/h). SOC is an output: `soc = ratedMiles / fullRatedRange × 100` once the scale is learned, with the raw int SOC as the fallback until then.
+5. **UI follow-up** (master-plan item): dual axes / two value hints (miles and SOC) on the car view and history chart.
+
+### What breaks / needs care
+
+- **Scale dependency**: mile-denominated stats are self-contained, but SOC display and mile-target projections need the learned `fullRatedRange`. Until the parked/rounding work pins it, keep the int-SOC path as fallback — do not gate the UI on the scale.
+- **EPA/trim baseline**: still required for SoH (the denominator), but no longer for day-to-day SOC math.
+- **Units preference**: canonical miles already planned; the conversion helpers must add mi/h ↔ km/h for charge rate, and the UK case (miles + °C) must not flip range to km.
+- **est/ideal range**: keep raw and out of the backbone; est can later feed a secondary "real-world range" hint, ideal stays completeness-only.
+- **Int SOC anchors**: keep logging them — they anchor the scale/rounding verdict and the fallback display.
+- **`charge_rate_mph_float` availability**: only meaningful while charging; presence/plausibility (0, stale, AC vs DC) is unverified and needs real logs (and raw logging first).
+- **ChargeProjection is user-visible**: the ETA basis changes; add tests and keep the fallback path.
+
+## 7. Raw sources
 
 - `core/src/main/proto/vehicle.proto` L306–L399 (charge state fields, decimal annotations at L317 and L325).
 - `tools/signal-matrix/upstream/fleet-telemetry/vehicle_data.proto` L13–L293 (signal numbers; firmware note L288).
