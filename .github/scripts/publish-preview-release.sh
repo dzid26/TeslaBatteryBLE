@@ -2,8 +2,9 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # Create or update the rolling "preview" release for the current commit.
 #
-# Run from a checkout of the repository with `dist/app-debug.apk` already built
-# and, optionally, screenshots in `screenshots/`.
+# Run from a checkout of the repository with `dist/app-debug.apk` already built.
+# Screenshots are embedded from the deployed GitHub Pages site (`website/images/`
+# in the repo) instead of being uploaded as release assets.
 set -euo pipefail
 
 REPO="${GITHUB_REPOSITORY:?GITHUB_REPOSITORY is required}"
@@ -12,8 +13,13 @@ SHORT_SHA="$(git rev-parse --short "$SHA")"
 TAG="preview"
 TITLE="Preview build"
 APK="dist/app-debug.apk"
-SCREENSHOTS_DIR="screenshots"
 ASSET_APK="TeslaBatteryBLE-preview-$SHORT_SHA.apk"
+SITE_IMAGES_DIR="website/images"
+
+# GitHub Pages origin for the deployed site images (owner is lowercased).
+OWNER="${REPO%/*}"
+NAME="${REPO#*/}"
+PAGES_ORIGIN="https://$(printf '%s' "$OWNER" | tr '[:upper:]' '[:lower:]').github.io/$NAME"
 
 [ -f "$APK" ] || { echo "missing $APK" >&2; exit 1; }
 cp "$APK" "$ASSET_APK"
@@ -49,30 +55,26 @@ git push origin "refs/tags/$TAG" --force
     echo
     echo "**Full diff**: https://github.com/$REPO/compare/$PREV_TAG...$TAG"
   fi
-  if [ -d "$SCREENSHOTS_DIR" ] && compgen -G "$SCREENSHOTS_DIR/*.png" > /dev/null; then
+  if [ -d "$SITE_IMAGES_DIR" ] && compgen -G "$SITE_IMAGES_DIR/*.png" > /dev/null; then
     echo
     echo "## Screenshots"
     echo
-    for screenshot in "$SCREENSHOTS_DIR"/*.png; do
+    for screenshot in "$SITE_IMAGES_DIR"/*.png; do
       name="$(basename "$screenshot")"
-      echo "<img src=\"https://github.com/$REPO/releases/download/$TAG/$name\" width=\"360\" alt=\"${name%.png}\">"
+      echo "<img src=\"$PAGES_ORIGIN/images/$name\" width=\"360\" alt=\"${name%.png}\">"
     done
   fi
 } > preview-notes.md
 
 if gh release view "$TAG" > /dev/null 2>&1; then
-  # Drop assets from the previous run (SHA-named APK, screenshots) so stale
-  # files never linger.
+  # Drop stale SHA-named APK assets from previous runs so old builds never linger.
   while read -r name; do
     [ -n "$name" ] || continue
     gh release delete-asset "$TAG" "$name" --yes || true
-  done < <(gh release view "$TAG" --json assets --jq '.assets[].name | select(endswith(".png") or endswith(".apk"))')
+  done < <(gh release view "$TAG" --json assets --jq '.assets[].name | select(endswith(".apk"))')
   gh release edit "$TAG" --title "$TITLE" --prerelease --notes-file preview-notes.md
 else
   gh release create "$TAG" --title "$TITLE" --prerelease --notes-file preview-notes.md "$ASSET_APK"
 fi
 
 gh release upload "$TAG" "$ASSET_APK" --clobber
-if [ -d "$SCREENSHOTS_DIR" ] && compgen -G "$SCREENSHOTS_DIR/*.png" > /dev/null; then
-  gh release upload "$TAG" "$SCREENSHOTS_DIR"/*.png --clobber
-fi
