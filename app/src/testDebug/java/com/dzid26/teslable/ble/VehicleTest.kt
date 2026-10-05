@@ -48,8 +48,8 @@ class VehicleTest {
     }
 
     @Test
-    fun maskedVinShowsOnlyTheTail() {
-        assertEquals("\u202623421", vehicle(vin = vin).maskedVin)
+    fun maskedVinShowsOnlyTheStart() {
+        assertEquals("5YJ3E\u2026", vehicle(vin = vin).maskedVin)
         assertNull(vehicle().maskedVin)
     }
 

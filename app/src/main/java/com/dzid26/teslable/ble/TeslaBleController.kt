@@ -498,6 +498,7 @@ class TeslaBleController(
         vehicles[name] = updated
         vehicleStore.save(vehicles.values)
         publishVehicles()
+        syncVinDraft(name)
         if (changed) log("${nameFor(address)}: remembered for reconnect")
     }
 
@@ -535,6 +536,19 @@ class TeslaBleController(
         vehicles[bleName] = transform(vehicle)
         vehicleStore.save(vehicles.values)
         publishVehicles()
+        syncVinDraft(bleName)
+    }
+
+    /** Keeps the VIN editor's draft in step when the selected car's VIN changes. */
+    private fun syncVinDraft(bleName: String) {
+        if (bleName != selectedBleName) return
+        val vin = vehicles[bleName]?.vin
+        _state.update {
+            it.copy(
+                vinInput = vin ?: "",
+                expectedBleName = vin?.let(::bleNameOf),
+            )
+        }
     }
 
     private fun publishVehicles() {

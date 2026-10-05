@@ -23,8 +23,8 @@ data class Vehicle(
     /** What the UI calls this car: user-set name, then the car's own name. */
     val title: String get() = displayName?.takeIf { it.isNotBlank() } ?: gattName ?: bleName
 
-    /** Enough of the VIN to tell cars apart without showing it in full. */
-    val maskedVin: String? get() = vin?.takeLast(VIN_TAIL)?.let { "\u2026$it" }
+    /** The start of the VIN: enough to tell cars apart without showing it all. */
+    val maskedVin: String? get() = vin?.take(VIN_PREFIX)?.let { "$it\u2026" }
 
     /** True when [candidate] is the VIN that hashes to this car's advertised name. */
     fun acceptsVin(candidate: String): Boolean {
@@ -38,7 +38,7 @@ data class Vehicle(
 
     companion object {
         const val VIN_LENGTH = 17
-        private const val VIN_TAIL = 5
+        private const val VIN_PREFIX = 5
 
         fun normalizeVin(raw: String): String = raw.trim().uppercase()
     }

@@ -140,6 +140,7 @@ fun MainScreen(
             onWake = onWake,
             onReadSoc = onReadSoc,
             onOpenSettings = onOpenSettings,
+            onToggleTracking = onToggleTracking,
         )
     } else {
         ConnectionsScreen(
@@ -221,21 +222,14 @@ private fun ConnectionsScreen(
             TopAppBar(
                 title = { Text("Cars") },
                 actions = {
+                    TrackingToggle(
+                        checked = state.trackingEnabled,
+                        onCheckedChange = onToggleTracking,
+                    )
                     IconButton(onClick = onOpenSettings) {
                         Icon(
                             imageVector = Icons.Filled.Settings,
                             contentDescription = "Settings",
-                        )
-                    }
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(end = 8.dp),
-                    ) {
-                        Text("Enable", style = MaterialTheme.typography.labelLarge)
-                        Spacer(Modifier.width(6.dp))
-                        Switch(
-                            checked = state.trackingEnabled,
-                            onCheckedChange = onToggleTracking,
                         )
                     }
                 },
@@ -400,6 +394,7 @@ private fun CarScreen(
     onWake: () -> Unit,
     onReadSoc: () -> Unit,
     onOpenSettings: () -> Unit,
+    onToggleTracking: (Boolean) -> Unit,
 ) {
     BackHandler { onBack() }
     val connection = state.connections[address]
@@ -424,6 +419,10 @@ private fun CarScreen(
                     Text(vehicle?.title ?: connection?.gattDeviceName ?: advert?.name ?: "Car")
                 },
                 actions = {
+                    TrackingToggle(
+                        checked = state.trackingEnabled,
+                        onCheckedChange = onToggleTracking,
+                    )
                     IconButton(onClick = onOpenSettings) {
                         Icon(
                             imageVector = Icons.Filled.Settings,
@@ -638,18 +637,23 @@ private fun VinCard(
             expectedBleName != null &&
             expectedBleName != bleName
     Card(modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(12.dp)) {
-            Text("VIN", style = MaterialTheme.typography.titleSmall)
-            Spacer(Modifier.height(4.dp))
+        Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
             if (editing) {
                 OutlinedTextField(
                     value = vinInput,
                     onValueChange = onVinChange,
                     singleLine = true,
-                    label = { Text("17 characters") },
+                    label = { Text("VIN") },
                     isError = mismatch,
                     supportingText = {
-                        if (mismatch) Text("Doesn't match this car's advertised name")
+                        Text(
+                            text =
+                                when {
+                                    mismatch -> "Doesn't match this car's advertised name"
+                                    vehicle?.vin != null -> "Used for authenticated sessions; never logged."
+                                    else -> "Required before pairing and SOC reads."
+                                },
+                        )
                     },
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -662,23 +666,19 @@ private fun VinCard(
             } else {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
+                        text = "VIN",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Text(
                         text = vehicle?.maskedVin ?: "Not set",
-                        style = MaterialTheme.typography.bodyLarge,
+                        style = MaterialTheme.typography.bodyMedium,
                         fontFamily = FontFamily.Monospace,
                         modifier = Modifier.weight(1f),
                     )
                     TextButton(onClick = { editing = true }) { Text("Edit") }
                 }
-                Text(
-                    text =
-                        if (vehicle?.vin != null) {
-                            "Used for authenticated sessions; never logged."
-                        } else {
-                            "Required before pairing and SOC reads."
-                        },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
             }
         }
     }
@@ -722,6 +722,21 @@ private fun LogCard(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun TrackingToggle(
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.padding(start = 8.dp, end = 4.dp),
+    ) {
+        Text("Enable", style = MaterialTheme.typography.labelLarge)
+        Spacer(Modifier.width(6.dp))
+        Switch(checked = checked, onCheckedChange = onCheckedChange)
     }
 }
 
