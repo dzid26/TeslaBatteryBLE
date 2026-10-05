@@ -1,0 +1,146 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="TeslaBatteryBLE: your Tesla's battery, tracked locally over Bluetooth LE. No cloud, no account, nothing leaves the phone.">
+  <meta name="color-scheme" content="light dark">
+  <title>TeslaBatteryBLE — Local Tesla battery tracking over BLE</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to main content</a>
+
+  <header>
+    <div class="container">
+      <h1>TeslaBatteryBLE</h1>
+      <p class="tagline">Your Tesla's battery, tracked locally over Bluetooth LE. No cloud. No account. Nothing leaves the phone.</p>
+      <div class="badges">
+        <a class="badge" href="https://github.com/dzid26/TeslaBatteryBLE/actions/workflows/android.yml">Android CI</a>
+        <a class="badge" href="https://github.com/dzid26/TeslaBatteryBLE/blob/main/LICENSE">AGPL-3.0-only</a>
+        <span class="badge">Android 8.0+</span>
+        <a class="badge" href="https://github.com/dzid26/TeslaBatteryBLE/blob/main/docs/master-plan.md">Beta</a>
+      </div>
+      <div class="cta-group">
+        <a class="button button-primary" href="https://github.com/dzid26/TeslaBatteryBLE/releases/tag/preview">Get the preview APK</a>
+        <a class="button button-secondary" href="https://github.com/dzid26/TeslaBatteryBLE">View on GitHub</a>
+      </div>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="screenshots" aria-labelledby="screenshots-heading">
+      <div class="container">
+        <h2 id="screenshots-heading">Screenshots</h2>
+        <div class="screenshot-row">
+          <figure class="screenshot">
+            <img src="images/01-overview.png" alt="App overview screen showing battery state of charge, charge status, and the main timeline graph." width="360" height="800" loading="lazy">
+            <figcaption>Overview</figcaption>
+          </figure>
+          <figure class="screenshot">
+            <img src="images/02-scanning.png" alt="Bluetooth scanning screen listing nearby Tesla vehicles with signal strength and VIN hints." width="360" height="800" loading="lazy">
+            <figcaption>Scanning</figcaption>
+          </figure>
+          <figure class="screenshot">
+            <img src="images/03-car.png" alt="Car detail screen with battery reading, connection state, and quick actions." width="360" height="800" loading="lazy">
+            <figcaption>Car</figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <section aria-labelledby="features-heading">
+      <div class="container">
+        <h2 id="features-heading">Features</h2>
+        <ul class="feature-grid">
+          <li>
+            <h3>Scan &amp; pair</h3>
+            <p>Find nearby Teslas by advertised BLE name and pair a key with an NFC card tap on the console.</p>
+          </li>
+          <li>
+            <h3>Encrypted session</h3>
+            <p>Read battery SOC and charge state over an authenticated, encrypted BLE session.</p>
+          </li>
+          <li>
+            <h3>On-demand wake</h3>
+            <p>The car is only woken when you ask — never in the background.</p>
+          </li>
+          <li>
+            <h3>Background tracking</h3>
+            <p>A foreground service keeps the connection alive while parked or charging, updating the SOC timeline.</p>
+          </li>
+          <li>
+            <h3>SOC history graph</h3>
+            <p>View 6 h / 24 h / 7 d / all-time charge history with since-last-charge stats.</p>
+          </li>
+          <li>
+            <h3>Simulated car</h3>
+            <p>Debug builds include a simulated vehicle for development and screenshots without a real car.</p>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <section aria-labelledby="privacy-heading">
+      <div class="container">
+        <h2 id="privacy-heading">Privacy</h2>
+        <p>TeslaBatteryBLE is local-first. The app has <strong>no internet permission</strong> and sends nothing anywhere.</p>
+        <ul class="privacy-list">
+          <li>Vehicle keys stay in device-only app storage by default.</li>
+          <li>Opt-in encrypted Android backup is available in Settings; on Android 12+ it requires your device lock secret.</li>
+          <li>Known cars, SOC history, and settings live in a local database on your phone.</li>
+          <li>No analytics, crash reporting, ads, accounts, or telemetry.</li>
+        </ul>
+        <p>Read the full <a href="https://github.com/dzid26/TeslaBatteryBLE/blob/main/PRIVACY.md">privacy statement</a>.</p>
+      </div>
+    </section>
+
+    <section aria-labelledby="install-heading">
+      <div class="container">
+        <h2 id="install-heading">Install</h2>
+        <div class="install-options">
+          <div class="install-card">
+            <h3>GitHub Releases (preview)</h3>
+            <ol>
+              <li>Go to the <a href="https://github.com/dzid26/TeslaBatteryBLE/releases/tag/preview">rolling preview release</a>.</li>
+              <li>Download the latest APK.</li>
+              <li>Open the APK on your Android device and allow installation from the browser/file manager.</li>
+            </ol>
+            <p class="note">Preview APKs are debug builds. They install side by side with future stable releases.</p>
+          </div>
+          <div class="install-card">
+            <h3>Obtainium (auto-updates)</h3>
+            <ol>
+              <li>Open Obtainium and tap <strong>Add App</strong>.</li>
+              <li>Enter <code>https://github.com/dzid26/TeslaBatteryBLE</code>.</li>
+              <li>Enable <strong>Include prereleases</strong> (the preview channel is a prerelease).</li>
+              <li>Install and let Obtainium track new previews.</li>
+            </ol>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="status" aria-labelledby="status-heading">
+      <div class="container">
+        <h2 id="status-heading">Status &amp; roadmap</h2>
+        <p>TeslaBatteryBLE is in <strong>beta</strong>. The rolling preview is rebuilt from <code>main</code> on every push. Signed stable releases and F-Droid are on the roadmap.</p>
+        <p>See the <a href="https://github.com/dzid26/TeslaBatteryBLE/blob/main/docs/master-plan.md">master plan</a> for phases, scope, and what's coming next.</p>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="container">
+      <ul>
+        <li><a href="https://github.com/dzid26/TeslaBatteryBLE">GitHub repo</a></li>
+        <li><a href="https://github.com/dzid26/TeslaBatteryBLE/releases">Releases</a></li>
+        <li><a href="https://github.com/dzid26/TeslaBatteryBLE/tree/main/docs">Docs</a></li>
+        <li><a href="https://github.com/dzid26/TeslaBatteryBLE/blob/main/LICENSE">AGPL-3.0-only</a></li>
+      </ul>
+      <p class="disclaimer">Not affiliated with, endorsed by, or sponsored by Tesla, Inc. "Tesla" is a trademark of Tesla, Inc., used here only to describe interoperability.</p>
+    </div>
+  </footer>
+</body>
+</html>
