@@ -17,8 +17,9 @@ All notable changes to this project are documented here. The format is based on
 
 ### Changed
 
-- Android backup kept enabled; key material excluded from backup and device transfer,
-  and privacy docs now describe Android's system backup behavior
+- Vehicle key now stored in app-private storage and included in Android backup so
+  pairing survives a device change (ADR-0005); legacy Keystore-encrypted keys migrate
+  automatically
 - CI: concurrency cancellation, least-privilege permissions, Android lint and app
   unit tests in the pipeline
 

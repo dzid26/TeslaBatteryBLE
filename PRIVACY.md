@@ -6,17 +6,20 @@ anywhere.**
 ## What the app stores (on your device only)
 
 - Vehicle advertisements seen during scanning (name, address, RSSI) — in memory while scanning
-- Your enrolled key material — encrypted with a Keystore-protected AES key
+- Your enrolled key material — stored in app-private storage and included in Android backup (see below)
 - Known cars (VIN, advertised BLE name) so you can reconnect
 - Battery and connection history (SOC samples, charge sessions) in a local database
 - App settings
 
 The app never synchronizes, uploads, or shares anything. Android's system backup
-is separate: if you have it enabled, your device may include app data (battery
-history, known cars) in cloud backup or device-to-device transfer. Key material
-is excluded from backup, and Keystore-protected keys cannot leave the device
-regardless. Uninstalling removes on-device data; a system backup copy, if any,
-is managed by your device and Google account settings.
+is separate: if you have it enabled, your device may include app data in cloud
+backup or device-to-device transfer — including the enrolled key, so pairing
+survives a new phone. Backup is protected by your Google account and your device
+lock secret; a rooted or forensically extracted device is outside that protection.
+The enrolled key is charging-manager scoped: it can read vehicle data and control
+charging, but cannot unlock or drive the car, and new keys always need an NFC card
+tap plus vehicle confirmation. Uninstalling removes on-device data; a system
+backup copy, if any, is managed by your device and Google account settings.
 
 ## Permissions and why they exist
 

@@ -22,7 +22,8 @@ In scope:
 
 - Cryptographic handling: session handshake, AES-GCM/HMAC usage, nonces, counters,
   metadata/signature construction, anti-replay windows
-- Key management: Keystore-backed storage, key generation, enrollment/roles
+- Key management: app-private key storage and backup exposure (ADR-0005), key
+  generation, enrollment/roles
 - Protocol implementation: framing, message parsing, malformed input handling
 - Any path that could leak VINs, keys, or plaintext to logs or other apps
 

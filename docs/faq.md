@@ -46,12 +46,16 @@ reads wait until the car is already awake or you trigger a wake.
 
 ## Where are my keys stored?
 
-On your phone only. Vehicle keys (P-256) are generated on-device and the
-private key is encrypted with a Keystore-protected key. Keys never leave the
-device and are never logged. You can remove the app's key from the car's key
-list at any time (key management on the car needs the owner-level key).
-Uninstalling the app deletes local key material. Details:
-[session and pairing](protocol/session-and-pairing.md).
+In app-private storage on your phone, which other apps cannot read. Vehicle
+keys (P-256) are generated on-device. The enrolled key is included in Android's
+system backup, so pairing survives a phone change; backup is protected by your
+Google account and device lock secret. The default `CHARGING_MANAGER` role limits
+impact to read + charge control — it cannot unlock or drive the car, and adding
+new keys always needs an NFC card tap plus vehicle confirmation. You can remove
+the app's key from the car's key list at any time. Uninstalling the app deletes
+local key material. Details:
+[session and pairing](protocol/session-and-pairing.md),
+[ADR-0005](adr/0005-plaintext-key-storage.md).
 
 ## Why is background tracking sometimes killed?
 
