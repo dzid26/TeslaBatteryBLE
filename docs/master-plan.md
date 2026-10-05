@@ -126,6 +126,7 @@ A trustworthy shell around the existing protocol work. No user-facing features.
 - Library name + publication target (Phase 3).
 - Play go/no-go (Phase 2).
 - Library docs site repo/hosting (Phase 3).
+- Multi-phone clones (2-3 phones collecting and merging history, optional key cloning): decide later; captured in `docs/requirements/multi-phone.md`.
 
 ## 11. Risks
 

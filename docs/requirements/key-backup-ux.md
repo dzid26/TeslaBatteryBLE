@@ -35,6 +35,8 @@ no export/import, no deep links.
   Auto-restore at install covers the common case; the FAQ documents the adb
   fallback.
 - A plain "forget key" action: uninstall or system "Clear storage" covers it.
+- Multi-phone clones and key cloning: direction captured in
+  `docs/requirements/multi-phone.md`; decide together with the sync design.
 
 ## Theft recovery: per-car keys, fresh key on pairing (implemented 2026-10-05)
 
