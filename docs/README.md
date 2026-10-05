@@ -17,6 +17,7 @@ Where things go, so agents and humans file docs in the right place.
   signal matrix).
 - [`research/`](research/) — competitive and exploratory research. The only
   place competitor names appear.
-- [`images/`](images/) — screenshots used by the README.
+- Screenshots live in [`website/images/`](../website/images/) — one set shared by
+  the README and the landing page.
 - [`compatibility.md`](compatibility.md), [`faq.md`](faq.md), and
   [`release-checklist.md`](release-checklist.md) — supporting docs.
