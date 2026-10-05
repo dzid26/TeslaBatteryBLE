@@ -65,19 +65,32 @@ class FakeCarProtocol(
     var batteryLevel: Int = 78
         private set
 
+    /** The demo scenario: plugged in and charging until the limit is reached. */
+    private var charging = false
+
     private val sessions = mutableMapOf<Domain, ByteArray>()
     private val epochs = mutableMapOf<Domain, ByteArray>()
     private var responseCounter = 100
     private var clientPublicKey: ByteArray? = null
     private var clientKeySha1: ByteArray? = null
 
+    val chargeLimit: Int get() = CHARGE_LIMIT
+
     fun setEnrolledKey(publicKeyRaw: ByteArray?) {
         clientPublicKey = publicKeyRaw
         clientKeySha1 = publicKeyRaw?.let(::sha1)
     }
 
+    fun setCharging(value: Boolean) {
+        charging = value
+    }
+
     fun dischargeOnePercent() {
-        if (!asleep && batteryLevel > 5) batteryLevel--
+        if (!asleep && !charging && batteryLevel > 5) batteryLevel--
+    }
+
+    fun chargeOnePercent() {
+        if (!asleep && charging && batteryLevel < CHARGE_LIMIT) batteryLevel++
     }
 
     fun handle(bytes: ByteArray): List<Response> {
@@ -327,7 +340,12 @@ class FakeCarProtocol(
                             battery_range = batteryLevel * RATED_MILES_PER_PERCENT,
                             est_battery_range = batteryLevel * ESTIMATED_MILES_PER_PERCENT,
                             charge_limit_soc = CHARGE_LIMIT,
-                            charging_state = ChargeState.ChargingState(Disconnected = Void()),
+                            charging_state =
+                                if (charging) {
+                                    ChargeState.ChargingState(Charging = Void())
+                                } else {
+                                    ChargeState.ChargingState(Disconnected = Void())
+                                },
                         ),
                 ),
         ).encode()

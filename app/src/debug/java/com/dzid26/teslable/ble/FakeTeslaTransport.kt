@@ -51,6 +51,19 @@ class FakeTeslaTransport(
             }
         }
 
+    private val chargeTick =
+        object : Runnable {
+            override fun run() {
+                if (!connected) return
+                protocol.chargeOnePercent()
+                if (protocol.batteryLevel >= protocol.chargeLimit) {
+                    // Full: unplug and let the demo drain again.
+                    protocol.setCharging(false)
+                }
+                handler.postDelayed(this, CHARGE_MS)
+            }
+        }
+
     override fun connect(address: String) {
         close()
         connected = true
@@ -63,8 +76,12 @@ class FakeTeslaTransport(
         }, 320)
         handler.postDelayed({
             listener.onPhase(ConnectionPhase.READY)
+            // The demo starts plugged in, so the chart shows charging samples
+            // and the projected limit; it unplugs itself when full.
+            protocol.setCharging(true)
             handler.post(rssiTick)
             handler.post(dischargeTick)
+            handler.post(chargeTick)
         }, 420)
     }
 
@@ -96,6 +113,7 @@ class FakeTeslaTransport(
     private companion object {
         const val RSSI_MS = 500L
         const val DISCHARGE_MS = 60_000L
+        const val CHARGE_MS = 20_000L
         const val LATENCY_MS = 80L
     }
 }

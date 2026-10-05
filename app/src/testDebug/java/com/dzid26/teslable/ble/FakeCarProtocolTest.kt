@@ -129,6 +129,33 @@ class FakeCarProtocolTest {
     }
 
     @Test
+    fun `charging reports the charging state`() {
+        protocol.setCharging(true)
+
+        val session = session(Domain.DOMAIN_INFOTAINMENT)
+        val plaintext =
+            authenticated(
+                session,
+                Domain.DOMAIN_INFOTAINMENT,
+                TeslaCommands.buildChargeStateRequest(),
+            )
+
+        assertEquals("Charging", TeslaCommands.parseChargeState(plaintext)!!.chargingState)
+    }
+
+    @Test
+    fun `charging stops at the limit`() {
+        // The car only charges while awake.
+        val session = session(Domain.DOMAIN_VEHICLE_SECURITY)
+        authenticated(session, Domain.DOMAIN_VEHICLE_SECURITY, TeslaCommands.buildWakeRequest())
+        protocol.setCharging(true)
+
+        repeat(20) { protocol.chargeOnePercent() }
+
+        assertEquals(85, protocol.batteryLevel)
+    }
+
+    @Test
     fun `discharge only happens while awake`() {
         protocol.dischargeOnePercent()
         assertEquals(78, protocol.batteryLevel)
