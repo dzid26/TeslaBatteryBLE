@@ -3,6 +3,7 @@ package com.dzid26.teslable.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -19,12 +20,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -97,6 +101,8 @@ internal fun CarScreen(
         } else {
             history.filter { it.vehicleId == vehicle.bleName }
         }
+    val paired = isPaired(connection, vehicle)
+    var editingVin by rememberSaveable(bleName) { mutableStateOf(false) }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -135,19 +141,34 @@ internal fun CarScreen(
                     .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            HeroCard(connection, advert, vehicle, vehicleHistory)
-            ActionsRow(connection, onWake, onReadSoc)
-            PhoneKeyCard(connection, vehicle, onPair)
-            VinCard(
-                bleName = bleName,
+            HeroCard(
+                connection = connection,
+                advert = advert,
                 vehicle = vehicle,
-                vinInput = state.vinInput,
-                expectedBleName = state.expectedBleName,
-                onVinChange = onVinChange,
+                history = vehicleHistory,
+                onEditVin = { editingVin = true },
             )
+            ActionsRow(connection, onWake, onReadSoc)
+            // Once the app key is enrolled the hero carries its status; the card
+            // only exists for pairing, so it disappears when there is nothing to do.
+            if (!paired) {
+                KeyCard(connection, vehicle, onPair)
+            }
             BatteryHistoryCard(vehicleHistory)
             LogCard(bleName = bleName, log = state.log)
         }
+    }
+
+    if (editingVin) {
+        // Start from the stored VIN so a typo can be corrected, not retyped.
+        LaunchedEffect(Unit) { onVinChange(vehicle?.vin ?: "") }
+        VinDialog(
+            bleName = bleName,
+            vinInput = state.vinInput,
+            expectedBleName = state.expectedBleName,
+            onVinChange = onVinChange,
+            onDismiss = { editingVin = false },
+        )
     }
 }
 
@@ -157,22 +178,43 @@ private fun HeroCard(
     advert: TeslaAdvert?,
     vehicle: Vehicle?,
     history: List<BatterySample>,
+    onEditVin: () -> Unit,
 ) {
     val display = connectionDisplay(connection, advert, vehicle = vehicle)
     val level = connection?.charge?.batteryLevel
     // With no live reading, the newest stored sample still answers "how full
     // is the car?" at a glance; the caption makes its age explicit.
     val lastKnown = history.lastOrNull()
+    val keySlot = connection?.keySlot ?: vehicle?.keySlot
+    val pairing = connection?.pairing ?: PairingPhase.IDLE
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(display.title, style = MaterialTheme.typography.titleMedium)
+                    // The app key state sits above the connection state: it is
+                    // what unlocks authenticated reads.
+                    if (keySlot != null || pairing == PairingPhase.OK) {
+                        Text(
+                            text = keySlot?.let { "App key paired · slot $it" } ?: "App key paired",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                     Text(
                         text = display.status,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    if (pairing == PairingPhase.OK) {
+                        // Only shown for the pairing that just succeeded; the
+                        // Tesla screen calls the key Phone Key, so this hint does.
+                        Text(
+                            text = "Rename the Phone Key in Controls > Locks on the Tesla screen.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
                 }
                 StatusPill(connection)
             }
@@ -252,7 +294,49 @@ private fun HeroCard(
                     )
                 }
             }
+            VinRow(vehicle = vehicle, onEdit = onEditVin)
         }
+    }
+}
+
+/**
+ * The VIN lives in the hero, not in its own card: it is set once and only
+ * edited to fix a typo, so it stays quiet until tapped.
+ */
+@Composable
+private fun VinRow(
+    vehicle: Vehicle?,
+    onEdit: () -> Unit,
+) {
+    Spacer(Modifier.height(12.dp))
+    HorizontalDivider()
+    Spacer(Modifier.height(4.dp))
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onEdit)
+                .padding(vertical = 4.dp),
+    ) {
+        Text(
+            text = "VIN",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.width(12.dp))
+        Text(
+            text = vehicle?.maskedVin ?: "Not set",
+            style = MaterialTheme.typography.bodyMedium,
+            fontFamily = FontFamily.Monospace,
+            modifier = Modifier.weight(1f),
+        )
+        Icon(
+            imageVector = Icons.Filled.Edit,
+            contentDescription = "Edit VIN",
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(18.dp),
+        )
     }
 }
 
@@ -282,15 +366,24 @@ private fun ActionsRow(
     }
 }
 
+/** True when the app key is enrolled (or just was): the car can authenticate. */
+private fun isPaired(
+    connection: TeslaConnection?,
+    vehicle: Vehicle?,
+): Boolean =
+    connection?.keySlot != null ||
+        vehicle?.keySlot != null ||
+        connection?.pairing == PairingPhase.OK
+
 @Composable
-private fun PhoneKeyCard(
+private fun KeyCard(
     connection: TeslaConnection?,
     vehicle: Vehicle?,
     onPair: () -> Unit,
 ) {
     // The stored slot proves enrollment even before the car answers.
     val keySlot = connection?.keySlot ?: vehicle?.keySlot
-    val paired = keySlot != null || connection?.pairing == PairingPhase.OK
+    val paired = isPaired(connection, vehicle)
     val pairing = connection?.pairing ?: PairingPhase.IDLE
     val pairingInProgress =
         pairing == PairingPhase.CHECKING ||
@@ -300,7 +393,7 @@ private fun PhoneKeyCard(
         Column(Modifier.padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text("Phone key", style = MaterialTheme.typography.titleSmall)
+                    Text("App key", style = MaterialTheme.typography.titleSmall)
                     Text(
                         text =
                             when {
@@ -403,64 +496,53 @@ private fun pairingDetailText(pairing: PairingPhase): String? =
     }
 
 @Composable
-private fun VinCard(
+private fun VinDialog(
     bleName: String,
-    vehicle: Vehicle?,
     vinInput: String,
     expectedBleName: String?,
     onVinChange: (String) -> Unit,
+    onDismiss: () -> Unit,
 ) {
-    var editing by rememberSaveable(bleName) { mutableStateOf(false) }
     val mismatch =
         vinInput.length == VIN_LENGTH &&
             expectedBleName != null &&
             expectedBleName != bleName
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-            if (editing) {
-                OutlinedTextField(
-                    value = vinInput,
-                    onValueChange = onVinChange,
-                    singleLine = true,
-                    label = { Text("VIN") },
-                    isError = mismatch,
-                    supportingText = {
-                        Text(
-                            text =
-                                when {
-                                    mismatch -> "Doesn't match this car's advertised name"
-                                    vehicle?.vin != null -> "Used for authenticated sessions; never logged."
-                                    else -> "Required before pairing and SOC reads."
-                                },
-                        )
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                ) {
-                    TextButton(onClick = { editing = false }) { Text("Done") }
-                }
-            } else {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+    val valid = vinInput.length == VIN_LENGTH && expectedBleName == bleName
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("VIN") },
+        text = {
+            OutlinedTextField(
+                value = vinInput,
+                onValueChange = onVinChange,
+                singleLine = true,
+                label = { Text("17-character VIN") },
+                isError = mismatch,
+                supportingText = {
                     Text(
-                        text = "VIN",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        text =
+                            when {
+                                mismatch -> "Doesn't match this car's advertised name"
+                                valid -> "Saved. Used for authenticated sessions; never logged."
+                                else -> "Printed on the windshield or the driver's door jamb."
+                            },
                     )
-                    Spacer(Modifier.width(12.dp))
-                    Text(
-                        text = vehicle?.maskedVin ?: "Not set",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontFamily = FontFamily.Monospace,
-                        modifier = Modifier.weight(1f),
-                    )
-                    TextButton(onClick = { editing = true }) { Text("Edit") }
-                }
+                },
+                modifier = Modifier.fillMaxWidth(),
+            )
+        },
+        confirmButton = {
+            TextButton(
+                onClick = onDismiss,
+                enabled = valid,
+            ) {
+                Text("Save")
             }
-        }
-    }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        },
+    )
 }
 
 @Composable

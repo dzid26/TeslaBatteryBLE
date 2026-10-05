@@ -38,11 +38,13 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import com.dzid26.teslable.BuildConfig
 import com.dzid26.teslable.ble.PairingKeyStore
+import com.dzid26.teslable.ble.Vehicle
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     keyStore: PairingKeyStore,
+    vehicles: List<Vehicle>,
     onClearPairingCache: () -> Unit,
     onOpenAbout: () -> Unit,
     onBack: () -> Unit,
@@ -50,7 +52,13 @@ fun SettingsScreen(
     BackHandler { onBack() }
 
     var backupEnabled by remember { mutableStateOf(keyStore.isBackupEnabled()) }
-    var keyId by remember { mutableStateOf(keyStore.load()?.keyId?.toHex()) }
+    // One key per car; read them when Settings opens (pairing happens elsewhere).
+    val vehicleKeys =
+        remember(vehicles) {
+            vehicles.mapNotNull { vehicle ->
+                keyStore.load(vehicle.bleName)?.keyId?.toHex()?.let { id -> vehicle.title to id }
+            }
+        }
     var showEnableDialog by remember { mutableStateOf(false) }
     var showDisableDialog by remember { mutableStateOf(false) }
     var showClearCacheDialog by remember { mutableStateOf(false) }
@@ -90,7 +98,7 @@ fun SettingsScreen(
             )
             Spacer(Modifier.height(16.dp))
             PairingCard(
-                keyId = keyId,
+                keys = vehicleKeys,
                 onClearCache = { showClearCacheDialog = true },
             )
             Spacer(Modifier.height(16.dp))
@@ -191,7 +199,7 @@ private fun VehicleKeysCard(
 
 @Composable
 private fun PairingCard(
-    keyId: String?,
+    keys: List<Pair<String, String>>,
     onClearCache: () -> Unit,
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
@@ -201,24 +209,34 @@ private fun PairingCard(
                 style = MaterialTheme.typography.titleMedium,
             )
             Spacer(Modifier.height(8.dp))
-            Text(
-                text = keyId?.let { "Key ${it.take(8)}…" } ?: "No key stored",
-                style = MaterialTheme.typography.bodyMedium,
-                fontFamily = FontFamily.Monospace,
-            )
+            if (keys.isEmpty()) {
+                Text(
+                    text = "No vehicle keys stored",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            } else {
+                keys.forEach { (title, id) ->
+                    Text(
+                        text = "$title · ${id.take(8)}…",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontFamily = FontFamily.Monospace,
+                    )
+                }
+            }
             Spacer(Modifier.height(8.dp))
             Text(
                 text =
-                    "Clearing the cache forgets the cached key slots and sessions so the pairing " +
-                        "flow can be tested again. The stored key is kept, and the car still has it " +
-                        "in its whitelist, so the next whitelist check may mark it paired again.",
+                    "Each car has its own key, and pairing always enrolls a freshly generated one. " +
+                        "Clearing the cache forgets cached key slots and sessions so the pairing flow " +
+                        "can be tested again; stored keys are kept, and a car that still has its key " +
+                        "is marked paired by the next whitelist check.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(12.dp))
             Button(
                 onClick = onClearCache,
-                enabled = keyId != null,
+                enabled = keys.isNotEmpty(),
             ) {
                 Text("Clear pairing cache")
             }

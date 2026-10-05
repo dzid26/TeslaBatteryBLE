@@ -18,6 +18,11 @@ All notable changes to this project are documented here. The format is based on
 
 ### Changed
 
+- Car view: the paired app key status sits in the hero above the connection
+  state, the key card only appears while pairing, and the VIN moved from its own
+  card into a quiet hero row that opens an edit dialog for corrections
+- Wording: the app's key is called "App key" everywhere; "Phone Key" appears
+  only in the rename hint that mirrors the Tesla screen
 - Battery history is excluded from Android backup, so a restored install never
   shows a stale "last known" percentage; cached key slots are dropped when the
   key is missing after a restore

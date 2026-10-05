@@ -97,6 +97,7 @@ class MainActivity : ComponentActivity() {
                         AppScreen.SETTINGS ->
                             SettingsScreen(
                                 keyStore = remember { PairingKeyStore(context) },
+                                vehicles = state.vehicles,
                                 onClearPairingCache = controller::clearPairingCache,
                                 onOpenAbout = { screen = AppScreen.ABOUT },
                                 onBack = { screen = AppScreen.MAIN },

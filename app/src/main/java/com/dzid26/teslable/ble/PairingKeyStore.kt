@@ -15,22 +15,20 @@ import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
 /**
- * Stores the vehicle key pair in app-private SharedPreferences.
+ * Stores one P-256 key pair per vehicle in app-private SharedPreferences.
  *
- * Default mode is device-only: the P-256 private key is encrypted with an AES
- * key held in the Android Keystore, so it cannot be read from a backup and does
- * not survive a phone change.
+ * A key belongs to a single car and is never re-enrolled once the car stops
+ * recognizing it: pairing generates a fresh key, so a key that was removed
+ * from the car (for example after a phone theft) stays dead. See ADR-0005.
  *
- * The user can opt in to portable mode, which stores the private key as
- * plaintext PKCS#8 base64 so Android's system backup can restore pairing on a
- * new phone. The trade-off is documented in ADR-0005: the enrolled key is
- * CHARGING_MANAGER-scoped (charge control plus reads, no unlock or drive), other
- * apps cannot read app-private storage, and Android backup is protected by the
- * user's Google account and lock-screen secret on Android 12+.
+ * Default mode is device-only: private keys are encrypted with an AES key held
+ * in the Android Keystore, so they cannot be read from a backup and do not
+ * survive a phone change. The user can opt in to portable mode (one global
+ * setting), which stores the private keys as plaintext PKCS#8 base64 so
+ * Android's system backup can restore pairing on a new phone.
  *
- * Older installs that still hold Keystore-encrypted material are decrypted and
- * migrated transparently on first load, then re-saved in the currently selected
- * mode.
+ * Older installs held one global key shared by all cars; it is adopted as the
+ * key of every known vehicle once, then removed.
  */
 class PairingKeyStore(
     context: Context,
@@ -38,53 +36,89 @@ class PairingKeyStore(
     private val appContext = context.applicationContext
     private val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
-    /** True when the key is allowed to be included in Android backup. */
+    /** True when keys are allowed to be included in Android backup. */
     fun isBackupEnabled(): Boolean = prefs.getBoolean(KEY_BACKUP_ENABLED, false)
 
     /**
-     * Changes the backup mode and re-saves an existing key in the new format.
+     * Changes the backup mode and re-saves every stored key in the new format.
      * If no key exists yet, only the preference is updated so the next
      * generated key is written in the chosen format.
      */
     fun setBackupEnabled(enabled: Boolean) {
-        val current = loadInternal()
-        if (current != null) {
-            save(current, enabled)
+        storedVehicleIds().forEach { vehicleId ->
+            loadInternal(vehicleId)?.let { save(vehicleId, it, enabled) }
         }
         prefs.edit().putBoolean(KEY_BACKUP_ENABLED, enabled).apply()
-        // Replacing or excluding the key changes what the next backup should
+        // Replacing or excluding keys changes what the next backup should
         // contain; nudge the system instead of waiting for the daily pass.
         BackupManager(appContext).dataChanged()
     }
 
-    fun load(): TeslaKeyPair? = loadInternal()
+    /** The key pair for one car, or null when the car has none. */
+    fun load(vehicleId: String): TeslaKeyPair? = loadInternal(vehicleId)
 
-    fun loadOrCreate(): TeslaKeyPair {
-        loadInternal()?.let { return it }
+    /** Generates and stores a fresh key pair for one car, replacing any previous one. */
+    fun generate(vehicleId: String): TeslaKeyPair {
         val keyPair = TeslaKeys.generate()
-        save(keyPair)
+        save(vehicleId, keyPair)
         return keyPair
     }
 
-    private fun loadInternal(): TeslaKeyPair? {
+    /**
+     * Adopts the pre-per-car global key as the key of every vehicle that does
+     * not have one yet, then removes the legacy entries. Does nothing while no
+     * vehicles are known, so the legacy key is not lost before they appear.
+     */
+    fun adoptLegacyKey(vehicleIds: Collection<String>) {
+        if (vehicleIds.isEmpty()) return
+        val legacy = loadLegacy() ?: return
+        vehicleIds.filter { loadInternal(it) == null }.forEach { save(it, legacy) }
+        prefs.edit()
+            .remove(KEY_PUBLIC)
+            .remove(KEY_PRIVATE)
+            .remove(KEY_IV)
+            .apply()
+    }
+
+    private fun loadLegacy(): TeslaKeyPair? {
         val publicKey = prefs.getString(KEY_PUBLIC, null) ?: return null
         val stored = prefs.getString(KEY_PRIVATE, null) ?: return null
-
-        if (prefs.contains(KEY_IV)) {
-            // Keystore-encrypted material: decrypt, then migrate to the current mode.
-            val decrypted = decryptWithKeystore(stored, publicKey)
+        val iv = prefs.getString(KEY_IV, null)
+        if (iv != null) {
+            val decrypted = decryptWithKeystore(stored, publicKey, iv)
             if (decrypted == null) {
                 // Keystore material restored from another device cannot be
                 // decrypted; drop it so a fresh key can be generated.
-                prefs
-                    .edit()
-                    .remove(KEY_IV)
-                    .remove(KEY_PRIVATE)
+                prefs.edit()
                     .remove(KEY_PUBLIC)
+                    .remove(KEY_PRIVATE)
+                    .remove(KEY_IV)
                     .apply()
                 return null
             }
-            save(decrypted)
+            return decrypted
+        }
+        return runCatching {
+            TeslaKeyPair(
+                privateKeyPkcs8 = Base64.decode(stored, Base64.NO_WRAP),
+                publicKeyRaw = Base64.decode(publicKey, Base64.NO_WRAP),
+            )
+        }.getOrNull()
+    }
+
+    private fun loadInternal(vehicleId: String): TeslaKeyPair? {
+        val publicKey = prefs.getString(key(vehicleId, KEY_PUBLIC), null) ?: return null
+        val stored = prefs.getString(key(vehicleId, KEY_PRIVATE), null) ?: return null
+        val iv = prefs.getString(key(vehicleId, KEY_IV), null)
+
+        if (iv != null) {
+            // Keystore-encrypted material: decrypt, then migrate to the current mode.
+            val decrypted = decryptWithKeystore(stored, publicKey, iv)
+            if (decrypted == null) {
+                remove(vehicleId)
+                return null
+            }
+            save(vehicleId, decrypted)
             return decrypted
         }
 
@@ -99,28 +133,29 @@ class PairingKeyStore(
         if (!isBackupEnabled()) {
             // A plaintext key exists but the current mode is device-only:
             // re-encrypt it under the Keystore key.
-            save(plaintext, backupEnabled = false)
+            save(vehicleId, plaintext, backupEnabled = false)
         }
         return plaintext
     }
 
     private fun save(
+        vehicleId: String,
         keyPair: TeslaKeyPair,
         backupEnabled: Boolean = isBackupEnabled(),
     ) {
         val editor =
             prefs
                 .edit()
-                .putString(KEY_PUBLIC, Base64.encodeToString(keyPair.publicKeyRaw, Base64.NO_WRAP))
+                .putString(key(vehicleId, KEY_PUBLIC), Base64.encodeToString(keyPair.publicKeyRaw, Base64.NO_WRAP))
         if (backupEnabled) {
             editor
-                .putString(KEY_PRIVATE, Base64.encodeToString(keyPair.privateKeyPkcs8, Base64.NO_WRAP))
-                .remove(KEY_IV)
+                .putString(key(vehicleId, KEY_PRIVATE), Base64.encodeToString(keyPair.privateKeyPkcs8, Base64.NO_WRAP))
+                .remove(key(vehicleId, KEY_IV))
         } else {
             val (iv, ciphertext) = encryptWithKeystore(keyPair.privateKeyPkcs8)
             editor
-                .putString(KEY_PRIVATE, Base64.encodeToString(ciphertext, Base64.NO_WRAP))
-                .putString(KEY_IV, Base64.encodeToString(iv, Base64.NO_WRAP))
+                .putString(key(vehicleId, KEY_PRIVATE), Base64.encodeToString(ciphertext, Base64.NO_WRAP))
+                .putString(key(vehicleId, KEY_IV), Base64.encodeToString(iv, Base64.NO_WRAP))
         }
         editor.apply()
         if (backupEnabled) {
@@ -129,6 +164,28 @@ class PairingKeyStore(
             BackupManager(appContext).dataChanged()
         }
     }
+
+    private fun remove(vehicleId: String) {
+        prefs
+            .edit()
+            .remove(key(vehicleId, KEY_PUBLIC))
+            .remove(key(vehicleId, KEY_PRIVATE))
+            .remove(key(vehicleId, KEY_IV))
+            .apply()
+    }
+
+    /** Vehicle ids that currently have a stored key. */
+    private fun storedVehicleIds(): Set<String> =
+        prefs.all.keys
+            .mapNotNull { prefKey ->
+                if (prefKey.startsWith(PREFIX) && prefKey.endsWith(".$KEY_PUBLIC")) {
+                    prefKey.removePrefix(PREFIX).removeSuffix(".$KEY_PUBLIC").takeIf { it.isNotEmpty() }
+                } else {
+                    null
+                }
+            }.toSet()
+
+    private fun key(vehicleId: String, suffix: String): String = "$PREFIX$vehicleId.$suffix"
 
     /** Encrypts bytes with the Keystore AES-GCM key, returning IV and ciphertext. */
     private fun encryptWithKeystore(plaintext: ByteArray): Pair<ByteArray, ByteArray> {
@@ -143,9 +200,9 @@ class PairingKeyStore(
     private fun decryptWithKeystore(
         encrypted: String,
         publicKey: String,
-    ): TeslaKeyPair? {
-        val iv = prefs.getString(KEY_IV, null) ?: return null
-        return runCatching {
+        iv: String,
+    ): TeslaKeyPair? =
+        runCatching {
             val cipher = Cipher.getInstance(TRANSFORMATION)
             cipher.init(
                 Cipher.DECRYPT_MODE,
@@ -157,7 +214,6 @@ class PairingKeyStore(
                 publicKeyRaw = Base64.decode(publicKey, Base64.NO_WRAP),
             )
         }.getOrNull()
-    }
 
     /** Returns the Keystore AES key, generating it if necessary. */
     private fun secretKey(): SecretKey {
@@ -184,6 +240,7 @@ class PairingKeyStore(
     private companion object {
         const val PREFS = "pairing_key"
         const val KEY_BACKUP_ENABLED = "key_backup_enabled"
+        const val PREFIX = "key."
         const val KEY_IV = "iv"
         const val KEY_PRIVATE = "private"
         const val KEY_PUBLIC = "public"
