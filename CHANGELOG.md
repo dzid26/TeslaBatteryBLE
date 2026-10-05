@@ -6,6 +6,28 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [0.2.0-beta.2] - 2026-10-05
+
+### Added
+
+- Fresh screenshots from the simulated car (overview, scanning, car, history,
+  settings, plus dark-mode variants) captured on API 34 / Pixel 6
+- Social preview image and 512 px store icon
+
+### Changed
+
+- Website simplified to installation instructions and updated with the new
+  screenshots
+- Release notes embed screenshots from the deployed site (preview) or pinned to
+  the release commit (tags); tag APKs are named `TeslaBatteryBLE-<tag>.apk`
+- A tag cut at the rolling preview's commit converts that release instead of
+  deleting it
+- Preview job no longer runs an emulator
+
+### Fixed
+
+- Release screenshot order (light shots first, dark variants last)
+
 ## [0.2.0-beta.1] - 2026-10-05
 
 ### Added
@@ -52,6 +74,7 @@ First public preview.
 - Simulated car in debug builds; emulator screenshots in the rolling preview release
 - CI: core tests, debug APK, Go-fixture diff against `teslamotors/vehicle-command`
 
-[Unreleased]: https://github.com/dzid26/TeslaBatteryBLE/compare/v0.2.0-beta.1...HEAD
+[Unreleased]: https://github.com/dzid26/TeslaBatteryBLE/compare/v0.2.0-beta.2...HEAD
+[0.2.0-beta.2]: https://github.com/dzid26/TeslaBatteryBLE/releases/tag/v0.2.0-beta.2
 [0.2.0-beta.1]: https://github.com/dzid26/TeslaBatteryBLE/releases/tag/v0.2.0-beta.1
 [0.1.0-beta.1]: https://github.com/dzid26/TeslaBatteryBLE/releases/tag/v0.1.0-beta.1
