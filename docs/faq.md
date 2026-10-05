@@ -72,8 +72,9 @@ NFC card tap. With it on:
 - A new phone can restore pairing during setup or a device-to-device transfer
   (Android 12+; Android 11 and below always keep keys out of backup).
 - A store install (Play) can restore app data automatically.
-- Installing an APK by hand (Obtainium, a browser download, `adb install`)
-  does not trigger a restore; see the next question.
+- Installing an APK by hand (Obtainium, a browser download, `adb install`) is
+  restored automatically when Android's automatic restore is on (it is by
+  default); otherwise see the next question.
 
 ## How do I know Android backed up my data, and how do I restore it after a manual install?
 
@@ -93,8 +94,9 @@ Use the Google transport (for example
 `com.google.android.gms/.backup.BackupTransportService`). The device must be
 signed in to the account that holds the backup and have backup enabled
 (`bmgr enabled`). You can also force a backup with
-`adb shell bmgr backupnow com.dzid26.teslable`. Without adb, restore only
-happens during phone setup, a device transfer, or a store install.
+`adb shell bmgr backupnow com.dzid26.teslable`. Automatic restore can be
+checked with `adb shell settings get secure backup_auto_restore` (`1` = on);
+when it is off, use the `bmgr restore` steps above.
 
 ## Why is background tracking sometimes killed?
 

@@ -13,3 +13,4 @@ replay_pid*.log
 keystore.properties
 *.jks
 *.keystore
+key-restore-test/

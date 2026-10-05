@@ -31,7 +31,7 @@ param(
     [string]$Apk = "app\build\outputs\apk\debug\app-debug.apk",
     [ValidateSet("google", "manual", "both")]
     [string]$Mode = "both",
-    [string]$OutDir = "key-restore-test"
+    [string]$OutDir = (Join-Path $env:TEMP "teslable-key-restore-test")
 )
 
 $ErrorActionPreference = "Stop"
@@ -52,7 +52,7 @@ if (-not $Serial) {
 if (-not $Serial) { throw "no device in 'adb devices'; connect one or pass -Serial" }
 
 $Apk = (Resolve-Path $Apk).Path
-$OutDir = Join-Path $repo $OutDir
+if (-not [IO.Path]::IsPathRooted($OutDir)) { $OutDir = Join-Path $repo $OutDir }
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 $uiFile = Join-Path $OutDir "ui.xml"
 
@@ -105,6 +105,7 @@ if (-not ((Adb shell pm path $pkg) -match "package:")) {
 if (-not (HasKey)) {
     throw "no pairing key on the device - pair the car (NFC card) first, then re-run"
 }
+$publicBefore = [regex]::Match((KeyPrefs), 'name="public">([^<]+)<').Groups[1].Value
 Write-Host "key storage: $(if (IsPortable) { 'portable' } else { 'device-only' })"
 
 if (-not (BackupEnabled) -or -not (IsPortable)) {
@@ -119,7 +120,7 @@ Write-Host "backup enabled: yes; portable key: yes"
 $googleOk = $false
 if ($Mode -in @("google", "both")) {
     $enabled = (Adb shell bmgr enabled) -join " "
-    if ($enabled -match "true") {
+    if ($enabled -match "enabled") {
         Write-Host "forcing an Android backup (bmgr backupnow --monitor)..."
         $out = Adb shell bmgr backupnow --monitor $pkg
         $out | Out-File (Join-Path $OutDir "backupnow.txt") -Encoding utf8
@@ -138,17 +139,28 @@ if (-not (Test-Path $tar)) { throw "tar safety copy failed" }
 
 # 3. Fresh install
 Write-Host "uninstalling..."
-Adb uninstall $pkg | Out-Null
+$uninstall = Adb uninstall $pkg
+if (($uninstall -join "`n") -notmatch "Success") { throw "uninstall failed: $uninstall" }
 Write-Host "installing $Apk..."
 Adb install -r $Apk | Out-Null
 foreach ($p in @("BLUETOOTH_SCAN", "BLUETOOTH_CONNECT", "ACCESS_FINE_LOCATION", "POST_NOTIFICATIONS")) {
     Adb shell pm grant $pkg "android.permission.$p" 2>$null | Out-Null
 }
-if (HasKey) { throw "key still present right after uninstall?!" }
+$autoRestored = $false
+if (HasKey) {
+    # Android's automatic restore (secure setting backup_auto_restore) can
+    # restore app data during install; that is the happy path, not an error.
+    if ((KeyPrefs) -match [regex]::Escape($publicBefore)) {
+        $autoRestored = $true
+    } else {
+        throw "a different key appeared after install; something is wrong"
+    }
+}
 
 # 4. Restore
 $restoredBy = $null
-if ($Mode -in @("google", "both") -and $googleOk) {
+if ($autoRestored) { $restoredBy = "auto" }
+if (-not $restoredBy -and $Mode -in @("google", "both") -and $googleOk) {
     Write-Host "restoring from Android backup..."
     $transports = Adb shell bmgr list transports
     $google = $transports | Select-String "com.google.android.gms/.backup.BackupTransportService" | Select-Object -First 1

@@ -178,9 +178,9 @@ private fun VehicleKeysCard(
                 Text(
                     text =
                         "Android decides when to back up (usually daily, while idle and charging). " +
-                            "Check or trigger one in system Settings \u2192 Backup. Restores happen " +
-                            "during phone setup, a device transfer, or a store install - a manually " +
-                            "installed APK is not restored automatically.",
+                            "Check or trigger one in system Settings \u2192 Backup. Android restores " +
+                            "it during phone setup, a device transfer, or an app install when " +
+                            "automatic restore is on; otherwise restore it manually or re-pair.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
