@@ -6,9 +6,10 @@
 #
 # Walks the simulated-car flow (demo builds, `assembleDebug -PdemoCar=true`):
 # the cars list, a scan, the car detail with a battery reading, the history
-# graph and Settings. Taps wait for the target UI text through uiautomator
-# instead of fixed sleeps, so slow emulators stay reliable. On a plain debug
-# build the car steps are skipped silently and only the scan is captured.
+# graph and Settings, then repeats every screen in dark mode. Taps wait for the
+# target UI text through uiautomator instead of fixed sleeps, so slow emulators
+# stay reliable. On a plain debug build the car steps are skipped silently and
+# only the scan is captured.
 set -euo pipefail
 
 # Git Bash on Windows rewrites /sdcard paths passed to adb; keep them literal.
@@ -329,11 +330,14 @@ else
   echo "  ! simulated car not listed (is this a demo build?)" >&2
 fi
 
-# Bonus dark-mode variants for the overview and car detail. The theme change
+# Dark-mode pass: every screen again with the dark theme. The theme change
 # recreates the activity (and can restart the app), so the app may come back on
-# the car screen; navigate to the cars list first. Dropped quietly when the
-# screens cannot be reached.
+# the car screen; navigate to the cars list first. Each capture goes through the
+# same non-empty check as the light pass, and the dark files become required
+# once the device accepts the theme switch.
+dark_pass=false
 if adb shell cmd uimode night yes > /dev/null 2>&1; then
+  dark_pass=true
   sleep 4
   if ! wait_for_text "Cars" 15; then
     adb shell input keyevent KEYCODE_BACK
@@ -342,8 +346,22 @@ if adb shell cmd uimode night yes > /dev/null 2>&1; then
   if wait_for_text "Cars" 5; then
     sleep 1
     capture 01-overview-dark.png
+
+    # 02 — the scan, with the simulated car already known from the light pass
+    # (its address is no longer shown, so wait for the other car's address).
+    if tap_text "Scan for Teslas" 20; then
+      if wait_for_text "Scanning:" 20 && wait_for_text "AA:BB:CC:DD:EE:02" 20; then
+        sleep 1
+        capture 02-scanning-dark.png
+      else
+        echo "  ! dark scan results never appeared" >&2
+      fi
+    else
+      echo "  ! could not start a dark scan" >&2
+    fi
+
+    # 03 — the car detail; after a process restart the car is asleep again.
     if tap_text "Demo Tesla" 20; then
-      # After a process restart the simulated car is asleep again: wake it.
       if ! wait_for_text "Charge limit" 5; then
         tap_and_wait "Wake vehicle" "Awake" 15 || true
         tap_and_wait "Read SOC" "Charge limit" 15 || true
@@ -351,22 +369,49 @@ if adb shell cmd uimode night yes > /dev/null 2>&1; then
       if wait_for_text "Charge limit" 10; then
         sleep 1
         capture 03-car-dark.png
+
+        # 04 — the history graph, framed like the light pass.
+        if scroll_to_text "Battery history"; then
+          sleep 1
+          capture 04-history-dark.png
+        elif wait_for_text "Battery history" 5; then
+          echo "  ... dark history card is already as high as the page allows" >&2
+          sleep 1
+          capture 04-history-dark.png
+        else
+          echo "  ! could not frame the dark history card" >&2
+        fi
+
+        # 05 — Settings.
+        adb shell input keyevent KEYCODE_BACK
+        if wait_for_text "Cars" 20 && tap_desc "Settings" 20; then
+          if wait_for_text "Vehicle key" 20; then
+            sleep 1
+            capture 05-settings-dark.png
+          else
+            echo "  ! dark settings screen did not open" >&2
+          fi
+          adb shell input keyevent KEYCODE_BACK
+        else
+          echo "  ! could not open dark settings" >&2
+        fi
       else
-        echo "  ! dark car detail has no reading; dropping the variant" >&2
-        rm -f "$OUT/03-car-dark.png"
+        echo "  ! dark car detail has no reading" >&2
       fi
     else
-      echo "  ! dark car detail not reachable; dropping the variant" >&2
-      rm -f "$OUT/03-car-dark.png"
+      echo "  ! dark car detail not reachable" >&2
     fi
   else
-    echo "  ! dark overview not reachable; dropping the variant" >&2
-    rm -f "$OUT/01-overview-dark.png"
+    echo "  ! dark overview not reachable" >&2
   fi
 fi
 
+required="01-overview.png 02-scanning.png 03-car.png 04-history.png 05-settings.png"
+if [ "$dark_pass" = true ]; then
+  required="$required 01-overview-dark.png 02-scanning-dark.png 03-car-dark.png 04-history-dark.png 05-settings-dark.png"
+fi
 missing=0
-for name in 01-overview.png 02-scanning.png 03-car.png 04-history.png 05-settings.png; do
+for name in $required; do
   if [ ! -s "$OUT/$name" ]; then
     echo "missing required screenshot: $name" >&2
     missing=1
