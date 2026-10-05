@@ -71,4 +71,61 @@ class AntiReplayWindowTest {
         assertTrue(window.update(8))
         assertFalse(window.update(7))
     }
+
+    @Test
+    fun `accepts the first counter once even when it is zero`() {
+        val window = AntiReplayWindow()
+        assertTrue(window.update(0))
+        assertFalse(window.update(0))
+    }
+
+    @Test
+    fun `accepts out of order counters inside the window`() {
+        val window = AntiReplayWindow()
+        assertTrue(window.update(100))
+        assertTrue(window.update(98))
+        assertTrue(window.update(99))
+        assertFalse(window.update(98))
+        assertFalse(window.update(99))
+    }
+
+    @Test
+    fun `accepts the oldest counter in the window and rejects one further back`() {
+        val window = AntiReplayWindow()
+        assertTrue(window.update(100))
+        assertTrue(window.update(100 - AntiReplayWindow.WINDOW_SIZE))
+        assertFalse(window.update(100 - AntiReplayWindow.WINDOW_SIZE - 1))
+        assertFalse(window.update(100 - AntiReplayWindow.WINDOW_SIZE))
+    }
+
+    @Test
+    fun `advances the window and forgets counters that fall out`() {
+        val window = AntiReplayWindow()
+        assertTrue(window.update(100))
+        assertTrue(window.update(133))
+        assertFalse(window.update(133))
+        assertTrue(window.update(101))
+        assertFalse(window.update(100))
+    }
+
+    @Test
+    fun `rejects counters after the uint32 wrap`() {
+        val window = AntiReplayWindow()
+        assertTrue(window.update(-1))
+        assertFalse(window.update(0))
+        assertFalse(window.update(1))
+    }
+
+    @Test
+    fun `treats counters as unsigned 32 bit values`() {
+        val (counter, history, ok) = AntiReplayWindow.updateSlidingWindow(0, 0L, -1)
+        assertTrue(ok)
+        assertEquals(-1, counter)
+        assertEquals(0L, history)
+
+        val (wrapped, wrappedHistory, wrappedOk) = AntiReplayWindow.updateSlidingWindow(-1, 0L, 0)
+        assertFalse(wrappedOk)
+        assertEquals(-1, wrapped)
+        assertEquals(0L, wrappedHistory)
+    }
 }
