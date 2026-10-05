@@ -53,7 +53,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -71,7 +74,9 @@ import com.dzid26.teslable.ble.connectionDisplay
 import com.dzid26.teslable.ble.vehicleStatusText
 import com.dzid26.teslable.core.history.BatterySample
 import com.dzid26.teslable.core.history.HistoryRange
+import com.dzid26.teslable.core.history.chargeProjection
 import com.dzid26.teslable.core.history.chargeStats
+import com.dzid26.teslable.core.history.gapFlags
 import com.dzid26.teslable.core.history.within
 import kotlinx.coroutines.delay
 import java.time.Instant
@@ -669,6 +674,8 @@ private fun BatteryChart(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     val textMeasurer = rememberTextMeasurer()
+    val gaps = samples.gapFlags()
+    val projection = chargeProjection(samples)
 
     Canvas(modifier) {
         val left = 36.dp.toPx()
@@ -680,7 +687,7 @@ private fun BatteryChart(
         if (width <= 0f || height <= 0f) return@Canvas
 
         val minPercent = samples.minOf { it.percent }
-        val maxPercent = samples.maxOf { it.percent }
+        val maxPercent = maxOf(samples.maxOf { it.percent }, projection?.targetPercent ?: 0)
         var yMin = ((minPercent - 2).coerceAtLeast(0) / 5) * 5
         var yMax = (((maxPercent + 2).coerceAtMost(100) + 4) / 5) * 5
         if (yMax <= yMin) {
@@ -719,8 +726,24 @@ private fun BatteryChart(
                 color = if (current.isCharging) chargingColor else lineColor,
                 start = Offset(x(previous.timestampMillis), y(previous.percent)),
                 end = Offset(x(current.timestampMillis), y(current.percent)),
-                strokeWidth = 2.dp.toPx(),
+                strokeWidth = (if (gaps[index - 1]) 1.dp else 2.dp).toPx(),
                 cap = StrokeCap.Round,
+            )
+        }
+
+        projection?.let { target ->
+            drawPath(
+                path =
+                    Path().apply {
+                        moveTo(x(target.from.timestampMillis), y(target.from.percent))
+                        lineTo(x(target.completionMillis), y(target.targetPercent))
+                    },
+                color = chargingColor,
+                style =
+                    Stroke(
+                        width = 2.dp.toPx(),
+                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(8.dp.toPx(), 6.dp.toPx())),
+                    ),
             )
         }
 

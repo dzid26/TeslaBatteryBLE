@@ -42,6 +42,9 @@ All notable changes to this project are documented here. The format is based on
   indicator (Scan for cars / Wake car / Read battery) that swaps its icon for a
   spinner while running, replacing the Scan, Wake and Read buttons; a Stop
   action appears while scanning
+- Battery history chart: missing stretches (car asleep or out of range) draw
+  as a thin line instead of looking continuous, and while charging a dashed
+  line projects when the charge limit will be reached at the current rate
 - Wake and command send failures are logged instead of failing silently
 - Release screenshots are captured from the simulated car automatically in CI
   and attached to each release as one `screenshot-sheet.png`; tag releases are
