@@ -9,7 +9,8 @@ All notable changes to this project are documented here. The format is based on
 ### Added
 
 - About screen (Settings → About): version, links, support, licenses, and the
-  Tesla, Inc. disclaimer, as tappable rows
+  Tesla, Inc. disclaimer, as tappable rows; version and licenses collapse into
+  one expandable More card
 - Permission wizard: full-screen Material pages with a greeting, then one page
   per missing permission explaining what it is for and what the user has to do,
   with an app-settings fallback when Android stops asking; the cars list keeps a
