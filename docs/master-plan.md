@@ -58,7 +58,8 @@ A trustworthy shell around the existing protocol work. No user-facing features.
 - [x] `SECURITY.md`, `PRIVACY.md` ("nothing leaves the device"), `CODE_OF_CONDUCT.md`, `CONTRIBUTING.md` (DCO, no CLA), `CHANGELOG.md`.
 - [x] Issue forms (bug: car model/year, vehicle software, Android version, logs; feature request), PR template, `.editorconfig`.
 - [x] CI gates: Android lint, app unit tests, concurrency cancel, least-privilege permissions, Dependabot.
-- [ ] CI hardening: ktlint + detekt, pinned action SHAs, required checks on `main` (branch protection deliberately deferred while agents push directly).
+- [x] CI hardening: pinned action SHAs (#16); ktlint + detekt gates (#19).
+- [ ] Required checks on `main` (branch protection deliberately deferred while agents push directly).
 - [ ] Release engineering: signed release blocked on owner keystore; release checklist documented.
 - [x] Docs skeleton: `docs/adr/` (ADR-0001 moved), `docs/protocol/` (transport, session/pairing, domains).
 - [x] `AGENTS.md` for future sessions.
@@ -73,11 +74,15 @@ A trustworthy shell around the existing protocol work. No user-facing features.
 - [ ] Store tests.
 - [ ] Compose UI smoke tests + screenshot tests in CI.
 - [ ] Protocol vectors: nonce/metadata/counter/clock-skew edge cases + negative tests.
-- [ ] Static analysis zero baseline; R8 + resource shrinking; Baseline Profile; LeakCanary (debug only).
-- [ ] Screenshots → `docs/images/` with captions; social preview image.
+- [x] Static analysis zero baseline: Android lint + ktlint + detekt in CI.
+- [ ] R8 + resource shrinking; Baseline Profile; LeakCanary (debug only).
+- [x] Screenshots in `docs/images/` (captured in CI, shown in README).
+- [ ] Social preview image.
 - [ ] Website v1 on GitHub Pages (landing + install buttons + privacy story).
-- [ ] Obtainium instructions; F-Droid metadata (fastlane) + submission; IzzyOnDroid submission; document GitHub→F-Droid signature migration.
-- [ ] `FUNDING.yml` + README/About donation links.
+- [x] Obtainium instructions (README); F-Droid metadata (`fastlane/`).
+- [ ] F-Droid submission; IzzyOnDroid submission; document GitHub→F-Droid signature migration (blocked on signed releases).
+- [x] `FUNDING.yml` + README donation section.
+- [ ] About-screen donation links (with the About screen).
 - [ ] v0.2.0 tagged, signed, with curated changelog.
 
 ## 7. Phase 2 — v0.3–0.5 "Product" (target: Nov–Dec)
