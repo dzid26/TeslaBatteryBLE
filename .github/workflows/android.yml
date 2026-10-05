@@ -74,11 +74,20 @@ jobs:
           name: teslable-debug-apk
           path: app/build/outputs/apk/debug/*.apk
 
+      - name: Prepare release artifacts
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          cp app/build/outputs/apk/debug/app-debug.apk "TeslaBatteryBLE-${GITHUB_REF_NAME}.apk"
+          bash .github/scripts/build-release-notes.sh
+
       - name: Release APK on tag
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3
         with:
-          files: app/build/outputs/apk/debug/*.apk
+          name: ${{ github.ref_name }}
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          body_path: release-notes.md
+          files: TeslaBatteryBLE-*.apk
 
   preview:
     name: Rolling preview release
