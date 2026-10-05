@@ -6,6 +6,9 @@
 # tagged release (move the release to the new tag, update title/notes, replace
 # the asset) instead of deleting it and creating a new one. Otherwise fall
 # back to creating a fresh release.
+#
+# Screenshots ship as release assets: one composed sheet when ImageMagick is
+# available, otherwise the individual images.
 set -euo pipefail
 
 TAG="${GITHUB_REF_NAME:?GITHUB_REF_NAME is required}"
@@ -14,6 +17,10 @@ SHA="${GITHUB_SHA:-$(git rev-parse HEAD)}"
 APK="app/build/outputs/apk/debug/app-debug.apk"
 ASSET_APK="TeslaBatteryBLE-${TAG}.apk"
 NOTES="release-notes.md"
+SITE_IMAGES_DIR="website/images"
+SHEET="screenshot-sheet.png"
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 case "$TAG" in
   *-*) PRERELEASE_JSON="true" ;;
@@ -22,7 +29,16 @@ esac
 
 [ -f "$APK" ] || { echo "missing $APK" >&2; exit 1; }
 cp "$APK" "$ASSET_APK"
-bash .github/scripts/build-release-notes.sh
+
+SHEET_OK="false"
+if bash "$SCRIPT_DIR/build-screenshot-sheet.sh" "$SHEET"; then
+  SHEET_OK="true"
+fi
+export SCREENSHOT_BASE_URL="https://github.com/$REPO/releases/download/$TAG"
+if [ "$SHEET_OK" = "true" ]; then
+  export SCREENSHOT_SHEET_URL="$SCREENSHOT_BASE_URL/$SHEET"
+fi
+bash "$SCRIPT_DIR/build-release-notes.sh"
 
 git fetch --tags origin
 
@@ -55,4 +71,10 @@ elif [ "$PRERELEASE_JSON" = "true" ]; then
   gh release create "$TAG" --title "$TAG" --prerelease --notes-file "$NOTES" "$ASSET_APK"
 else
   gh release create "$TAG" --title "$TAG" --notes-file "$NOTES" "$ASSET_APK"
+fi
+
+if [ "$SHEET_OK" = "true" ]; then
+  gh release upload "$TAG" "$SHEET" --clobber
+elif compgen -G "$SITE_IMAGES_DIR/*.png" > /dev/null; then
+  gh release upload "$TAG" "$SITE_IMAGES_DIR"/*.png --clobber
 fi
