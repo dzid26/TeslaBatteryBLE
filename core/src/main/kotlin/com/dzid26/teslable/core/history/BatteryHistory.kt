@@ -14,9 +14,9 @@ data class BatterySample(
      * rows written before per-vehicle history existed.
      */
     val vehicleId: String = "",
-    /** Precise SOC the car reported; [percent] is its rounded form. */
+    /** Displayed SOC as a float; duplicates [batteryLevel], used by stats and the CSV. */
     val socPercent: Float? = null,
-    /** Estimated or rated range in miles; null when the car reported none. */
+    /** Rated range in miles; duplicates [ratedRangeMiles], used by the car view and the CSV. */
     val rangeMiles: Float? = null,
     /** Displayed SOC as reported (`battery_level`), before [socPercent] fallbacks. */
     val batteryLevel: Int? = null,
