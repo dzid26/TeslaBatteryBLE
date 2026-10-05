@@ -2,7 +2,7 @@
 package com.dzid26.teslable.ui
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -34,7 +34,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import com.dzid26.teslable.BuildConfig
@@ -45,6 +44,7 @@ import com.dzid26.teslable.ble.PairingKeyStore
 fun SettingsScreen(
     keyStore: PairingKeyStore,
     onClearPairingCache: () -> Unit,
+    onOpenAbout: () -> Unit,
     onBack: () -> Unit,
 ) {
     BackHandler { onBack() }
@@ -54,7 +54,6 @@ fun SettingsScreen(
     var showEnableDialog by remember { mutableStateOf(false) }
     var showDisableDialog by remember { mutableStateOf(false) }
     var showClearCacheDialog by remember { mutableStateOf(false) }
-    var showLicenses by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -95,7 +94,7 @@ fun SettingsScreen(
                 onClearCache = { showClearCacheDialog = true },
             )
             Spacer(Modifier.height(16.dp))
-            AboutCard(onShowLicenses = { showLicenses = true })
+            AboutCard(onOpenAbout = onOpenAbout)
         }
     }
 
@@ -129,10 +128,6 @@ fun SettingsScreen(
             },
             onDismiss = { showClearCacheDialog = false },
         )
-    }
-
-    if (showLicenses) {
-        LicensesDialog(onDismiss = { showLicenses = false })
     }
 }
 
@@ -220,9 +215,13 @@ private fun PairingCard(
 }
 
 @Composable
-private fun AboutCard(onShowLicenses: () -> Unit) {
-    val uriHandler = LocalUriHandler.current
-    Card(modifier = Modifier.fillMaxWidth()) {
+private fun AboutCard(onOpenAbout: () -> Unit) {
+    Card(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onOpenAbout),
+    ) {
         Column(Modifier.padding(16.dp)) {
             Text(
                 text = "About",
@@ -241,63 +240,14 @@ private fun AboutCard(onShowLicenses: () -> Unit) {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Spacer(Modifier.height(12.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(onClick = { uriHandler.openUri(SOURCE_URL) }) { Text("Source code") }
-                TextButton(onClick = { uriHandler.openUri(SPONSORS_URL) }) { Text("Sponsor") }
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(onClick = { uriHandler.openUri(PRIVACY_URL) }) { Text("Privacy") }
-                TextButton(onClick = onShowLicenses) { Text("Licenses") }
-            }
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(8.dp))
             Text(
-                text =
-                    "Not affiliated with, endorsed by, or sponsored by Tesla, Inc. " +
-                        "\"Tesla\" is a trademark of Tesla, Inc.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                text = "Version, licenses, privacy, and support",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary,
             )
         }
     }
-}
-
-@Composable
-private fun LicensesDialog(onDismiss: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Licenses") },
-        text = {
-            Column(Modifier.verticalScroll(rememberScrollState())) {
-                Text(
-                    text =
-                        "TeslaBatteryBLE is free software under the GNU Affero General Public " +
-                            "License v3.0 only (AGPL-3.0-only).",
-                    style = MaterialTheme.typography.bodySmall,
-                )
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    text =
-                        "Tesla protocol definitions come from teslamotors/vehicle-command " +
-                            "(Apache-2.0). The Kotlin protocol port also references the MIT-licensed " +
-                            "Swift ports TeslaBLEKeyKit and swift-tesla-ble. Bundled dependencies " +
-                            "(AndroidX, Kotlin, Wire, and others) keep their own licenses.",
-                    style = MaterialTheme.typography.bodySmall,
-                )
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    text =
-                        "Full license texts ship with release artifacts and are available in " +
-                            "the source repository.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Close") }
-        },
-    )
 }
 
 @Composable
@@ -377,7 +327,3 @@ private fun ClearPairingCacheDialog(
 }
 
 private fun ByteArray.toHex(): String = joinToString("") { byte -> (byte.toInt() and 0xFF).toString(16).padStart(2, '0') }
-
-private const val SOURCE_URL = "https://github.com/dzid26/TeslaBatteryBLE"
-private const val SPONSORS_URL = "https://github.com/sponsors/dzid26"
-private const val PRIVACY_URL = "https://github.com/dzid26/TeslaBatteryBLE/blob/main/PRIVACY.md"
