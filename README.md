@@ -17,13 +17,13 @@ app, pair a key with an NFC card tap on the console, and read the car directly.
 
 | Overview | Scanning | Car | History | Settings |
 | --- | --- | --- | --- | --- |
-| ![Overview](docs/images/01-overview.png) | ![Scanning](docs/images/02-scanning.png) | ![Car](docs/images/03-car.png) | ![History](docs/images/04-history.png) | ![Settings](docs/images/05-settings.png) |
+| ![Overview](website/images/01-overview.png) | ![Scanning](website/images/02-scanning.png) | ![Car](website/images/03-car.png) | ![History](website/images/04-history.png) | ![Settings](website/images/05-settings.png) |
 
 Dark mode:
 
 | Overview | Scanning | Car | History | Settings |
 | --- | --- | --- | --- | --- |
-| ![Overview in dark mode](docs/images/01-overview-dark.png) | ![Scanning in dark mode](docs/images/02-scanning-dark.png) | ![Car in dark mode](docs/images/03-car-dark.png) | ![History in dark mode](docs/images/04-history-dark.png) | ![Settings in dark mode](docs/images/05-settings-dark.png) |
+| ![Overview in dark mode](website/images/01-overview-dark.png) | ![Scanning in dark mode](website/images/02-scanning-dark.png) | ![Car in dark mode](website/images/03-car-dark.png) | ![History in dark mode](website/images/04-history-dark.png) | ![Settings in dark mode](website/images/05-settings-dark.png) |
 
 ## Features
 

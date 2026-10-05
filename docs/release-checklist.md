@@ -30,6 +30,7 @@
 - Stable signing: one owner-held keystore signs local builds, preview builds and tagged releases (Gradle reads the gitignored `keystore.properties`; CI reads the `SIGNING_*` repository secrets). Keep the keystore and its password backed up - losing them means no further updates to installed apps.
 - The preview channel ships signed debug APKs on the rolling `preview` tag, rebuilt from `main` on every push.
 - Switching signing keys (or installing a build signed elsewhere, e.g. F-Droid) requires uninstall + reinstall, which also deletes the car pairing key (re-pair with the NFC card).
+- Screenshots live in `website/images/` — one set shared by the README and the landing page; release sheets are captured separately in CI.
 
 ## Store distribution (when signed)
 
