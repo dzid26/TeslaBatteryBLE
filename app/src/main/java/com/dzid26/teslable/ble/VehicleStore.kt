@@ -10,7 +10,6 @@ import org.json.JSONObject
  * slot).
  */
 class VehicleStore(context: Context) {
-
     private val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
     fun load(): List<Vehicle> {
@@ -30,33 +29,34 @@ class VehicleStore(context: Context) {
                     vehicle.vin?.let { put(KEY_VIN, it) }
                     vehicle.keySlot?.let { put(KEY_KEY_SLOT, it) }
                     if (vehicle.lastSeenMillis > 0) put(KEY_LAST_SEEN, vehicle.lastSeenMillis)
-                }
+                },
             )
         }
         prefs.edit().putString(KEY_VEHICLES, array.toString()).apply()
     }
 
-    private fun parse(raw: String): List<Vehicle> = runCatching {
-        val array = JSONArray(raw)
-        buildList {
-            for (index in 0 until array.length()) {
-                val item = array.optJSONObject(index) ?: continue
-                val bleName = item.optString(KEY_BLE_NAME).takeIf { it.isNotEmpty() } ?: continue
-                val address = item.optString(KEY_ADDRESS).takeIf { it.isNotEmpty() } ?: continue
-                add(
-                    Vehicle(
-                        bleName = bleName,
-                        address = address,
-                        gattName = item.optString(KEY_GATT_NAME).takeIf { it.isNotEmpty() },
-                        displayName = item.optString(KEY_DISPLAY_NAME).takeIf { it.isNotEmpty() },
-                        vin = item.optString(KEY_VIN).takeIf { it.isNotEmpty() },
-                        keySlot = item.optInt(KEY_KEY_SLOT, -1).takeIf { it >= 0 },
-                        lastSeenMillis = item.optLong(KEY_LAST_SEEN, 0L),
+    private fun parse(raw: String): List<Vehicle> =
+        runCatching {
+            val array = JSONArray(raw)
+            buildList {
+                for (index in 0 until array.length()) {
+                    val item = array.optJSONObject(index) ?: continue
+                    val bleName = item.optString(KEY_BLE_NAME).takeIf { it.isNotEmpty() } ?: continue
+                    val address = item.optString(KEY_ADDRESS).takeIf { it.isNotEmpty() } ?: continue
+                    add(
+                        Vehicle(
+                            bleName = bleName,
+                            address = address,
+                            gattName = item.optString(KEY_GATT_NAME).takeIf { it.isNotEmpty() },
+                            displayName = item.optString(KEY_DISPLAY_NAME).takeIf { it.isNotEmpty() },
+                            vin = item.optString(KEY_VIN).takeIf { it.isNotEmpty() },
+                            keySlot = item.optInt(KEY_KEY_SLOT, -1).takeIf { it >= 0 },
+                            lastSeenMillis = item.optLong(KEY_LAST_SEEN, 0L),
+                        ),
                     )
-                )
+                }
             }
-        }
-    }.getOrDefault(emptyList())
+        }.getOrDefault(emptyList())
 
     private companion object {
         const val PREFS = "vehicles"

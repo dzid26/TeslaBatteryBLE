@@ -20,7 +20,6 @@ import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
 
 object TeslaCrypto {
-
     const val SHARED_KEY_SIZE = 16
     const val NONCE_SIZE = 12
     const val GCM_TAG_SIZE = 16
@@ -28,9 +27,13 @@ object TeslaCrypto {
 
     private val random = SecureRandom()
 
-    fun sessionKey(privateKeyPkcs8: ByteArray, peerPublicRaw: ByteArray): ByteArray {
-        val privateKey = KeyFactory.getInstance("EC")
-            .generatePrivate(PKCS8EncodedKeySpec(privateKeyPkcs8)) as ECPrivateKey
+    fun sessionKey(
+        privateKeyPkcs8: ByteArray,
+        peerPublicRaw: ByteArray,
+    ): ByteArray {
+        val privateKey =
+            KeyFactory.getInstance("EC")
+                .generatePrivate(PKCS8EncodedKeySpec(privateKeyPkcs8)) as ECPrivateKey
         val agreement = KeyAgreement.getInstance("ECDH")
         agreement.init(privateKey)
         agreement.doPhase(rawToPublicKey(peerPublicRaw), true)
@@ -46,7 +49,10 @@ object TeslaCrypto {
             .generatePublic(ECPublicKeySpec(ECPoint(x, y), p256Parameters())) as ECPublicKey
     }
 
-    fun subkey(sessionKey: ByteArray, label: String): ByteArray {
+    fun subkey(
+        sessionKey: ByteArray,
+        label: String,
+    ): ByteArray {
         val mac = Mac.getInstance("HmacSHA256")
         mac.init(SecretKeySpec(sessionKey, "HmacSHA256"))
         return mac.doFinal(label.toByteArray(Charsets.US_ASCII))
@@ -73,12 +79,13 @@ object TeslaCrypto {
         ciphertext: ByteArray,
         tag: ByteArray,
         associatedData: ByteArray,
-    ): ByteArray? = runCatching {
-        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-        cipher.init(Cipher.DECRYPT_MODE, SecretKeySpec(key, "AES"), GCMParameterSpec(GCM_TAG_BITS, nonce))
-        cipher.updateAAD(associatedData)
-        cipher.doFinal(ciphertext + tag)
-    }.getOrNull()
+    ): ByteArray? =
+        runCatching {
+            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+            cipher.init(Cipher.DECRYPT_MODE, SecretKeySpec(key, "AES"), GCMParameterSpec(GCM_TAG_BITS, nonce))
+            cipher.updateAAD(associatedData)
+            cipher.doFinal(ciphertext + tag)
+        }.getOrNull()
 
     fun randomBytes(size: Int): ByteArray = ByteArray(size).also(random::nextBytes)
 

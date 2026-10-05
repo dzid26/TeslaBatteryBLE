@@ -17,26 +17,30 @@ class TeslaScanner(
     private val adapter = context.getSystemService(BluetoothManager::class.java)?.adapter
     private val found = LinkedHashMap<String, TeslaAdvert>()
 
-    private val callback = object : ScanCallback() {
-
-        @SuppressLint("MissingPermission")
-        override fun onScanResult(callbackType: Int, result: ScanResult) {
-            val name = result.scanRecord?.deviceName ?: result.device.name
-            if (name == null || !TeslaNames.isTeslaBleName(name)) {
-                return
+    private val callback =
+        object : ScanCallback() {
+            @SuppressLint("MissingPermission")
+            override fun onScanResult(
+                callbackType: Int,
+                result: ScanResult,
+            ) {
+                val name = result.scanRecord?.deviceName ?: result.device.name
+                if (name == null || !TeslaNames.isTeslaBleName(name)) {
+                    return
+                }
+                found[result.device.address] =
+                    TeslaAdvert(
+                        name = name,
+                        address = result.device.address,
+                        rssi = result.rssi,
+                    )
+                onDevices(found.values.sortedByDescending { it.rssi })
             }
-            found[result.device.address] = TeslaAdvert(
-                name = name,
-                address = result.device.address,
-                rssi = result.rssi,
-            )
-            onDevices(found.values.sortedByDescending { it.rssi })
-        }
 
-        override fun onScanFailed(errorCode: Int) {
-            onLog("Scan failed with error $errorCode")
+            override fun onScanFailed(errorCode: Int) {
+                onLog("Scan failed with error $errorCode")
+            }
         }
-    }
 
     @SuppressLint("MissingPermission")
     fun start() {
@@ -52,9 +56,10 @@ class TeslaScanner(
         }
         found.clear()
         onDevices(emptyList())
-        val settings = ScanSettings.Builder()
-            .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
-            .build()
+        val settings =
+            ScanSettings.Builder()
+                .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+                .build()
         scanner.startScan(null, settings, callback)
         onLog("Scanning for Tesla advertisements (name pattern S<hex>C)")
     }

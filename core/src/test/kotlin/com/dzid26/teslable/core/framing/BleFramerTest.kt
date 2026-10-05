@@ -7,7 +7,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class BleFramerTest {
-
     @Test
     fun `encode prepends big endian length and chunks`() {
         val payload = ByteArray(300) { it.toByte() }

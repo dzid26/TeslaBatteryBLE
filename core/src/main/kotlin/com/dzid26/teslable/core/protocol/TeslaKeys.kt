@@ -16,15 +16,15 @@ data class TeslaKeyPair(
 }
 
 object TeslaKeys {
-
     fun generate(): TeslaKeyPair {
         val generator = KeyPairGenerator.getInstance("EC")
         generator.initialize(ECGenParameterSpec("secp256r1"))
         val keyPair = generator.generateKeyPair()
         val publicKey = keyPair.public as ECPublicKey
-        val raw = byteArrayOf(0x04) +
-            publicKey.w.affineX.toFixed(FIELD_SIZE) +
-            publicKey.w.affineY.toFixed(FIELD_SIZE)
+        val raw =
+            byteArrayOf(0x04) +
+                publicKey.w.affineX.toFixed(FIELD_SIZE) +
+                publicKey.w.affineY.toFixed(FIELD_SIZE)
         return TeslaKeyPair(
             privateKeyPkcs8 = keyPair.private.encoded,
             publicKeyRaw = raw,

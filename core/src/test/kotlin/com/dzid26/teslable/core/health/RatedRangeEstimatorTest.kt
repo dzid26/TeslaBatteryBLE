@@ -6,7 +6,6 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class RatedRangeEstimatorTest {
-
     @Test
     fun `scales partial SOC to full range`() {
         val result = RatedRangeEstimator.estimate(216.0, 80.0, 300.0)!!

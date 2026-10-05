@@ -13,13 +13,12 @@ import com.tesla.generated.vcsec.UnsignedMessage
 import okio.ByteString.Companion.toByteString
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TeslaPairingTest {
-
     @Test
     fun `generates a p256 key pair with an uncompressed public key`() {
         val keyPair = TeslaKeys.generate()
@@ -42,9 +41,10 @@ class TeslaPairingTest {
     @Test
     fun `add key request is a present-key envelope with the public key and role`() {
         val keyPair = TeslaKeys.generate()
-        val envelope = ToVCSECMessage.ADAPTER.decode(
-            TeslaPairing.buildAddKeyRequest(keyPair.publicKeyRaw)
-        )
+        val envelope =
+            ToVCSECMessage.ADAPTER.decode(
+                TeslaPairing.buildAddKeyRequest(keyPair.publicKeyRaw),
+            )
         val signedMessage = envelope.signedMessage
         assertNotNull(signedMessage)
         assertEquals(SignatureType.SIGNATURE_TYPE_PRESENT_KEY, signedMessage!!.signatureType)
@@ -81,9 +81,10 @@ class TeslaPairingTest {
 
     @Test
     fun `parses wrapped add key responses`() {
-        val payload = FromVCSECMessage(
-            commandStatus = CommandStatus(operationStatus = OperationStatus_E.OPERATIONSTATUS_WAIT),
-        ).encode()
+        val payload =
+            FromVCSECMessage(
+                commandStatus = CommandStatus(operationStatus = OperationStatus_E.OPERATIONSTATUS_WAIT),
+            ).encode()
         val wrapped = RoutableMessage(protobuf_message_as_bytes = payload.toByteString()).encode()
         assertEquals(TeslaPairing.Result.WAITING_FOR_CARD, TeslaPairing.parseAddKeyResponse(wrapped))
     }

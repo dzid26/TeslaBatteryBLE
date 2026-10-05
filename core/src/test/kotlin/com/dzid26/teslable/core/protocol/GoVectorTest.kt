@@ -7,7 +7,6 @@ import org.junit.Assert.assertNotNull
 import org.junit.Test
 
 class GoVectorTest {
-
     @Test
     fun `verifies the session info tag produced by the go runtime`() {
         assertNotNull(createSession())
@@ -15,15 +14,16 @@ class GoVectorTest {
 
     @Test
     fun `rejects the go tag with the wrong vin`() {
-        val session = TeslaSession.import(
-            privateKeyPkcs8 = CLIENT_PRIVATE_PKCS8.hex(),
-            publicKeyRaw = CLIENT_PUBLIC.hex(),
-            vin = "WRONGVIN000000000",
-            challenge = CHALLENGE.hex(),
-            encodedInfo = SESSION_INFO.hex(),
-            tag = SESSION_INFO_TAG.hex(),
-            clock = { 0 },
-        )
+        val session =
+            TeslaSession.import(
+                privateKeyPkcs8 = CLIENT_PRIVATE_PKCS8.hex(),
+                publicKeyRaw = CLIENT_PUBLIC.hex(),
+                vin = "WRONGVIN000000000",
+                challenge = CHALLENGE.hex(),
+                encodedInfo = SESSION_INFO.hex(),
+                tag = SESSION_INFO_TAG.hex(),
+                clock = { 0 },
+            )
         org.junit.Assert.assertEquals(null, session)
     }
 
@@ -35,18 +35,18 @@ class GoVectorTest {
         assertArrayEquals(RESPONSE_PLAINTEXT.hex(), plaintext)
     }
 
-    private fun createSession(): TeslaSession? = TeslaSession.import(
-        privateKeyPkcs8 = CLIENT_PRIVATE_PKCS8.hex(),
-        publicKeyRaw = CLIENT_PUBLIC.hex(),
-        vin = VIN,
-        challenge = CHALLENGE.hex(),
-        encodedInfo = SESSION_INFO.hex(),
-        tag = SESSION_INFO_TAG.hex(),
-        clock = { 0 },
-    )
+    private fun createSession(): TeslaSession? =
+        TeslaSession.import(
+            privateKeyPkcs8 = CLIENT_PRIVATE_PKCS8.hex(),
+            publicKeyRaw = CLIENT_PUBLIC.hex(),
+            vin = VIN,
+            challenge = CHALLENGE.hex(),
+            encodedInfo = SESSION_INFO.hex(),
+            tag = SESSION_INFO_TAG.hex(),
+            clock = { 0 },
+        )
 
-    private fun String.hex(): ByteArray =
-        chunked(2).map { it.toInt(16).toByte() }.toByteArray()
+    private fun String.hex(): ByteArray = chunked(2).map { it.toInt(16).toByte() }.toByteArray()
 
     private companion object {
         const val VIN = "5YJ3E1EA7KF000001"

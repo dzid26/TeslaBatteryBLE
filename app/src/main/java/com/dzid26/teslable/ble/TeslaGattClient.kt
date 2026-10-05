@@ -21,7 +21,6 @@ class TeslaGattClient(
     private val context: Context,
     private val listener: TeslaTransport.Listener,
 ) : TeslaTransport {
-
     private var gatt: BluetoothGatt? = null
     private var txCharacteristic: BluetoothGattCharacteristic? = null
     private var rxCharacteristic: BluetoothGattCharacteristic? = null
@@ -33,18 +32,20 @@ class TeslaGattClient(
     private val handler = Handler(Looper.getMainLooper())
     private val writeQueue = ArrayDeque<ByteArray>()
     private var writeInProgress = false
-    private val writeTimeout = Runnable {
-        writeInProgress = false
-        processWriteQueue()
-    }
+    private val writeTimeout =
+        Runnable {
+            writeInProgress = false
+            processWriteQueue()
+        }
 
     @SuppressLint("MissingPermission")
     override fun connect(address: String) {
         close()
-        val device = context
-            .getSystemService(BluetoothManager::class.java)
-            ?.adapter
-            ?.getRemoteDevice(address)
+        val device =
+            context
+                .getSystemService(BluetoothManager::class.java)
+                ?.adapter
+                ?.getRemoteDevice(address)
         if (device == null) {
             listener.onLog("Could not resolve $address")
             listener.onPhase(ConnectionPhase.FAILED)
@@ -95,20 +96,21 @@ class TeslaGattClient(
         val chunk = writeQueue.removeFirstOrNull() ?: return
 
         writeInProgress = true
-        val started = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            gatt.writeCharacteristic(
-                characteristic,
-                chunk,
-                BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE,
-            ) == BluetoothStatusCodes.SUCCESS
-        } else {
-            @Suppress("DEPRECATION")
-            characteristic.writeType = BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
-            @Suppress("DEPRECATION")
-            characteristic.value = chunk
-            @Suppress("DEPRECATION")
-            gatt.writeCharacteristic(characteristic)
-        }
+        val started =
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                gatt.writeCharacteristic(
+                    characteristic,
+                    chunk,
+                    BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE,
+                ) == BluetoothStatusCodes.SUCCESS
+            } else {
+                @Suppress("DEPRECATION")
+                characteristic.writeType = BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
+                @Suppress("DEPRECATION")
+                characteristic.value = chunk
+                @Suppress("DEPRECATION")
+                gatt.writeCharacteristic(characteristic)
+            }
 
         if (!started) {
             writeInProgress = false
@@ -120,170 +122,192 @@ class TeslaGattClient(
         handler.postDelayed(writeTimeout, WRITE_TIMEOUT_MS)
     }
 
-    private val callback = object : BluetoothGattCallback() {
-
-        @SuppressLint("MissingPermission")
-        override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
-            when {
-                status != BluetoothGatt.GATT_SUCCESS -> {
-                    listener.onLog("GATT error status $status")
-                    listener.onPhase(ConnectionPhase.FAILED)
-                }
-
-                newState == BluetoothProfile.STATE_CONNECTED -> {
-                    listener.onLog("Connected, discovering services")
-                    listener.onPhase(ConnectionPhase.CONNECTED)
-                    if (!gatt.discoverServices()) {
-                        listener.onLog("discoverServices() returned false")
+    private val callback =
+        object : BluetoothGattCallback() {
+            @SuppressLint("MissingPermission")
+            override fun onConnectionStateChange(
+                gatt: BluetoothGatt,
+                status: Int,
+                newState: Int,
+            ) {
+                when {
+                    status != BluetoothGatt.GATT_SUCCESS -> {
+                        listener.onLog("GATT error status $status")
                         listener.onPhase(ConnectionPhase.FAILED)
+                    }
+
+                    newState == BluetoothProfile.STATE_CONNECTED -> {
+                        listener.onLog("Connected, discovering services")
+                        listener.onPhase(ConnectionPhase.CONNECTED)
+                        if (!gatt.discoverServices()) {
+                            listener.onLog("discoverServices() returned false")
+                            listener.onPhase(ConnectionPhase.FAILED)
+                        }
+                    }
+
+                    newState == BluetoothProfile.STATE_DISCONNECTED -> {
+                        listener.onLog("Disconnected")
+                        listener.onPhase(ConnectionPhase.DISCONNECTED)
+                    }
+                }
+            }
+
+            @SuppressLint("MissingPermission")
+            override fun onServicesDiscovered(
+                gatt: BluetoothGatt,
+                status: Int,
+            ) {
+                if (status != BluetoothGatt.GATT_SUCCESS) {
+                    listener.onLog("Service discovery failed with status $status")
+                    listener.onPhase(ConnectionPhase.FAILED)
+                    return
+                }
+                listener.onPhase(ConnectionPhase.DISCOVERING)
+                listener.onServices(
+                    gatt.services.map { service ->
+                        GattServiceInfo(
+                            uuid = service.uuid,
+                            characteristicUuids = service.characteristics.map { it.uuid },
+                        )
+                    },
+                )
+
+                val service = gatt.getService(TeslaGatt.SERVICE_UUID)
+                if (service == null) {
+                    listener.onLog("Tesla GATT service not found")
+                    descriptorWriteDone = true
+                } else {
+                    txCharacteristic = service.getCharacteristic(TeslaGatt.TO_VEHICLE_UUID)
+                    rxCharacteristic = service.getCharacteristic(TeslaGatt.FROM_VEHICLE_UUID)
+                    listener.onLog(
+                        "TX characteristic: ${txCharacteristic != null}, " +
+                            "RX characteristic: ${rxCharacteristic != null}",
+                    )
+                    val rx = rxCharacteristic
+                    if (rx == null) {
+                        descriptorWriteDone = true
+                    } else {
+                        subscribe(gatt, rx)
                     }
                 }
 
-                newState == BluetoothProfile.STATE_DISCONNECTED -> {
-                    listener.onLog("Disconnected")
-                    listener.onPhase(ConnectionPhase.DISCONNECTED)
+                if (!gatt.requestMtu(MTU_REQUEST)) {
+                    listener.onLog("requestMtu() returned false")
+                    mtuDone = true
                 }
-            }
-        }
-
-        @SuppressLint("MissingPermission")
-        override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
-            if (status != BluetoothGatt.GATT_SUCCESS) {
-                listener.onLog("Service discovery failed with status $status")
-                listener.onPhase(ConnectionPhase.FAILED)
-                return
-            }
-            listener.onPhase(ConnectionPhase.DISCOVERING)
-            listener.onServices(
-                gatt.services.map { service ->
-                    GattServiceInfo(
-                        uuid = service.uuid,
-                        characteristicUuids = service.characteristics.map { it.uuid },
-                    )
-                }
-            )
-
-            val service = gatt.getService(TeslaGatt.SERVICE_UUID)
-            if (service == null) {
-                listener.onLog("Tesla GATT service not found")
-                descriptorWriteDone = true
-            } else {
-                txCharacteristic = service.getCharacteristic(TeslaGatt.TO_VEHICLE_UUID)
-                rxCharacteristic = service.getCharacteristic(TeslaGatt.FROM_VEHICLE_UUID)
-                listener.onLog(
-                    "TX characteristic: ${txCharacteristic != null}, " +
-                        "RX characteristic: ${rxCharacteristic != null}"
-                )
-                val rx = rxCharacteristic
-                if (rx == null) {
-                    descriptorWriteDone = true
-                } else {
-                    subscribe(gatt, rx)
-                }
-            }
-
-            if (!gatt.requestMtu(MTU_REQUEST)) {
-                listener.onLog("requestMtu() returned false")
-                mtuDone = true
-            }
-            maybeReadDeviceName(gatt)
-        }
-
-        override fun onMtuChanged(gatt: BluetoothGatt, mtu: Int, status: Int) {
-            if (status == BluetoothGatt.GATT_SUCCESS) {
-                negotiatedMtu = mtu
-                listener.onMtu(mtu)
-            } else {
-                listener.onLog("MTU negotiation failed with status $status")
-            }
-            mtuDone = true
-            maybeReadDeviceName(gatt)
-        }
-
-        override fun onDescriptorWrite(
-            gatt: BluetoothGatt,
-            descriptor: BluetoothGattDescriptor,
-            status: Int,
-        ) {
-            if (descriptor.uuid == TeslaGatt.CLIENT_CHARACTERISTIC_CONFIG_UUID) {
-                listener.onLog(
-                    if (status == BluetoothGatt.GATT_SUCCESS) "Notifications enabled"
-                    else "Notification setup failed with status $status"
-                )
-                descriptorWriteDone = true
                 maybeReadDeviceName(gatt)
             }
-        }
 
-        @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
-        override fun onCharacteristicRead(
-            gatt: BluetoothGatt,
-            characteristic: BluetoothGattCharacteristic,
-            status: Int,
-        ) {
-            if (status == BluetoothGatt.GATT_SUCCESS) {
-                handleDeviceName(characteristic.value)
+            override fun onMtuChanged(
+                gatt: BluetoothGatt,
+                mtu: Int,
+                status: Int,
+            ) {
+                if (status == BluetoothGatt.GATT_SUCCESS) {
+                    negotiatedMtu = mtu
+                    listener.onMtu(mtu)
+                } else {
+                    listener.onLog("MTU negotiation failed with status $status")
+                }
+                mtuDone = true
+                maybeReadDeviceName(gatt)
+            }
+
+            override fun onDescriptorWrite(
+                gatt: BluetoothGatt,
+                descriptor: BluetoothGattDescriptor,
+                status: Int,
+            ) {
+                if (descriptor.uuid == TeslaGatt.CLIENT_CHARACTERISTIC_CONFIG_UUID) {
+                    listener.onLog(
+                        if (status == BluetoothGatt.GATT_SUCCESS) {
+                            "Notifications enabled"
+                        } else {
+                            "Notification setup failed with status $status"
+                        },
+                    )
+                    descriptorWriteDone = true
+                    maybeReadDeviceName(gatt)
+                }
+            }
+
+            @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
+            override fun onCharacteristicRead(
+                gatt: BluetoothGatt,
+                characteristic: BluetoothGattCharacteristic,
+                status: Int,
+            ) {
+                if (status == BluetoothGatt.GATT_SUCCESS) {
+                    handleDeviceName(characteristic.value)
+                }
+            }
+
+            override fun onCharacteristicRead(
+                gatt: BluetoothGatt,
+                characteristic: BluetoothGattCharacteristic,
+                value: ByteArray,
+                status: Int,
+            ) {
+                if (status == BluetoothGatt.GATT_SUCCESS) {
+                    handleDeviceName(value)
+                }
+            }
+
+            @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
+            override fun onCharacteristicChanged(
+                gatt: BluetoothGatt,
+                characteristic: BluetoothGattCharacteristic,
+            ) {
+                handleNotification(characteristic.value)
+            }
+
+            override fun onCharacteristicChanged(
+                gatt: BluetoothGatt,
+                characteristic: BluetoothGattCharacteristic,
+                value: ByteArray,
+            ) {
+                handleNotification(value)
+            }
+
+            override fun onCharacteristicWrite(
+                gatt: BluetoothGatt,
+                characteristic: BluetoothGattCharacteristic,
+                status: Int,
+            ) {
+                if (characteristic.uuid != TeslaGatt.TO_VEHICLE_UUID) return
+                if (status != BluetoothGatt.GATT_SUCCESS) {
+                    listener.onLog("write failed with status $status")
+                }
+                handler.removeCallbacks(writeTimeout)
+                writeInProgress = false
+                processWriteQueue()
+            }
+
+            override fun onReadRemoteRssi(
+                gatt: BluetoothGatt,
+                rssi: Int,
+                status: Int,
+            ) {
+                if (status == BluetoothGatt.GATT_SUCCESS) {
+                    listener.onRssi(rssi)
+                }
             }
         }
-
-        override fun onCharacteristicRead(
-            gatt: BluetoothGatt,
-            characteristic: BluetoothGattCharacteristic,
-            value: ByteArray,
-            status: Int,
-        ) {
-            if (status == BluetoothGatt.GATT_SUCCESS) {
-                handleDeviceName(value)
-            }
-        }
-
-        @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
-        override fun onCharacteristicChanged(
-            gatt: BluetoothGatt,
-            characteristic: BluetoothGattCharacteristic,
-        ) {
-            handleNotification(characteristic.value)
-        }
-
-        override fun onCharacteristicChanged(
-            gatt: BluetoothGatt,
-            characteristic: BluetoothGattCharacteristic,
-            value: ByteArray,
-        ) {
-            handleNotification(value)
-        }
-
-        override fun onCharacteristicWrite(
-            gatt: BluetoothGatt,
-            characteristic: BluetoothGattCharacteristic,
-            status: Int,
-        ) {
-            if (characteristic.uuid != TeslaGatt.TO_VEHICLE_UUID) return
-            if (status != BluetoothGatt.GATT_SUCCESS) {
-                listener.onLog("write failed with status $status")
-            }
-            handler.removeCallbacks(writeTimeout)
-            writeInProgress = false
-            processWriteQueue()
-        }
-
-        override fun onReadRemoteRssi(gatt: BluetoothGatt, rssi: Int, status: Int) {
-            if (status == BluetoothGatt.GATT_SUCCESS) {
-                listener.onRssi(rssi)
-            }
-        }
-    }
 
     @SuppressLint("MissingPermission")
-    private fun subscribe(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
+    private fun subscribe(
+        gatt: BluetoothGatt,
+        characteristic: BluetoothGattCharacteristic,
+    ) {
         if (!gatt.setCharacteristicNotification(characteristic, true)) {
             listener.onLog("setCharacteristicNotification() failed")
             descriptorWriteDone = true
             maybeReadDeviceName(gatt)
             return
         }
-        val descriptor = characteristic
-            .getDescriptor(TeslaGatt.CLIENT_CHARACTERISTIC_CONFIG_UUID)
+        val descriptor =
+            characteristic
+                .getDescriptor(TeslaGatt.CLIENT_CHARACTERISTIC_CONFIG_UUID)
         if (descriptor == null) {
             listener.onLog("CCCD descriptor missing")
             descriptorWriteDone = true
@@ -291,14 +315,15 @@ class TeslaGattClient(
             return
         }
         val value = BluetoothGattDescriptor.ENABLE_INDICATION_VALUE
-        val started = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            gatt.writeDescriptor(descriptor, value) == BluetoothStatusCodes.SUCCESS
-        } else {
-            @Suppress("DEPRECATION")
-            descriptor.value = value
-            @Suppress("DEPRECATION")
-            gatt.writeDescriptor(descriptor)
-        }
+        val started =
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                gatt.writeDescriptor(descriptor, value) == BluetoothStatusCodes.SUCCESS
+            } else {
+                @Suppress("DEPRECATION")
+                descriptor.value = value
+                @Suppress("DEPRECATION")
+                gatt.writeDescriptor(descriptor)
+            }
         if (!started) {
             listener.onLog("writeDescriptor() failed")
             descriptorWriteDone = true
@@ -315,9 +340,10 @@ class TeslaGattClient(
 
     @SuppressLint("MissingPermission")
     private fun readGattDeviceName(gatt: BluetoothGatt) {
-        val characteristic = gatt
-            .getService(GENERIC_ACCESS_SERVICE)
-            ?.getCharacteristic(DEVICE_NAME_CHARACTERISTIC)
+        val characteristic =
+            gatt
+                .getService(GENERIC_ACCESS_SERVICE)
+                ?.getCharacteristic(DEVICE_NAME_CHARACTERISTIC)
         if (characteristic == null) {
             listener.onLog("Device name characteristic not exposed")
             listener.onPhase(ConnectionPhase.READY)

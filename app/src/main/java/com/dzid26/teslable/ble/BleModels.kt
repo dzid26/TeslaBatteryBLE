@@ -77,9 +77,10 @@ data class LogEntry(
 
 /** The live connection for the selected car, if it has one. */
 fun BleUiState.selectedConnection(): TeslaConnection? {
-    val address = vehicles.firstOrNull { it.bleName == selectedBleName }?.address
-        ?: devices.firstOrNull { it.name == selectedBleName }?.address
-        ?: return null
+    val address =
+        vehicles.firstOrNull { it.bleName == selectedBleName }?.address
+            ?: devices.firstOrNull { it.name == selectedBleName }?.address
+            ?: return null
     return connections[address]
 }
 
@@ -102,12 +103,13 @@ fun connectionDisplay(
     showHints: Boolean = false,
     vehicle: Vehicle? = null,
 ): ConnectionDisplay {
-    val title = vehicle?.displayName?.takeIf { it.isNotBlank() }
-        ?: connection?.gattDeviceName
-        ?: vehicle?.gattName
-        ?: connection?.name
-        ?: advert?.name
-        ?: "Tesla"
+    val title =
+        vehicle?.displayName?.takeIf { it.isNotBlank() }
+            ?: connection?.gattDeviceName
+            ?: vehicle?.gattName
+            ?: connection?.name
+            ?: advert?.name
+            ?: "Tesla"
     return ConnectionDisplay(
         title = title,
         stateText = connectionStateText(connection, showHints),
@@ -119,53 +121,60 @@ fun connectionDisplay(
  * The four connection states: disconnected, connected while asleep, connected
  * and reading, or connected with a battery percentage.
  */
-private fun connectionStateText(connection: TeslaConnection?, showHints: Boolean): String = when {
-    connection == null -> "Disconnected"
+private fun connectionStateText(
+    connection: TeslaConnection?,
+    showHints: Boolean,
+): String =
+    when {
+        connection == null -> "Disconnected"
 
-    connection.phase == ConnectionPhase.READY && connection.status?.asleep == true ->
-        "Connected \uD83D\uDCA4"
+        connection.phase == ConnectionPhase.READY && connection.status?.asleep == true ->
+            "Connected \uD83D\uDCA4"
 
-    connection.phase == ConnectionPhase.READY && connection.status?.asleep == false ->
-        connection.charge?.batteryLevel?.let { "Connected · $it%" } ?: "Connected (reading)"
+        connection.phase == ConnectionPhase.READY && connection.status?.asleep == false ->
+            connection.charge?.batteryLevel?.let { "Connected · $it%" } ?: "Connected (reading)"
 
-    connection.phase == ConnectionPhase.READY -> "Connected (reading)"
+        connection.phase == ConnectionPhase.READY -> "Connected (reading)"
 
-    connection.phase == ConnectionPhase.FAILED ->
-        if (showHints) "Disconnected · tap to retry" else "Disconnected"
+        connection.phase == ConnectionPhase.FAILED ->
+            if (showHints) "Disconnected · tap to retry" else "Disconnected"
 
-    connection.phase == ConnectionPhase.DISCONNECTED ->
-        if (showHints) "Disconnected · tap to reconnect" else "Disconnected"
+        connection.phase == ConnectionPhase.DISCONNECTED ->
+            if (showHints) "Disconnected · tap to reconnect" else "Disconnected"
 
-    connection.phase == ConnectionPhase.IDLE -> "Disconnected"
+        connection.phase == ConnectionPhase.IDLE -> "Disconnected"
 
-    else -> "Connecting..."
-}
+        else -> "Connecting..."
+    }
 
 /** "Locked · Asleep · User away" instead of raw booleans. */
-fun vehicleStatusText(status: TeslaVcsec.Status): String = listOf(
-    if (status.locked) "Locked" else "Unlocked",
-    if (status.asleep) "Asleep" else "Awake",
-    if (status.userPresent) "User present" else "User away",
-).joinToString(" · ")
+fun vehicleStatusText(status: TeslaVcsec.Status): String =
+    listOf(
+        if (status.locked) "Locked" else "Unlocked",
+        if (status.asleep) "Asleep" else "Awake",
+        if (status.userPresent) "User present" else "User away",
+    ).joinToString(" · ")
 
 /** Friendly names for the per-domain secure sessions. */
-fun sessionNames(sessions: List<String>): String = sessions.joinToString(", ") { session ->
-    when {
-        session.contains("VEHICLE_SECURITY") -> "Security"
-        session.contains("INFOTAINMENT") -> "Infotainment"
-        session.contains("BROADCAST") -> "Broadcast"
-        else -> session
+fun sessionNames(sessions: List<String>): String =
+    sessions.joinToString(", ") { session ->
+        when {
+            session.contains("VEHICLE_SECURITY") -> "Security"
+            session.contains("INFOTAINMENT") -> "Infotainment"
+            session.contains("BROADCAST") -> "Broadcast"
+            else -> session
+        }
     }
-}
 
 /** Friendly charging state for the charge details line. */
-fun chargingStateText(state: String): String = when (state) {
-    "Charging" -> "Charging"
-    "Complete" -> "Charging complete"
-    "Stopped" -> "Charging stopped"
-    "Disconnected" -> "Unplugged"
-    "NoPower" -> "No power"
-    "Starting" -> "Starting"
-    "Calibrating" -> "Calibrating"
-    else -> state
-}
+fun chargingStateText(state: String): String =
+    when (state) {
+        "Charging" -> "Charging"
+        "Complete" -> "Charging complete"
+        "Stopped" -> "Charging stopped"
+        "Disconnected" -> "Unplugged"
+        "NoPower" -> "No power"
+        "Starting" -> "Starting"
+        "Calibrating" -> "Calibrating"
+        else -> state
+    }

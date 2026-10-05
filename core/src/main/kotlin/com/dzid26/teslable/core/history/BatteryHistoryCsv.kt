@@ -7,14 +7,14 @@ package com.dzid26.teslable.core.history
  * `vehicleId,timestampMillis,percent,chargeLimit,chargingState`.
  */
 object BatteryHistoryCsv {
-
-    fun encode(sample: BatterySample): String = listOf(
-        sample.vehicleId,
-        sample.timestampMillis.toString(),
-        sample.percent.toString(),
-        sample.chargeLimit?.toString() ?: "",
-        sample.chargingState?.replace(',', ' ') ?: "",
-    ).joinToString(",")
+    fun encode(sample: BatterySample): String =
+        listOf(
+            sample.vehicleId,
+            sample.timestampMillis.toString(),
+            sample.percent.toString(),
+            sample.chargeLimit?.toString() ?: "",
+            sample.chargingState?.replace(',', ' ') ?: "",
+        ).joinToString(",")
 
     /** Parses one data line; returns null for the header or a malformed row. */
     fun parse(line: String): BatterySample? {

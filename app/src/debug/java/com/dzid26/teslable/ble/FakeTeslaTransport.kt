@@ -16,36 +16,39 @@ class FakeTeslaTransport(
     context: Context,
     private val listener: TeslaTransport.Listener,
 ) : TeslaTransport {
-
     private val handler = Handler(Looper.getMainLooper())
-    private val vin: String = context
-        .getSharedPreferences("teslable", Context.MODE_PRIVATE)
-        .getString("vin", DemoMode.DEMO_VIN)
-        ?.takeIf { it.length == 17 }
-        ?: DemoMode.DEMO_VIN
-    private val protocol = FakeCarProtocol(vin).apply {
-        setEnrolledKey(PairingKeyStore(context).load()?.publicKeyRaw)
-    }
+    private val vin: String =
+        context
+            .getSharedPreferences("teslable", Context.MODE_PRIVATE)
+            .getString("vin", DemoMode.DEMO_VIN)
+            ?.takeIf { it.length == 17 }
+            ?: DemoMode.DEMO_VIN
+    private val protocol =
+        FakeCarProtocol(vin).apply {
+            setEnrolledKey(PairingKeyStore(context).load()?.publicKeyRaw)
+        }
 
     private var connected = false
     private var rssi = -70
 
-    private val rssiTick = object : Runnable {
-        override fun run() {
-            if (!connected) return
-            rssi = (rssi + Random.nextInt(-2, 3)).coerceIn(-95, -45)
-            listener.onRssi(rssi)
-            handler.postDelayed(this, RSSI_MS)
+    private val rssiTick =
+        object : Runnable {
+            override fun run() {
+                if (!connected) return
+                rssi = (rssi + Random.nextInt(-2, 3)).coerceIn(-95, -45)
+                listener.onRssi(rssi)
+                handler.postDelayed(this, RSSI_MS)
+            }
         }
-    }
 
-    private val dischargeTick = object : Runnable {
-        override fun run() {
-            if (!connected) return
-            protocol.dischargeOnePercent()
-            handler.postDelayed(this, DISCHARGE_MS)
+    private val dischargeTick =
+        object : Runnable {
+            override fun run() {
+                if (!connected) return
+                protocol.dischargeOnePercent()
+                handler.postDelayed(this, DISCHARGE_MS)
+            }
         }
-    }
 
     override fun connect(address: String) {
         close()

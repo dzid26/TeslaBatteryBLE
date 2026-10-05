@@ -117,9 +117,10 @@ fun MainScreen(
     val bleName = viewingBleName
     val vehicle = bleName?.let { name -> state.vehicles.firstOrNull { it.bleName == name } }
     val advert = bleName?.let { name -> state.devices.firstOrNull { it.name == name } }
-    val address = vehicle?.address
-        ?: advert?.address
-        ?: bleName?.let { name -> state.connections.values.firstOrNull { it.name == name }?.address }
+    val address =
+        vehicle?.address
+            ?: advert?.address
+            ?: bleName?.let { name -> state.connections.values.firstOrNull { it.name == name }?.address }
 
     if (bleName != null && address != null) {
         CarScreen(
@@ -169,29 +170,31 @@ private data class VehicleRow(
 )
 
 private fun vehicleRows(state: BleUiState): List<VehicleRow> {
-    val known = state.vehicles.map { vehicle ->
-        VehicleRow(
-            bleName = vehicle.bleName,
-            address = vehicle.address,
-            title = vehicle.title,
-            vehicle = vehicle,
-            connection = state.connections[vehicle.address],
-            advert = state.devices.firstOrNull { it.name == vehicle.bleName },
-        )
-    }
-    val discovered = state.devices
-        .filter { device -> state.vehicles.none { it.bleName == device.name } }
-        .sortedByDescending { it.rssi ?: Int.MIN_VALUE }
-        .map { device ->
+    val known =
+        state.vehicles.map { vehicle ->
             VehicleRow(
-                bleName = device.name,
-                address = device.address,
-                title = state.connections[device.address]?.gattDeviceName ?: device.name,
-                vehicle = null,
-                connection = state.connections[device.address],
-                advert = device,
+                bleName = vehicle.bleName,
+                address = vehicle.address,
+                title = vehicle.title,
+                vehicle = vehicle,
+                connection = state.connections[vehicle.address],
+                advert = state.devices.firstOrNull { it.name == vehicle.bleName },
             )
         }
+    val discovered =
+        state.devices
+            .filter { device -> state.vehicles.none { it.bleName == device.name } }
+            .sortedByDescending { it.rssi ?: Int.MIN_VALUE }
+            .map { device ->
+                VehicleRow(
+                    bleName = device.name,
+                    address = device.address,
+                    title = state.connections[device.address]?.gattDeviceName ?: device.name,
+                    vehicle = null,
+                    connection = state.connections[device.address],
+                    advert = device,
+                )
+            }
     return known + discovered
 }
 
@@ -236,10 +239,11 @@ private fun ConnectionsScreen(
         },
     ) { innerPadding ->
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .padding(horizontal = 16.dp),
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .padding(horizontal = 16.dp),
         ) {
             if (!permissionsGranted) {
                 Button(onClick = onRequestPermissions) {
@@ -262,18 +266,19 @@ private fun ConnectionsScreen(
             Spacer(Modifier.height(8.dp))
 
             val connectedCount = state.connections.values.count { it.phase == ConnectionPhase.READY }
-            val statusText = when {
-                state.scanning ->
-                    "Scanning: ${state.devices.size} Tesla(s), $connectedCount connected"
+            val statusText =
+                when {
+                    state.scanning ->
+                        "Scanning: ${state.devices.size} Tesla(s), $connectedCount connected"
 
-                state.discovering ->
-                    "Looking for your cars..."
+                    state.discovering ->
+                        "Looking for your cars..."
 
-                rows.isNotEmpty() ->
-                    "${rows.size} car(s), $connectedCount connected"
+                    rows.isNotEmpty() ->
+                        "${rows.size} car(s), $connectedCount connected"
 
-                else -> "No scan yet"
-            }
+                    else -> "No scan yet"
+                }
             Text(
                 text = statusText,
                 style = MaterialTheme.typography.bodyMedium,
@@ -328,14 +333,16 @@ private fun VehicleCard(
 ) {
     val display = connectionDisplay(row.connection, row.advert, showHints = true, vehicle = row.vehicle)
     val level = row.connection?.charge?.batteryLevel
-    val paired = row.connection?.keySlot != null ||
-        row.connection?.sessions?.isNotEmpty() == true ||
-        row.connection?.pairing == PairingPhase.OK
+    val paired =
+        row.connection?.keySlot != null ||
+            row.connection?.sessions?.isNotEmpty() == true ||
+            row.connection?.pairing == PairingPhase.OK
 
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onOpen),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onOpen),
     ) {
         Row(
             modifier = Modifier.padding(12.dp),
@@ -391,11 +398,12 @@ private fun CarScreen(
 ) {
     BackHandler { onBack() }
     val connection = state.connections[address]
-    val vehicleHistory = if (vehicle == null) {
-        emptyList()
-    } else {
-        history.filter { it.vehicleId == vehicle.bleName }
-    }
+    val vehicleHistory =
+        if (vehicle == null) {
+            emptyList()
+        } else {
+            history.filter { it.vehicleId == vehicle.bleName }
+        }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -422,11 +430,12 @@ private fun CarScreen(
         },
     ) { innerPadding ->
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(innerPadding)
-                .padding(16.dp),
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(innerPadding)
+                    .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             HeroCard(connection, advert, vehicle)
@@ -484,10 +493,11 @@ private fun HeroCard(
                 Spacer(Modifier.height(8.dp))
                 LinearProgressIndicator(
                     progress = { level / 100f },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(8.dp)
-                        .clip(RoundedCornerShape(4.dp)),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .height(8.dp)
+                            .clip(RoundedCornerShape(4.dp)),
                 )
             } else {
                 Text(
@@ -500,10 +510,11 @@ private fun HeroCard(
                 Text(vehicleStatusText(status), style = MaterialTheme.typography.bodySmall)
             }
             connection?.charge?.let { charge ->
-                val details = buildList {
-                    charge.chargeLimit?.let { add("Charge limit $it%") }
-                    charge.chargingState?.let { add(chargingStateText(it)) }
-                }
+                val details =
+                    buildList {
+                        charge.chargeLimit?.let { add("Charge limit $it%") }
+                        charge.chargingState?.let { add(chargingStateText(it)) }
+                    }
                 if (details.isNotEmpty()) {
                     Text(
                         text = details.joinToString(" · "),
@@ -525,15 +536,17 @@ private fun ActionsRow(
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Button(
             onClick = onWake,
-            enabled = connection?.sessions?.contains("DOMAIN_VEHICLE_SECURITY") == true &&
-                connection.status?.asleep == true,
+            enabled =
+                connection?.sessions?.contains("DOMAIN_VEHICLE_SECURITY") == true &&
+                    connection.status?.asleep == true,
         ) {
             Text("Wake vehicle")
         }
         OutlinedButton(
             onClick = onReadSoc,
-            enabled = connection?.phase == ConnectionPhase.READY &&
-                connection.status?.asleep == false,
+            enabled =
+                connection?.phase == ConnectionPhase.READY &&
+                    connection.status?.asleep == false,
         ) {
             Text("Read SOC")
         }
@@ -545,20 +558,22 @@ private fun PhoneKeyCard(
     connection: TeslaConnection?,
     onPair: () -> Unit,
 ) {
-    val paired = connection?.keySlot != null ||
-        connection?.sessions?.isNotEmpty() == true ||
-        connection?.pairing == PairingPhase.OK
+    val paired =
+        connection?.keySlot != null ||
+            connection?.sessions?.isNotEmpty() == true ||
+            connection?.pairing == PairingPhase.OK
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text("Phone key", style = MaterialTheme.typography.titleSmall)
                     Text(
-                        text = when {
-                            !paired -> "Not paired"
-                            connection.keySlot != null -> "Paired · slot ${connection.keySlot}"
-                            else -> "Paired"
-                        },
+                        text =
+                            when {
+                                !paired -> "Not paired"
+                                connection.keySlot != null -> "Paired · slot ${connection.keySlot}"
+                                else -> "Paired"
+                            },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -576,23 +591,25 @@ private fun PhoneKeyCard(
             if (pairing != PairingPhase.IDLE) {
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    text = when (pairing) {
-                        PairingPhase.SENDING -> "Sending pairing request..."
-                        PairingPhase.WAITING_FOR_CARD ->
-                            "Tap your NFC card on the center console and confirm on the car screen."
+                    text =
+                        when (pairing) {
+                            PairingPhase.SENDING -> "Sending pairing request..."
+                            PairingPhase.WAITING_FOR_CARD ->
+                                "Tap your NFC card on the center console and confirm on the car screen."
 
-                        PairingPhase.OK ->
-                            "Key paired: ${connection?.pairingKeyId} — rename the Phone Key in Controls > Locks."
+                            PairingPhase.OK ->
+                                "Key paired: ${connection?.pairingKeyId} — rename the Phone Key in Controls > Locks."
 
-                        PairingPhase.ERROR -> "Pairing failed"
-                        PairingPhase.IDLE -> ""
-                    },
+                            PairingPhase.ERROR -> "Pairing failed"
+                            PairingPhase.IDLE -> ""
+                        },
                     style = MaterialTheme.typography.bodySmall,
-                    color = when (pairing) {
-                        PairingPhase.OK -> MaterialTheme.colorScheme.primary
-                        PairingPhase.ERROR -> MaterialTheme.colorScheme.error
-                        else -> MaterialTheme.colorScheme.onSurfaceVariant
-                    },
+                    color =
+                        when (pairing) {
+                            PairingPhase.OK -> MaterialTheme.colorScheme.primary
+                            PairingPhase.ERROR -> MaterialTheme.colorScheme.error
+                            else -> MaterialTheme.colorScheme.onSurfaceVariant
+                        },
                 )
             }
         }
@@ -608,9 +625,10 @@ private fun VinCard(
     onVinChange: (String) -> Unit,
 ) {
     var editing by rememberSaveable(bleName) { mutableStateOf(false) }
-    val mismatch = vinInput.length == VIN_LENGTH &&
-        expectedBleName != null &&
-        expectedBleName != bleName
+    val mismatch =
+        vinInput.length == VIN_LENGTH &&
+            expectedBleName != null &&
+            expectedBleName != bleName
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp)) {
             Text("VIN", style = MaterialTheme.typography.titleSmall)
@@ -644,11 +662,12 @@ private fun VinCard(
                     TextButton(onClick = { editing = true }) { Text("Edit") }
                 }
                 Text(
-                    text = if (vehicle?.vin != null) {
-                        "Used for authenticated sessions; never logged."
-                    } else {
-                        "Required before pairing and SOC reads."
-                    },
+                    text =
+                        if (vehicle?.vin != null) {
+                            "Used for authenticated sessions; never logged."
+                        } else {
+                            "Required before pairing and SOC reads."
+                        },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -658,7 +677,10 @@ private fun VinCard(
 }
 
 @Composable
-private fun LogCard(bleName: String, log: List<LogEntry>) {
+private fun LogCard(
+    bleName: String,
+    log: List<LogEntry>,
+) {
     val lines = log.filter { it.vehicleId == null || it.vehicleId == bleName }
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp)) {
@@ -676,10 +698,11 @@ private fun LogCard(bleName: String, log: List<LogEntry>) {
                     logScroll.scrollTo(logScroll.maxValue)
                 }
                 Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 200.dp)
-                        .verticalScroll(logScroll),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 200.dp)
+                            .verticalScroll(logScroll),
                 ) {
                     lines.takeLast(100).forEach { line ->
                         Text(
@@ -696,34 +719,36 @@ private fun LogCard(bleName: String, log: List<LogEntry>) {
 
 @Composable
 private fun StatusPill(connection: TeslaConnection?) {
-    val (container, content, label) = when {
-        connection?.phase == ConnectionPhase.READY && connection.status?.asleep == false ->
-            Triple(
-                MaterialTheme.colorScheme.primaryContainer,
-                MaterialTheme.colorScheme.onPrimaryContainer,
-                "Awake",
-            )
+    val (container, content, label) =
+        when {
+            connection?.phase == ConnectionPhase.READY && connection.status?.asleep == false ->
+                Triple(
+                    MaterialTheme.colorScheme.primaryContainer,
+                    MaterialTheme.colorScheme.onPrimaryContainer,
+                    "Awake",
+                )
 
-        connection?.phase == ConnectionPhase.READY && connection.status?.asleep == true ->
-            Triple(
-                MaterialTheme.colorScheme.secondaryContainer,
-                MaterialTheme.colorScheme.onSecondaryContainer,
-                "Asleep",
-            )
+            connection?.phase == ConnectionPhase.READY && connection.status?.asleep == true ->
+                Triple(
+                    MaterialTheme.colorScheme.secondaryContainer,
+                    MaterialTheme.colorScheme.onSecondaryContainer,
+                    "Asleep",
+                )
 
-        connection?.phase == ConnectionPhase.FAILED ->
-            Triple(
-                MaterialTheme.colorScheme.errorContainer,
-                MaterialTheme.colorScheme.onErrorContainer,
-                "Failed",
-            )
+            connection?.phase == ConnectionPhase.FAILED ->
+                Triple(
+                    MaterialTheme.colorScheme.errorContainer,
+                    MaterialTheme.colorScheme.onErrorContainer,
+                    "Failed",
+                )
 
-        else -> Triple(
-            MaterialTheme.colorScheme.surfaceVariant,
-            MaterialTheme.colorScheme.onSurfaceVariant,
-            if (connection?.phase == ConnectionPhase.CONNECTING) "Connecting" else "Disconnected",
-        )
-    }
+            else ->
+                Triple(
+                    MaterialTheme.colorScheme.surfaceVariant,
+                    MaterialTheme.colorScheme.onSurfaceVariant,
+                    if (connection?.phase == ConnectionPhase.CONNECTING) "Connecting" else "Disconnected",
+                )
+        }
     Surface(color = container, contentColor = content, shape = RoundedCornerShape(50)) {
         Text(
             text = label,
@@ -734,13 +759,14 @@ private fun StatusPill(connection: TeslaConnection?) {
 }
 
 @Composable
-private fun statusColor(connection: TeslaConnection?): Color = when {
-    connection?.phase == ConnectionPhase.READY && connection.status?.asleep == false ->
-        MaterialTheme.colorScheme.primary
+private fun statusColor(connection: TeslaConnection?): Color =
+    when {
+        connection?.phase == ConnectionPhase.READY && connection.status?.asleep == false ->
+            MaterialTheme.colorScheme.primary
 
-    connection?.phase == ConnectionPhase.FAILED -> MaterialTheme.colorScheme.error
-    else -> MaterialTheme.colorScheme.onSurfaceVariant
-}
+        connection?.phase == ConnectionPhase.FAILED -> MaterialTheme.colorScheme.error
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
 
 // ---------------------------------------------------------------- battery card
 
@@ -774,20 +800,23 @@ private fun BatteryHistoryCard(samples: List<BatterySample>) {
             } else {
                 BatteryChart(
                     samples = visible,
-                    windowStart = range.durationMillis?.let { now - it }
-                        ?: visible.first().timestampMillis,
+                    windowStart =
+                        range.durationMillis?.let { now - it }
+                            ?: visible.first().timestampMillis,
                     windowEnd = now,
                     showDate = range != HistoryRange.SIX_HOURS,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(140.dp),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .height(140.dp),
                 )
             }
             stats?.let {
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    text = "Since last charge: ${formatDuration(now - it.sinceMillis)} ago · " +
-                        "${it.currentPercent}% now · ${it.usedPercent}% used",
+                    text =
+                        "Since last charge: ${formatDuration(now - it.sinceMillis)} ago · " +
+                            "${it.currentPercent}% now · ${it.usedPercent}% used",
                     style = MaterialTheme.typography.bodySmall,
                 )
                 Text(
@@ -811,9 +840,10 @@ private fun BatteryChart(
     val lineColor = MaterialTheme.colorScheme.primary
     val chargingColor = Color(0xFF43A047)
     val gridColor = MaterialTheme.colorScheme.outlineVariant
-    val labelStyle = MaterialTheme.typography.labelSmall.copy(
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
+    val labelStyle =
+        MaterialTheme.typography.labelSmall.copy(
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     val textMeasurer = rememberTextMeasurer()
 
     Canvas(modifier) {
@@ -835,11 +865,9 @@ private fun BatteryChart(
         }
         val span = (windowEnd - windowStart).coerceAtLeast(1L).toFloat()
 
-        fun x(timestampMillis: Long): Float =
-            left + ((timestampMillis - windowStart).toFloat() / span).coerceIn(0f, 1f) * width
+        fun x(timestampMillis: Long): Float = left + ((timestampMillis - windowStart).toFloat() / span).coerceIn(0f, 1f) * width
 
-        fun y(percent: Int): Float =
-            top + height - ((percent - yMin).toFloat() / (yMax - yMin)) * height
+        fun y(percent: Int): Float = top + height - ((percent - yMin).toFloat() / (yMax - yMin)) * height
 
         listOf(yMin, (yMin + yMax) / 2, yMax).forEach { value ->
             val gridY = y(value)
@@ -852,10 +880,11 @@ private fun BatteryChart(
             val label = textMeasurer.measure("$value%", labelStyle)
             drawText(
                 textLayoutResult = label,
-                topLeft = Offset(
-                    x = left - label.size.width - 6.dp.toPx(),
-                    y = gridY - label.size.height / 2f,
-                ),
+                topLeft =
+                    Offset(
+                        x = left - label.size.width - 6.dp.toPx(),
+                        y = gridY - label.size.height / 2f,
+                    ),
             )
         }
 
@@ -892,19 +921,23 @@ private fun BatteryChart(
     }
 }
 
-private fun HistoryRange.label(): String = when (this) {
-    HistoryRange.SIX_HOURS -> "6h"
-    HistoryRange.DAY -> "24h"
-    HistoryRange.WEEK -> "7d"
-    HistoryRange.ALL -> "All"
-}
+private fun HistoryRange.label(): String =
+    when (this) {
+        HistoryRange.SIX_HOURS -> "6h"
+        HistoryRange.DAY -> "24h"
+        HistoryRange.WEEK -> "7d"
+        HistoryRange.ALL -> "All"
+    }
 
 private const val VIN_LENGTH = 17
 
 private val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 private val dateTimeFormatter = DateTimeFormatter.ofPattern("dd MMM HH:mm")
 
-private fun formatTime(millis: Long, showDate: Boolean): String =
+private fun formatTime(
+    millis: Long,
+    showDate: Boolean,
+): String =
     Instant.ofEpochMilli(millis)
         .atZone(ZoneId.systemDefault())
         .format(if (showDate) dateTimeFormatter else timeFormatter)

@@ -29,7 +29,6 @@ import kotlinx.coroutines.flow.update
  * commands live in the link, so one car failing never touches another.
  */
 class TeslaBleController(context: Context) {
-
     private val appContext = context.applicationContext
     private val prefs = appContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
     private val _state = MutableStateFlow(BleUiState())
@@ -49,38 +48,41 @@ class TeslaBleController(context: Context) {
     private var selectedBleName: String? = null
     private var uiVisible = false
 
-    private val scanner = TeslaScanner(
-        context = appContext,
-        onDevices = ::onDevicesFound,
-        onLog = ::log,
-    )
+    private val scanner =
+        TeslaScanner(
+            context = appContext,
+            onDevices = ::onDevicesFound,
+            onLog = ::log,
+        )
 
-    private fun demoCar(): DemoMode.Car? =
-        if (DemoMode.isEnabled(appContext)) DemoMode.car else null
+    private fun demoCar(): DemoMode.Car? = if (DemoMode.isEnabled(appContext)) DemoMode.car else null
 
     private fun createTransport(
         address: String,
         listener: TeslaTransport.Listener,
-    ): TeslaTransport = demoCar()?.createTransport(address, listener)
-        ?: TeslaGattClient(appContext, listener)
+    ): TeslaTransport =
+        demoCar()?.createTransport(address, listener)
+            ?: TeslaGattClient(appContext, listener)
 
     /** Fake adverts in demo mode; the real BLE scanner otherwise. */
-    private val demoScan = object : Runnable {
-        override fun run() {
-            onDevicesFound(demoCar()?.adverts() ?: emptyList())
-            if (_state.value.scanning || _state.value.discovering) {
-                handler.postDelayed(this, DEMO_SCAN_MS)
+    private val demoScan =
+        object : Runnable {
+            override fun run() {
+                onDevicesFound(demoCar()?.adverts() ?: emptyList())
+                if (_state.value.scanning || _state.value.discovering) {
+                    handler.postDelayed(this, DEMO_SCAN_MS)
+                }
             }
         }
-    }
 
     /** Silent discovery is a recovery path, not a permanent scan. */
-    private val stopDiscovery = Runnable {
-        if (_state.value.discovering) {
-            stopScanner()
-            _state.update { it.copy(discovering = false) }
+    private val stopDiscovery =
+        Runnable {
+            if (_state.value.discovering) {
+                stopScanner()
+                _state.update { it.copy(discovering = false) }
+            }
         }
-    }
 
     init {
         vehicleStore.load().forEach { vehicles[it.bleName] = it }
@@ -107,11 +109,12 @@ class TeslaBleController(context: Context) {
 
     fun setVinInput(input: String) {
         val normalized = Vehicle.normalizeVin(input)
-        val expected = if (normalized.length == Vehicle.VIN_LENGTH) {
-            bleNameOf(normalized)
-        } else {
-            null
-        }
+        val expected =
+            if (normalized.length == Vehicle.VIN_LENGTH) {
+                bleNameOf(normalized)
+            } else {
+                null
+            }
         val vehicle = selectedVehicle()
         if (vehicle != null && expected != null) {
             if (vehicle.acceptsVin(normalized)) {
@@ -162,10 +165,11 @@ class TeslaBleController(context: Context) {
 
     /** The UI opened a car by its current address. */
     fun openVehicle(address: String) {
-        val name = _state.value.connections[address]?.name
-            ?: _state.value.devices.firstOrNull { it.address == address }?.name
-            ?: vehicles.values.firstOrNull { it.address == address }?.bleName
-            ?: return
+        val name =
+            _state.value.connections[address]?.name
+                ?: _state.value.devices.firstOrNull { it.address == address }?.name
+                ?: vehicles.values.firstOrNull { it.address == address }?.bleName
+                ?: return
         openVehicle(name, address)
     }
 
@@ -180,7 +184,10 @@ class TeslaBleController(context: Context) {
         _state.update { it.copy(openVehicleRequest = null) }
     }
 
-    private fun openVehicle(bleName: String, address: String) {
+    private fun openVehicle(
+        bleName: String,
+        address: String,
+    ) {
         selectVehicle(bleName, persist = true)
         _state.update { it.copy(openVehicleRequest = bleName) }
         val link = links[bleName]
@@ -229,10 +236,11 @@ class TeslaBleController(context: Context) {
     }
 
     fun pairKey(address: String) {
-        val link = linkForAddress(address) ?: run {
-            log("No selected car ready for pairing")
-            return
-        }
+        val link =
+            linkForAddress(address) ?: run {
+                log("No selected car ready for pairing")
+                return
+            }
         selectVehicle(link.bleName)
         link.pairKey()
     }
@@ -297,8 +305,9 @@ class TeslaBleController(context: Context) {
 
     private fun onDevicesFound(devices: List<TeslaAdvert>) {
         val now = System.currentTimeMillis()
-        val strongestByName = devices.groupBy { it.name }
-            .mapValues { (_, found) -> found.maxBy { it.rssi ?: Int.MIN_VALUE } }
+        val strongestByName =
+            devices.groupBy { it.name }
+                .mapValues { (_, found) -> found.maxBy { it.rssi ?: Int.MIN_VALUE } }
         for ((name, device) in strongestByName) {
             val known = vehicles[name] ?: continue
             vehicles[name] = known.copy(lastSeenMillis = now)
@@ -314,16 +323,18 @@ class TeslaBleController(context: Context) {
             for (device in devices) {
                 val existing = connections[device.address]
                 if (existing == null) {
-                    connections[device.address] = TeslaConnection(
-                        address = device.address,
-                        name = device.name,
-                        rssi = device.rssi,
-                    )
+                    connections[device.address] =
+                        TeslaConnection(
+                            address = device.address,
+                            name = device.name,
+                            rssi = device.rssi,
+                        )
                 } else if (existing.name != device.name || existing.rssi != device.rssi) {
-                    connections[device.address] = existing.copy(
-                        name = device.name,
-                        rssi = device.rssi,
-                    )
+                    connections[device.address] =
+                        existing.copy(
+                            name = device.name,
+                            rssi = device.rssi,
+                        )
                 }
             }
             state.copy(
@@ -356,12 +367,13 @@ class TeslaBleController(context: Context) {
                         rssi = connection.rssi,
                     )
             }
-        val candidates = if (explicitScan) {
-            found
-        } else {
-            val known = found.filter { vehicles.containsKey(it.name) }
-            known.ifEmpty { listOfNotNull(found.maxByOrNull { it.rssi ?: Int.MIN_VALUE }) }
-        }
+        val candidates =
+            if (explicitScan) {
+                found
+            } else {
+                val known = found.filter { vehicles.containsKey(it.name) }
+                known.ifEmpty { listOfNotNull(found.maxByOrNull { it.rssi ?: Int.MIN_VALUE }) }
+            }
         candidates
             .groupBy { it.name }
             .mapValues { (_, devices) -> devices.maxBy { it.rssi ?: Int.MIN_VALUE } }
@@ -426,51 +438,60 @@ class TeslaBleController(context: Context) {
 
     // -------------------------------------------------------- vehicle bookkeeping
 
-    private fun orderedVehicles(): List<Vehicle> = vehicles.values.sortedWith(
-        compareByDescending<Vehicle> { it.bleName == selectedBleName }
-            .thenByDescending { it.lastSeenMillis }
-    )
+    private fun orderedVehicles(): List<Vehicle> =
+        vehicles.values.sortedWith(
+            compareByDescending<Vehicle> { it.bleName == selectedBleName }
+                .thenByDescending { it.lastSeenMillis },
+        )
 
     private fun rememberVehicle(address: String) {
         val connection = _state.value.connections[address] ?: return
         rememberVehicle(connection.name, address, connection.gattDeviceName)
     }
 
-    private fun rememberVehicle(name: String, address: String, gattName: String?) {
+    private fun rememberVehicle(
+        name: String,
+        address: String,
+        gattName: String?,
+    ) {
         if (!TeslaNames.isTeslaBleName(name)) return
         val existing = vehicles[name]
-        val demoVin = if (DemoMode.isEnabled(appContext) &&
-            name == runCatching { TeslaNames.bleName(DemoMode.DEMO_VIN) }.getOrNull()
-        ) {
-            DemoMode.DEMO_VIN
-        } else {
-            null
-        }
-        val updated = (existing ?: Vehicle(bleName = name, address = address)).copy(
-            address = address,
-            gattName = gattName ?: existing?.gattName,
-            vin = existing?.vin ?: demoVin,
-            lastSeenMillis = System.currentTimeMillis(),
-        )
-        val changed = existing == null ||
-            existing.address != updated.address ||
-            (gattName != null && existing.gattName != gattName) ||
-            (updated.vin != null && existing.vin == null)
+        val demoVin =
+            if (DemoMode.isEnabled(appContext) &&
+                name == runCatching { TeslaNames.bleName(DemoMode.DEMO_VIN) }.getOrNull()
+            ) {
+                DemoMode.DEMO_VIN
+            } else {
+                null
+            }
+        val updated =
+            (existing ?: Vehicle(bleName = name, address = address)).copy(
+                address = address,
+                gattName = gattName ?: existing?.gattName,
+                vin = existing?.vin ?: demoVin,
+                lastSeenMillis = System.currentTimeMillis(),
+            )
+        val changed =
+            existing == null ||
+                existing.address != updated.address ||
+                (gattName != null && existing.gattName != gattName) ||
+                (updated.vin != null && existing.vin == null)
         vehicles[name] = updated
         vehicleStore.save(vehicles.values)
         publishVehicles()
         if (changed) log("${nameFor(address)}: remembered for reconnect")
     }
 
-    private fun selectedVehicle(): Vehicle? =
-        selectedBleName?.let(vehicles::get)
+    private fun selectedVehicle(): Vehicle? = selectedBleName?.let(vehicles::get)
 
     private fun selectedLink(): VehicleLink? = selectedBleName?.let(links::get)
 
-    private fun linkForAddress(address: String): VehicleLink? =
-        links.values.firstOrNull { it.address == address }
+    private fun linkForAddress(address: String): VehicleLink? = links.values.firstOrNull { it.address == address }
 
-    private fun selectVehicle(name: String, persist: Boolean = false) {
+    private fun selectVehicle(
+        name: String,
+        persist: Boolean = false,
+    ) {
         selectedBleName = name
         if (persist) {
             prefs.edit().putString(KEY_SELECTED_VEHICLE, name).apply()
@@ -485,10 +506,12 @@ class TeslaBleController(context: Context) {
         }
     }
 
-    private fun bleNameOf(vin: String): String? =
-        runCatching { TeslaNames.bleName(vin) }.getOrNull()
+    private fun bleNameOf(vin: String): String? = runCatching { TeslaNames.bleName(vin) }.getOrNull()
 
-    private fun updateVehicle(bleName: String, transform: (Vehicle) -> Vehicle) {
+    private fun updateVehicle(
+        bleName: String,
+        transform: (Vehicle) -> Vehicle,
+    ) {
         val vehicle = vehicles[bleName] ?: return
         vehicles[bleName] = transform(vehicle)
         vehicleStore.save(vehicles.values)
@@ -502,7 +525,10 @@ class TeslaBleController(context: Context) {
     }
 
     /** One link per car; recreates it when the car shows up at a new address. */
-    private fun ensureLink(bleName: String, address: String): VehicleLink {
+    private fun ensureLink(
+        bleName: String,
+        address: String,
+    ): VehicleLink {
         val existing = links[bleName]
         if (existing != null && existing.address == address) return existing
         existing?.close()
@@ -511,7 +537,10 @@ class TeslaBleController(context: Context) {
         return link
     }
 
-    private fun updateConnection(address: String, transform: (TeslaConnection) -> TeslaConnection) {
+    private fun updateConnection(
+        address: String,
+        transform: (TeslaConnection) -> TeslaConnection,
+    ) {
         _state.update { state ->
             val connection = state.connections[address] ?: return@update state
             state.copy(connections = state.connections + (address to transform(connection)))
@@ -530,7 +559,10 @@ class TeslaBleController(context: Context) {
         appendLog(null, message)
     }
 
-    private fun appendLog(vehicleId: String?, message: String) {
+    private fun appendLog(
+        vehicleId: String?,
+        message: String,
+    ) {
         _state.update { it.copy(log = (it.log + LogEntry(vehicleId, message)).takeLast(LOG_MAX_LINES)) }
     }
 
@@ -575,76 +607,83 @@ class TeslaBleController(context: Context) {
         private var pairingPhase = PairingPhase.IDLE
         private var pairingKeyId: String? = null
 
-        val poll = object : Runnable {
-            override fun run() {
-                if (phase != ConnectionPhase.READY) return
-                transport?.readRssi()
-                requestStatus()
-                handler.postDelayed(this, POLL_MS)
-            }
-        }
-
-        val rssiPoll = object : Runnable {
-            override fun run() {
-                if (!uiVisible || phase != ConnectionPhase.READY) return
-                transport?.readRssi()
-                handler.postDelayed(this, RSSI_POLL_MS)
-            }
-        }
-
-        val reconnect = object : Runnable {
-            override fun run() {
-                if (!_state.value.trackingEnabled) return
-                if (phase == ConnectionPhase.READY || phase == ConnectionPhase.CONNECTING) return
-                log("${name()}: reconnecting (attempt ${reconnectAttempts + 1})")
-                connect()
-            }
-        }
-
-        val wakeRefresh = object : Runnable {
-            override fun run() {
-                if (_state.value.connections[address]?.status?.asleep == false) return
-                if (wakeRefreshAttempts++ >= WAKE_REFRESH_MAX_ATTEMPTS) return
-                requestStatus()
-                handler.postDelayed(this, WAKE_REFRESH_MS)
-            }
-        }
-
-        val sessionRetry = object : Runnable {
-            override fun run() {
-                if (phase != ConnectionPhase.READY) return
-                val needed = neededSessions()
-                if (needed.isEmpty()) return
-                if (sessionRetryAttempts++ >= SESSION_MAX_ATTEMPTS) {
-                    log("${name()}: session not established (${needed.joinToString { it.name }})")
-                    return
+        val poll =
+            object : Runnable {
+                override fun run() {
+                    if (phase != ConnectionPhase.READY) return
+                    transport?.readRssi()
+                    requestStatus()
+                    handler.postDelayed(this, POLL_MS)
                 }
-                sendSessionRequests(needed)
-                handler.postDelayed(this, SESSION_RETRY_MS)
             }
-        }
 
-        val pairingTimeout = Runnable {
-            if (pairingPhase == PairingPhase.SENDING) {
-                pairingPhase = PairingPhase.WAITING_FOR_CARD
-                updateConnection(address) {
-                    it.copy(pairing = PairingPhase.WAITING_FOR_CARD, pairingKeyId = pairingKeyId)
+        val rssiPoll =
+            object : Runnable {
+                override fun run() {
+                    if (!uiVisible || phase != ConnectionPhase.READY) return
+                    transport?.readRssi()
+                    handler.postDelayed(this, RSSI_POLL_MS)
                 }
-                log("No pairing response; tap the card and confirm on the car screen")
             }
-        }
 
-        val whitelistPoll = object : Runnable {
-            override fun run() {
-                if (pairingPhase == PairingPhase.OK || pairingPhase == PairingPhase.ERROR) return
-                if (whitelistPollAttempts++ >= WHITELIST_MAX_ATTEMPTS) {
-                    log("Key not enrolled yet; tap the card and retry if needed")
-                    return
+        val reconnect =
+            object : Runnable {
+                override fun run() {
+                    if (!_state.value.trackingEnabled) return
+                    if (phase == ConnectionPhase.READY || phase == ConnectionPhase.CONNECTING) return
+                    log("${name()}: reconnecting (attempt ${reconnectAttempts + 1})")
+                    connect()
                 }
-                transport?.send(TeslaVcsec.buildWhitelistInfoRequest())
-                handler.postDelayed(this, WHITELIST_POLL_MS)
             }
-        }
+
+        val wakeRefresh =
+            object : Runnable {
+                override fun run() {
+                    if (_state.value.connections[address]?.status?.asleep == false) return
+                    if (wakeRefreshAttempts++ >= WAKE_REFRESH_MAX_ATTEMPTS) return
+                    requestStatus()
+                    handler.postDelayed(this, WAKE_REFRESH_MS)
+                }
+            }
+
+        val sessionRetry =
+            object : Runnable {
+                override fun run() {
+                    if (phase != ConnectionPhase.READY) return
+                    val needed = neededSessions()
+                    if (needed.isEmpty()) return
+                    if (sessionRetryAttempts++ >= SESSION_MAX_ATTEMPTS) {
+                        log("${name()}: session not established (${needed.joinToString { it.name }})")
+                        return
+                    }
+                    sendSessionRequests(needed)
+                    handler.postDelayed(this, SESSION_RETRY_MS)
+                }
+            }
+
+        val pairingTimeout =
+            Runnable {
+                if (pairingPhase == PairingPhase.SENDING) {
+                    pairingPhase = PairingPhase.WAITING_FOR_CARD
+                    updateConnection(address) {
+                        it.copy(pairing = PairingPhase.WAITING_FOR_CARD, pairingKeyId = pairingKeyId)
+                    }
+                    log("No pairing response; tap the card and confirm on the car screen")
+                }
+            }
+
+        val whitelistPoll =
+            object : Runnable {
+                override fun run() {
+                    if (pairingPhase == PairingPhase.OK || pairingPhase == PairingPhase.ERROR) return
+                    if (whitelistPollAttempts++ >= WHITELIST_MAX_ATTEMPTS) {
+                        log("Key not enrolled yet; tap the card and retry if needed")
+                        return
+                    }
+                    transport?.send(TeslaVcsec.buildWhitelistInfoRequest())
+                    handler.postDelayed(this, WHITELIST_POLL_MS)
+                }
+            }
 
         fun name(): String {
             val connection = _state.value.connections[address]
@@ -721,8 +760,9 @@ class TeslaBleController(context: Context) {
                 // stopped advertising or came back at a new address.
                 startDiscovery()
             }
-            val delay = (RECONNECT_DELAY_MS * reconnectAttempts)
-                .coerceAtMost(RECONNECT_MAX_DELAY_MS)
+            val delay =
+                (RECONNECT_DELAY_MS * reconnectAttempts)
+                    .coerceAtMost(RECONNECT_MAX_DELAY_MS)
             nextRetryAtMs = System.currentTimeMillis() + delay
             handler.removeCallbacks(reconnect)
             handler.postDelayed(reconnect, delay)
@@ -734,9 +774,10 @@ class TeslaBleController(context: Context) {
                     state
                 } else {
                     state.copy(
-                        connections = state.connections + (
-                            address to TeslaConnection(address = address, name = bleName)
-                            )
+                        connections =
+                            state.connections + (
+                                address to TeslaConnection(address = address, name = bleName)
+                            ),
                     )
                 }
             }
@@ -782,18 +823,20 @@ class TeslaBleController(context: Context) {
             val keyPair = keyStore.load() ?: return
             for (domain in domains) {
                 val uuid = TeslaCrypto.randomBytes(16)
-                val routing = if (domain == Domain.DOMAIN_VEHICLE_SECURITY) {
-                    TeslaCrypto.randomBytes(16)
-                } else {
-                    clientAddress
-                }
+                val routing =
+                    if (domain == Domain.DOMAIN_VEHICLE_SECURITY) {
+                        TeslaCrypto.randomBytes(16)
+                    } else {
+                        clientAddress
+                    }
                 pendingSessions[uuid.toHex()] = PendingSession(domain)
-                val request = TeslaSessionRequests.buildSessionInfoRequest(
-                    domain = domain,
-                    publicKeyRaw = keyPair.publicKeyRaw,
-                    routingAddress = routing,
-                    uuid = uuid,
-                )
+                val request =
+                    TeslaSessionRequests.buildSessionInfoRequest(
+                        domain = domain,
+                        publicKeyRaw = keyPair.publicKeyRaw,
+                        routingAddress = routing,
+                        uuid = uuid,
+                    )
                 log("${name()}: session request ${domain.name}")
                 if (transport?.send(request) != true) {
                     log("${name()}: failed to send session request")
@@ -802,8 +845,9 @@ class TeslaBleController(context: Context) {
         }
 
         private fun handleSessionInfo(bytes: ByteArray): Boolean {
-            val message = runCatching { RoutableMessage.ADAPTER.decode(bytes) }.getOrNull()
-                ?: return false
+            val message =
+                runCatching { RoutableMessage.ADAPTER.decode(bytes) }.getOrNull()
+                    ?: return false
             val encodedInfo = message.session_info?.toByteArray() ?: return false
             val challenge = message.request_uuid.toByteArray()
             val pending = pendingSessions.remove(challenge.toHex()) ?: return false
@@ -813,18 +857,19 @@ class TeslaBleController(context: Context) {
                 return true
             }
             val keyPair = keyStore.load()
-            val session = if (keyPair != null && vin().length == Vehicle.VIN_LENGTH) {
-                TeslaSession.import(
-                    privateKeyPkcs8 = keyPair.privateKeyPkcs8,
-                    publicKeyRaw = keyPair.publicKeyRaw,
-                    vin = vin(),
-                    challenge = challenge,
-                    encodedInfo = encodedInfo,
-                    tag = tag,
-                )
-            } else {
-                null
-            }
+            val session =
+                if (keyPair != null && vin().length == Vehicle.VIN_LENGTH) {
+                    TeslaSession.import(
+                        privateKeyPkcs8 = keyPair.privateKeyPkcs8,
+                        publicKeyRaw = keyPair.publicKeyRaw,
+                        vin = vin(),
+                        challenge = challenge,
+                        encodedInfo = encodedInfo,
+                        tag = tag,
+                    )
+                } else {
+                    null
+                }
             if (session == null) {
                 log("${name()}: session verification failed (${pending.domain.name})")
                 return true
@@ -887,32 +932,37 @@ class TeslaBleController(context: Context) {
             payload: ByteArray,
             kind: CommandKind,
         ): Boolean {
-            val session = sessions[domain] ?: run {
-                log("${name()}: no session for ${domain.name}")
-                return false
-            }
+            val session =
+                sessions[domain] ?: run {
+                    log("${name()}: no session for ${domain.name}")
+                    return false
+                }
             val uuid = TeslaCrypto.randomBytes(16)
-            val routing = if (domain == Domain.DOMAIN_VEHICLE_SECURITY) {
-                TeslaCrypto.randomBytes(16)
-            } else {
-                clientAddress
-            }
+            val routing =
+                if (domain == Domain.DOMAIN_VEHICLE_SECURITY) {
+                    TeslaCrypto.randomBytes(16)
+                } else {
+                    clientAddress
+                }
             val message = TeslaSessionRequests.buildAuthenticatedRequest(domain, payload, routing, uuid)
-            val encrypted = session.encrypt(message, COMMAND_EXPIRES_SECONDS) ?: run {
-                log("${name()}: encryption failed")
-                return false
-            }
+            val encrypted =
+                session.encrypt(message, COMMAND_EXPIRES_SECONDS) ?: run {
+                    log("${name()}: encryption failed")
+                    return false
+                }
             val requestId = session.requestId(encrypted) ?: return false
             pendingCommands[uuid.toHex()] = PendingCommand(domain, requestId, kind)
             return transport?.send(encrypted.encode()) == true
         }
 
         private fun handleEncryptedResponse(bytes: ByteArray): Boolean {
-            val message = runCatching { RoutableMessage.ADAPTER.decode(bytes) }.getOrNull()
-                ?: return false
+            val message =
+                runCatching { RoutableMessage.ADAPTER.decode(bytes) }.getOrNull()
+                    ?: return false
             if (message.signature_data?.AES_GCM_Response_data == null) return false
-            val pending = pendingCommands.remove(message.request_uuid.toByteArray().toHex())
-                ?: return false
+            val pending =
+                pendingCommands.remove(message.request_uuid.toByteArray().toHex())
+                    ?: return false
             val session = sessions[pending.domain] ?: return true
             val plaintext = session.decrypt(message, pending.requestId, pending.window)
             if (plaintext == null) {
@@ -951,14 +1001,14 @@ class TeslaBleController(context: Context) {
                         ) {
                             log(
                                 "${name()}: SOC ${charge.batteryLevel}% " +
-                                    "(${charge.chargingState ?: "unknown"})"
+                                    "(${charge.chargingState ?: "unknown"})",
                             )
                         }
                     } else {
                         val status = runCatching { TeslaCommands.parseActionStatus(plaintext) }.getOrNull()
                         log(
                             "${name()}: charge response missing data" +
-                                (status?.let { " ($it)" } ?: "")
+                                (status?.let { " ($it)" } ?: ""),
                         )
                     }
                 }
@@ -1014,9 +1064,11 @@ class TeslaBleController(context: Context) {
         private fun handleWhitelistInfo(whitelist: WhitelistInfo) {
             val stored = keyStore.load()
             val keyId = stored?.keyId?.toHex()
-            val enrolled = stored != null && whitelist.whitelistEntries.any {
-                it.publicKeySHA1.toByteArray().copyOf(stored.keyId.size).contentEquals(stored.keyId)
-            }
+            val enrolled =
+                stored != null &&
+                    whitelist.whitelistEntries.any {
+                        it.publicKeySHA1.toByteArray().copyOf(stored.keyId.size).contentEquals(stored.keyId)
+                    }
             if (stored != null && enrolled && keyId != null) {
                 handler.removeCallbacks(whitelistPoll)
                 if (pairingPhase == PairingPhase.SENDING || pairingPhase == PairingPhase.WAITING_FOR_CARD) {
@@ -1030,15 +1082,17 @@ class TeslaBleController(context: Context) {
                 rememberVehicle(address)
                 // A freshly enrolled key can open sessions now.
                 startSession()
-                val index = whitelist.whitelistEntries.indexOfFirst {
-                    it.publicKeySHA1.toByteArray().copyOf(stored.keyId.size).contentEquals(stored.keyId)
-                }
+                val index =
+                    whitelist.whitelistEntries.indexOfFirst {
+                        it.publicKeySHA1.toByteArray().copyOf(stored.keyId.size).contentEquals(stored.keyId)
+                    }
                 val slots = occupiedSlots(whitelist.slotMask)
-                keySlotQueue = if (index in slots.indices) {
-                    listOf(slots[index]) + slots.filterIndexed { i, _ -> i != index }
-                } else {
-                    slots
-                }
+                keySlotQueue =
+                    if (index in slots.indices) {
+                        listOf(slots[index]) + slots.filterIndexed { i, _ -> i != index }
+                    } else {
+                        slots
+                    }
                 requestNextKeySlot()
             } else if (whitelistPollAttempts == 1) {
                 log("${name()}: whitelist has ${whitelist.numberOfEntries} keys")
@@ -1047,11 +1101,12 @@ class TeslaBleController(context: Context) {
 
         private fun handleWhitelistEntry(entry: WhitelistEntryInfo) {
             val stored = keyStore.load()
-            val matches = stored != null && (
-                entry.publicKey?.PublicKeyRaw?.toByteArray()?.contentEquals(stored.publicKeyRaw) == true ||
-                    entry.keyId?.publicKeySHA1?.toByteArray()
-                        ?.copyOf(stored.keyId.size)
-                        ?.contentEquals(stored.keyId) == true
+            val matches =
+                stored != null && (
+                    entry.publicKey?.PublicKeyRaw?.toByteArray()?.contentEquals(stored.publicKeyRaw) == true ||
+                        entry.keyId?.publicKeySHA1?.toByteArray()
+                            ?.copyOf(stored.keyId.size)
+                            ?.contentEquals(stored.keyId) == true
                 )
             if (matches) {
                 keySlotQueue = emptyList()
@@ -1070,11 +1125,12 @@ class TeslaBleController(context: Context) {
             val pairing = runCatching { TeslaPairing.parseAddKeyResponse(message) }.getOrNull()
             if (pairing != null) {
                 handler.removeCallbacks(pairingTimeout)
-                val phase = when (pairing) {
-                    TeslaPairing.Result.OK -> PairingPhase.OK
-                    TeslaPairing.Result.WAITING_FOR_CARD -> PairingPhase.WAITING_FOR_CARD
-                    TeslaPairing.Result.ERROR -> PairingPhase.ERROR
-                }
+                val phase =
+                    when (pairing) {
+                        TeslaPairing.Result.OK -> PairingPhase.OK
+                        TeslaPairing.Result.WAITING_FOR_CARD -> PairingPhase.WAITING_FOR_CARD
+                        TeslaPairing.Result.ERROR -> PairingPhase.ERROR
+                    }
                 pairingPhase = phase
                 updateConnection(address) { it.copy(pairing = phase, pairingKeyId = pairingKeyId) }
                 log("${name()}: pairing ${pairing.name.lowercase()}")
@@ -1106,14 +1162,15 @@ class TeslaBleController(context: Context) {
                 ) {
                     log(
                         "${name()}: VCSEC status locked=${status.locked} " +
-                            "asleep=${status.asleep} userPresent=${status.userPresent}"
+                            "asleep=${status.asleep} userPresent=${status.userPresent}",
                     )
                 }
                 if (!status.asleep && !chargeAfterSession) {
                     // Track SOC for every awake car that can answer, not just
                     // the selected one; skip cars with no VIN (no session).
-                    val canRead = sessions.containsKey(Domain.DOMAIN_INFOTAINMENT) ||
-                        vin().length == Vehicle.VIN_LENGTH
+                    val canRead =
+                        sessions.containsKey(Domain.DOMAIN_INFOTAINMENT) ||
+                            vin().length == Vehicle.VIN_LENGTH
                     if (canRead) requestChargeState()
                 }
             } else {
@@ -1121,70 +1178,70 @@ class TeslaBleController(context: Context) {
             }
         }
 
-        private fun listener() = object : TeslaTransport.Listener {
-            override fun onPhase(phase: ConnectionPhase) {
-                if (phase == ConnectionPhase.FAILED || phase == ConnectionPhase.DISCONNECTED) {
-                    transport?.close()
-                    transport = null
-                    handler.removeCallbacks(poll)
-                    handler.removeCallbacks(rssiPoll)
-                    val hadData = _state.value.connections[address]?.let {
-                        it.sessions.isNotEmpty() || it.status != null || it.charge != null
-                    } == true
-                    val display = if (hadData) ConnectionPhase.DISCONNECTED else ConnectionPhase.FAILED
-                    this@VehicleLink.phase = display
-                    updateConnection(address) { it.copy(phase = display) }
-                    scheduleReconnect()
-                    return
+        private fun listener() =
+            object : TeslaTransport.Listener {
+                override fun onPhase(phase: ConnectionPhase) {
+                    if (phase == ConnectionPhase.FAILED || phase == ConnectionPhase.DISCONNECTED) {
+                        transport?.close()
+                        transport = null
+                        handler.removeCallbacks(poll)
+                        handler.removeCallbacks(rssiPoll)
+                        val hadData =
+                            _state.value.connections[address]?.let {
+                                it.sessions.isNotEmpty() || it.status != null || it.charge != null
+                            } == true
+                        val display = if (hadData) ConnectionPhase.DISCONNECTED else ConnectionPhase.FAILED
+                        this@VehicleLink.phase = display
+                        updateConnection(address) { it.copy(phase = display) }
+                        scheduleReconnect()
+                        return
+                    }
+                    this@VehicleLink.phase = phase
+                    updateConnection(address) { it.copy(phase = phase) }
+                    if (phase == ConnectionPhase.READY) {
+                        reconnectAttempts = 0
+                        nextRetryAtMs = 0
+                        // Additive scans stay under the user's control; the selected
+                        // car connecting is the one signal that means "found it".
+                        if (_state.value.explicitScan && selectedBleName == bleName) stopScan()
+                        if (selectedBleName == bleName) startRssiPoll()
+                        requestStatus()
+                        requestKeySlot()
+                        startSession()
+                        postPoll()
+                        maybeStopDiscovery()
+                    }
                 }
-                this@VehicleLink.phase = phase
-                updateConnection(address) { it.copy(phase = phase) }
-                if (phase == ConnectionPhase.READY) {
-                    reconnectAttempts = 0
-                    nextRetryAtMs = 0
-                    // Additive scans stay under the user's control; the selected
-                    // car connecting is the one signal that means "found it".
-                    if (_state.value.explicitScan && selectedBleName == bleName) stopScan()
-                    if (selectedBleName == bleName) startRssiPoll()
-                    requestStatus()
-                    requestKeySlot()
-                    startSession()
-                    postPoll()
-                    maybeStopDiscovery()
+
+                override fun onServices(services: List<GattServiceInfo>) {
+                    updateConnection(address) { it.copy(services = services) }
+                }
+
+                override fun onGattDeviceName(name: String?) {
+                    updateConnection(address) { it.copy(gattDeviceName = name) }
+                }
+
+                override fun onMtu(mtu: Int) {
+                    updateConnection(address) { it.copy(mtu = mtu) }
+                }
+
+                override fun onRssi(rssi: Int) {
+                    updateConnection(address) { it.copy(rssi = rssi) }
+                }
+
+                override fun onMessage(message: ByteArray) {
+                    this@VehicleLink.onMessage(message)
+                }
+
+                override fun onLog(message: String) {
+                    log("${name()}: $message")
                 }
             }
-
-            override fun onServices(services: List<GattServiceInfo>) {
-                updateConnection(address) { it.copy(services = services) }
-            }
-
-            override fun onGattDeviceName(name: String?) {
-                updateConnection(address) { it.copy(gattDeviceName = name) }
-            }
-
-            override fun onMtu(mtu: Int) {
-                updateConnection(address) { it.copy(mtu = mtu) }
-            }
-
-            override fun onRssi(rssi: Int) {
-                updateConnection(address) { it.copy(rssi = rssi) }
-            }
-
-            override fun onMessage(message: ByteArray) {
-                this@VehicleLink.onMessage(message)
-            }
-
-            override fun onLog(message: String) {
-                log("${name()}: $message")
-            }
-        }
     }
 
-    private fun occupiedSlots(slotMask: Int): List<Int> =
-        (0 until Int.SIZE_BITS).filter { (slotMask ushr it) and 1 == 1 }
+    private fun occupiedSlots(slotMask: Int): List<Int> = (0 until Int.SIZE_BITS).filter { (slotMask ushr it) and 1 == 1 }
 
-    private fun ByteArray.toHex(): String =
-        joinToString("") { (it.toInt() and 0xFF).toString(16).padStart(2, '0') }
+    private fun ByteArray.toHex(): String = joinToString("") { (it.toInt() and 0xFF).toString(16).padStart(2, '0') }
 
     private companion object {
         const val LOG_MAX_LINES = 200
@@ -1208,15 +1265,17 @@ class TeslaBleController(context: Context) {
         const val PREFS = "teslable"
         const val KEY_TRACKING_ENABLED = "tracking_enabled"
         const val KEY_SELECTED_VEHICLE = "selected_vehicle"
-        val ACTIVE_PHASES = setOf(
-            ConnectionPhase.CONNECTING,
-            ConnectionPhase.CONNECTED,
-            ConnectionPhase.DISCOVERING,
-            ConnectionPhase.READY,
-        )
-        val SESSION_DOMAINS = listOf(
-            Domain.DOMAIN_VEHICLE_SECURITY,
-            Domain.DOMAIN_INFOTAINMENT,
-        )
+        val ACTIVE_PHASES =
+            setOf(
+                ConnectionPhase.CONNECTING,
+                ConnectionPhase.CONNECTED,
+                ConnectionPhase.DISCOVERING,
+                ConnectionPhase.READY,
+            )
+        val SESSION_DOMAINS =
+            listOf(
+                Domain.DOMAIN_VEHICLE_SECURITY,
+                Domain.DOMAIN_INFOTAINMENT,
+            )
     }
 }

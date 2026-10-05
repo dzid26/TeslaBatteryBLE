@@ -8,7 +8,6 @@ import com.dzid26.teslable.core.protocol.TeslaKeys
 import com.dzid26.teslable.core.protocol.TeslaSession
 import com.tesla.generated.carserver.common.Void
 import com.tesla.generated.carserver.server.Action
-import com.tesla.generated.carserver.server.Response as CarServerResponse
 import com.tesla.generated.carserver.vehicle.ChargeState
 import com.tesla.generated.carserver.vehicle.VehicleData
 import com.tesla.generated.signatures.AES_GCM_Response_Signature_Data
@@ -34,8 +33,9 @@ import com.tesla.generated.vcsec.VehicleSleepStatus_E
 import com.tesla.generated.vcsec.VehicleStatus
 import com.tesla.generated.vcsec.WhitelistEntryInfo
 import com.tesla.generated.vcsec.WhitelistInfo
-import java.security.MessageDigest
 import okio.ByteString.Companion.toByteString
+import java.security.MessageDigest
+import com.tesla.generated.carserver.server.Response as CarServerResponse
 
 /**
  * The simulated car's protocol brain. Pure JVM so it can be unit tested against
@@ -47,7 +47,6 @@ import okio.ByteString.Companion.toByteString
  * responses.
  */
 class FakeCarProtocol(private val vin: String) {
-
     data class Response(val bytes: ByteArray, val delayMs: Long = 0)
 
     var asleep: Boolean = true
@@ -80,7 +79,10 @@ class FakeCarProtocol(private val vin: String) {
         return out
     }
 
-    private fun handleMessage(bytes: ByteArray, out: MutableList<Response>) {
+    private fun handleMessage(
+        bytes: ByteArray,
+        out: MutableList<Response>,
+    ) {
         val message = runCatching { RoutableMessage.ADAPTER.decode(bytes) }.getOrNull()
         if (message != null) {
             if (message.session_info_request != null) {
@@ -120,62 +122,71 @@ class FakeCarProtocol(private val vin: String) {
         val info = request.VCSEC_InformationRequest ?: return
         when (info.informationRequestType) {
             InformationRequestType.INFORMATION_REQUEST_TYPE_GET_STATUS -> {
-                out += plaintext(
-                    domain,
-                    FromVCSECMessage(
-                        vehicleStatus = VehicleStatus(
-                            vehicleLockState = if (locked) {
-                                VehicleLockState_E.VEHICLELOCKSTATE_LOCKED
-                            } else {
-                                VehicleLockState_E.VEHICLELOCKSTATE_UNLOCKED
-                            },
-                            vehicleSleepStatus = if (asleep) {
-                                VehicleSleepStatus_E.VEHICLE_SLEEP_STATUS_ASLEEP
-                            } else {
-                                VehicleSleepStatus_E.VEHICLE_SLEEP_STATUS_AWAKE
-                            },
-                            userPresence = UserPresence_E.VEHICLE_USER_PRESENCE_NOT_PRESENT,
-                        ),
-                    ).encode(),
-                    uuid,
-                )
+                out +=
+                    plaintext(
+                        domain,
+                        FromVCSECMessage(
+                            vehicleStatus =
+                                VehicleStatus(
+                                    vehicleLockState =
+                                        if (locked) {
+                                            VehicleLockState_E.VEHICLELOCKSTATE_LOCKED
+                                        } else {
+                                            VehicleLockState_E.VEHICLELOCKSTATE_UNLOCKED
+                                        },
+                                    vehicleSleepStatus =
+                                        if (asleep) {
+                                            VehicleSleepStatus_E.VEHICLE_SLEEP_STATUS_ASLEEP
+                                        } else {
+                                            VehicleSleepStatus_E.VEHICLE_SLEEP_STATUS_AWAKE
+                                        },
+                                    userPresence = UserPresence_E.VEHICLE_USER_PRESENCE_NOT_PRESENT,
+                                ),
+                        ).encode(),
+                        uuid,
+                    )
             }
 
             InformationRequestType.INFORMATION_REQUEST_TYPE_GET_WHITELIST_INFO -> {
                 val sha1 = clientKeySha1
-                val entries = if (sha1 != null) {
-                    listOf(KeyIdentifier(publicKeySHA1 = sha1.toByteString()))
-                } else {
-                    emptyList()
-                }
-                out += plaintext(
-                    domain,
-                    FromVCSECMessage(
-                        whitelistInfo = WhitelistInfo(
-                            numberOfEntries = entries.size,
-                            whitelistEntries = entries,
-                            slotMask = if (entries.isEmpty()) 0 else 1,
-                        ),
-                    ).encode(),
-                    uuid,
-                )
+                val entries =
+                    if (sha1 != null) {
+                        listOf(KeyIdentifier(publicKeySHA1 = sha1.toByteString()))
+                    } else {
+                        emptyList()
+                    }
+                out +=
+                    plaintext(
+                        domain,
+                        FromVCSECMessage(
+                            whitelistInfo =
+                                WhitelistInfo(
+                                    numberOfEntries = entries.size,
+                                    whitelistEntries = entries,
+                                    slotMask = if (entries.isEmpty()) 0 else 1,
+                                ),
+                        ).encode(),
+                        uuid,
+                    )
             }
 
             InformationRequestType.INFORMATION_REQUEST_TYPE_GET_WHITELIST_ENTRY_INFO -> {
                 val sha1 = clientKeySha1
                 val publicKey = clientPublicKey
                 if (sha1 != null && publicKey != null) {
-                    out += plaintext(
-                        domain,
-                        FromVCSECMessage(
-                            whitelistEntryInfo = WhitelistEntryInfo(
-                                keyId = KeyIdentifier(publicKeySHA1 = sha1.toByteString()),
-                                publicKey = PublicKey(PublicKeyRaw = publicKey.toByteString()),
-                                slot = 0,
-                            ),
-                        ).encode(),
-                        uuid,
-                    )
+                    out +=
+                        plaintext(
+                            domain,
+                            FromVCSECMessage(
+                                whitelistEntryInfo =
+                                    WhitelistEntryInfo(
+                                        keyId = KeyIdentifier(publicKeySHA1 = sha1.toByteString()),
+                                        publicKey = PublicKey(PublicKeyRaw = publicKey.toByteString()),
+                                        slot = 0,
+                                    ),
+                            ).encode(),
+                            uuid,
+                        )
                 }
             }
 
@@ -183,7 +194,10 @@ class FakeCarProtocol(private val vin: String) {
         }
     }
 
-    private fun handlePairing(request: ToVCSECMessage, out: MutableList<Response>) {
+    private fun handlePairing(
+        request: ToVCSECMessage,
+        out: MutableList<Response>,
+    ) {
         val payload = request.signedMessage?.protobufMessageAsBytes?.toByteArray() ?: return
         val unsigned = runCatching { UnsignedMessage.ADAPTER.decode(payload) }.getOrNull() ?: return
         val addKey = unsigned.VCSEC_WhitelistOperation?.addKeyToWhitelistAndAddPermissions ?: return
@@ -193,7 +207,10 @@ class FakeCarProtocol(private val vin: String) {
         out += commandStatus(OperationStatus_E.OPERATIONSTATUS_OK, CARD_TAP_MS)
     }
 
-    private fun handleSessionRequest(request: RoutableMessage, out: MutableList<Response>) {
+    private fun handleSessionRequest(
+        request: RoutableMessage,
+        out: MutableList<Response>,
+    ) {
         val domain = request.to_destination?.domain ?: return
         val clientPublic = request.session_info_request?.public_key?.toByteArray() ?: return
         val challenge = request.uuid?.toByteArray() ?: return
@@ -203,52 +220,60 @@ class FakeCarProtocol(private val vin: String) {
         val sessionKey = TeslaCrypto.sessionKey(carKey.privateKeyPkcs8, clientPublic)
         sessions[domain] = sessionKey
         val epoch = epochs.getOrPut(domain) { TeslaCrypto.randomBytes(EPOCH_BYTES) }
-        val info = SessionInfo(
-            counter = SESSION_COUNTER,
-            publicKey = carKey.publicKeyRaw.toByteString(),
-            epoch = epoch.toByteString(),
-            clock_time = (System.currentTimeMillis() / 1000).toInt(),
-        ).encode()
-        val tag = TeslaSession.sessionInfoHmac(sessionKey, vin, challenge, info)
-        out += Response(
-            RoutableMessage(
-                from_destination = Destination(domain = domain),
-                request_uuid = challenge.toByteString(),
-                session_info = info.toByteString(),
-                signature_data = SignatureData(
-                    session_info_tag = HMAC_Signature_Data(tag = tag.toByteString()),
-                ),
+        val info =
+            SessionInfo(
+                counter = SESSION_COUNTER,
+                publicKey = carKey.publicKeyRaw.toByteString(),
+                epoch = epoch.toByteString(),
+                clock_time = (System.currentTimeMillis() / 1000).toInt(),
             ).encode()
-        )
+        val tag = TeslaSession.sessionInfoHmac(sessionKey, vin, challenge, info)
+        out +=
+            Response(
+                RoutableMessage(
+                    from_destination = Destination(domain = domain),
+                    request_uuid = challenge.toByteString(),
+                    session_info = info.toByteString(),
+                    signature_data =
+                        SignatureData(
+                            session_info_tag = HMAC_Signature_Data(tag = tag.toByteString()),
+                        ),
+                ).encode(),
+            )
     }
 
-    private fun handleAuthenticated(request: RoutableMessage, out: MutableList<Response>) {
+    private fun handleAuthenticated(
+        request: RoutableMessage,
+        out: MutableList<Response>,
+    ) {
         val domain = request.to_destination?.domain ?: return
         val key = sessions[domain] ?: return
         val gcm = request.signature_data?.AES_GCM_Personalized_data ?: return
         val ciphertext = request.protobuf_message_as_bytes?.toByteArray() ?: return
         val uuid = request.uuid?.toByteArray() ?: return
 
-        val metadata = Metadata.sha256()
-            .add(
-                Tag.TAG_SIGNATURE_TYPE.value,
-                byteArrayOf(SignatureType.SIGNATURE_TYPE_AES_GCM_PERSONALIZED.value.toByte()),
-            )
-            .add(Tag.TAG_DOMAIN.value, byteArrayOf(domain.value.toByte()))
-            .add(Tag.TAG_PERSONALIZATION.value, vin.toByteArray(Charsets.US_ASCII))
-            .add(Tag.TAG_EPOCH.value, gcm.epoch.toByteArray())
-            .addUint32(Tag.TAG_EXPIRES_AT.value, gcm.expires_at)
-            .addUint32(Tag.TAG_COUNTER.value, gcm.counter)
+        val metadata =
+            Metadata.sha256()
+                .add(
+                    Tag.TAG_SIGNATURE_TYPE.value,
+                    byteArrayOf(SignatureType.SIGNATURE_TYPE_AES_GCM_PERSONALIZED.value.toByte()),
+                )
+                .add(Tag.TAG_DOMAIN.value, byteArrayOf(domain.value.toByte()))
+                .add(Tag.TAG_PERSONALIZATION.value, vin.toByteArray(Charsets.US_ASCII))
+                .add(Tag.TAG_EPOCH.value, gcm.epoch.toByteArray())
+                .addUint32(Tag.TAG_EXPIRES_AT.value, gcm.expires_at)
+                .addUint32(Tag.TAG_COUNTER.value, gcm.counter)
         if (request.flags > 0) {
             metadata.addUint32(Tag.TAG_FLAGS.value, request.flags)
         }
-        val plaintext = TeslaCrypto.decryptGcm(
-            key,
-            gcm.nonce.toByteArray(),
-            ciphertext,
-            gcm.tag.toByteArray(),
-            metadata.checksum(byteArrayOf()),
-        ) ?: return
+        val plaintext =
+            TeslaCrypto.decryptGcm(
+                key,
+                gcm.nonce.toByteArray(),
+                ciphertext,
+                gcm.tag.toByteArray(),
+                metadata.checksum(byteArrayOf()),
+            ) ?: return
         val requestTag = gcm.tag.toByteArray()
 
         // Charge first: Wire matches on field numbers, so an Action (field 2 =
@@ -262,28 +287,33 @@ class FakeCarProtocol(private val vin: String) {
         val unsigned = runCatching { UnsignedMessage.ADAPTER.decode(plaintext) }.getOrNull()
         if (unsigned?.RKEAction != null) {
             asleep = false
-            out += authenticated(
-                domain,
-                uuid,
-                requestTag,
-                FromVCSECMessage(
-                    commandStatus = CommandStatus(
-                        operationStatus = OperationStatus_E.OPERATIONSTATUS_OK,
-                    ),
-                ).encode(),
-            )
+            out +=
+                authenticated(
+                    domain,
+                    uuid,
+                    requestTag,
+                    FromVCSECMessage(
+                        commandStatus =
+                            CommandStatus(
+                                operationStatus = OperationStatus_E.OPERATIONSTATUS_OK,
+                            ),
+                    ).encode(),
+                )
         }
     }
 
-    private fun chargeResponse(): ByteArray = CarServerResponse(
-        vehicleData = VehicleData(
-            charge_state = ChargeState(
-                battery_level = batteryLevel,
-                charge_limit_soc = CHARGE_LIMIT,
-                charging_state = ChargeState.ChargingState(Disconnected = Void()),
-            ),
-        ),
-    ).encode()
+    private fun chargeResponse(): ByteArray =
+        CarServerResponse(
+            vehicleData =
+                VehicleData(
+                    charge_state =
+                        ChargeState(
+                            battery_level = batteryLevel,
+                            charge_limit_soc = CHARGE_LIMIT,
+                            charging_state = ChargeState.ChargingState(Disconnected = Void()),
+                        ),
+                ),
+        ).encode()
 
     private fun authenticated(
         domain: Domain,
@@ -294,65 +324,77 @@ class FakeCarProtocol(private val vin: String) {
         val key = sessions[domain] ?: return Response(ByteArray(0))
         val counter = ++responseCounter
         val nonce = TeslaCrypto.randomBytes(TeslaCrypto.NONCE_SIZE)
-        val requestId = byteArrayOf(
-            SignatureType.SIGNATURE_TYPE_AES_GCM_PERSONALIZED.value.toByte(),
-        ) + requestTag
-        val metadata = Metadata.sha256()
-            .add(
-                Tag.TAG_SIGNATURE_TYPE.value,
-                byteArrayOf(SignatureType.SIGNATURE_TYPE_AES_GCM_RESPONSE.value.toByte()),
+        val requestId =
+            byteArrayOf(
+                SignatureType.SIGNATURE_TYPE_AES_GCM_PERSONALIZED.value.toByte(),
+            ) + requestTag
+        val metadata =
+            Metadata.sha256()
+                .add(
+                    Tag.TAG_SIGNATURE_TYPE.value,
+                    byteArrayOf(SignatureType.SIGNATURE_TYPE_AES_GCM_RESPONSE.value.toByte()),
+                )
+                .add(Tag.TAG_DOMAIN.value, byteArrayOf(domain.value.toByte()))
+                .add(Tag.TAG_PERSONALIZATION.value, vin.toByteArray(Charsets.US_ASCII))
+                .addUint32(Tag.TAG_COUNTER.value, counter)
+                .addUint32(Tag.TAG_FLAGS.value, 0)
+                .add(Tag.TAG_REQUEST_HASH.value, requestId)
+                .addUint32(Tag.TAG_FAULT.value, 0)
+        val (ciphertext, tag) =
+            TeslaCrypto.encryptGcm(
+                key,
+                nonce,
+                plaintext,
+                metadata.checksum(byteArrayOf()),
             )
-            .add(Tag.TAG_DOMAIN.value, byteArrayOf(domain.value.toByte()))
-            .add(Tag.TAG_PERSONALIZATION.value, vin.toByteArray(Charsets.US_ASCII))
-            .addUint32(Tag.TAG_COUNTER.value, counter)
-            .addUint32(Tag.TAG_FLAGS.value, 0)
-            .add(Tag.TAG_REQUEST_HASH.value, requestId)
-            .addUint32(Tag.TAG_FAULT.value, 0)
-        val (ciphertext, tag) = TeslaCrypto.encryptGcm(
-            key,
-            nonce,
-            plaintext,
-            metadata.checksum(byteArrayOf()),
-        )
         return Response(
             RoutableMessage(
                 from_destination = Destination(domain = domain),
                 request_uuid = requestUuid.toByteString(),
                 protobuf_message_as_bytes = ciphertext.toByteString(),
-                signature_data = SignatureData(
-                    AES_GCM_Response_data = AES_GCM_Response_Signature_Data(
-                        nonce = nonce.toByteString(),
-                        counter = counter,
-                        tag = tag.toByteString(),
+                signature_data =
+                    SignatureData(
+                        AES_GCM_Response_data =
+                            AES_GCM_Response_Signature_Data(
+                                nonce = nonce.toByteString(),
+                                counter = counter,
+                                tag = tag.toByteString(),
+                            ),
                     ),
-                ),
-            ).encode()
+            ).encode(),
         )
     }
 
-    private fun commandStatus(status: OperationStatus_E, delayMs: Long = 0): Response =
+    private fun commandStatus(
+        status: OperationStatus_E,
+        delayMs: Long = 0,
+    ): Response =
         Response(
             FromVCSECMessage(commandStatus = CommandStatus(operationStatus = status)).encode(),
             delayMs,
         )
 
-    private fun plaintext(domain: Domain, payload: ByteArray, uuid: ByteArray?): Response {
-        val message = RoutableMessage(
-            from_destination = Destination(domain = domain),
-            protobuf_message_as_bytes = payload.toByteString(),
-            flags = 0,
-        )
+    private fun plaintext(
+        domain: Domain,
+        payload: ByteArray,
+        uuid: ByteArray?,
+    ): Response {
+        val message =
+            RoutableMessage(
+                from_destination = Destination(domain = domain),
+                protobuf_message_as_bytes = payload.toByteString(),
+                flags = 0,
+            )
         return Response(
             if (uuid == null) {
                 message.encode()
             } else {
                 message.copy(request_uuid = uuid.toByteString()).encode()
-            }
+            },
         )
     }
 
-    private fun sha1(bytes: ByteArray): ByteArray =
-        MessageDigest.getInstance("SHA-1").digest(bytes)
+    private fun sha1(bytes: ByteArray): ByteArray = MessageDigest.getInstance("SHA-1").digest(bytes)
 
     private companion object {
         const val CARD_TAP_MS = 4_000L

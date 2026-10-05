@@ -15,13 +15,14 @@ import androidx.compose.ui.platform.LocalContext
 fun TeslaBleTheme(content: @Composable () -> Unit) {
     val dark = isSystemInDarkTheme()
     val context = LocalContext.current
-    val colorScheme = when {
-        // Wallpaper-based color on Android 12+; the app has no brand palette.
-        Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ->
-            if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+    val colorScheme =
+        when {
+            // Wallpaper-based color on Android 12+; the app has no brand palette.
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ->
+                if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
 
-        dark -> darkColorScheme()
-        else -> lightColorScheme()
-    }
+            dark -> darkColorScheme()
+            else -> lightColorScheme()
+        }
     MaterialTheme(colorScheme = colorScheme, content = content)
 }

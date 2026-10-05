@@ -17,14 +17,16 @@ import org.junit.Assert.assertNotNull
 import org.junit.Test
 
 class TeslaSessionTest {
-
     private val vin = "5YJ3E1EA7KF000001"
     private val client = TeslaKeys.generate()
     private val vehicle = TeslaKeys.generate()
     private val challenge = ByteArray(16) { 1 }
     private val sessionKey = TeslaCrypto.sessionKey(client.privateKeyPkcs8, vehicle.publicKeyRaw)
 
-    private fun sessionInfo(counter: Int = 7, clockTime: Int = 100): ByteArray =
+    private fun sessionInfo(
+        counter: Int = 7,
+        clockTime: Int = 100,
+    ): ByteArray =
         SessionInfo(
             counter = counter,
             publicKey = vehicle.publicKeyRaw.toByteString(),
@@ -82,11 +84,12 @@ class TeslaSessionTest {
     @Test
     fun `encrypts with an incrementing counter and decrypts the response`() {
         val session = createSession()!!
-        val message = RoutableMessage(
-            to_destination = Destination(domain = Domain.DOMAIN_INFOTAINMENT),
-            from_destination = Destination(routing_address = ByteArray(16).toByteString()),
-            protobuf_message_as_bytes = "hello".toByteArray().toByteString(),
-        )
+        val message =
+            RoutableMessage(
+                to_destination = Destination(domain = Domain.DOMAIN_INFOTAINMENT),
+                from_destination = Destination(routing_address = ByteArray(16).toByteString()),
+                protobuf_message_as_bytes = "hello".toByteArray().toByteString(),
+            )
 
         val encrypted = session.encrypt(message, 5)
         assertNotNull(encrypted)
@@ -95,7 +98,7 @@ class TeslaSessionTest {
         assertEquals(8, gcm!!.counter)
         assertFalse(
             encrypted.protobuf_message_as_bytes!!.toByteArray()
-                .contentEquals("hello".toByteArray())
+                .contentEquals("hello".toByteArray()),
         )
 
         val requestId = session.requestId(encrypted)!!
@@ -114,16 +117,18 @@ class TeslaSessionTest {
         val firstId = ByteArray(33) { 1 }
         val secondId = ByteArray(33) { 2 }
 
-        val first = session.decrypt(
-            vehicleResponse(firstId, "first".toByteArray(), counter = 0),
-            firstId,
-            AntiReplayWindow(),
-        )
-        val second = session.decrypt(
-            vehicleResponse(secondId, "second".toByteArray(), counter = 0),
-            secondId,
-            AntiReplayWindow(),
-        )
+        val first =
+            session.decrypt(
+                vehicleResponse(firstId, "first".toByteArray(), counter = 0),
+                firstId,
+                AntiReplayWindow(),
+            )
+        val second =
+            session.decrypt(
+                vehicleResponse(secondId, "second".toByteArray(), counter = 0),
+                secondId,
+                AntiReplayWindow(),
+            )
 
         assertArrayEquals("first".toByteArray(), first)
         assertArrayEquals("second".toByteArray(), second)
@@ -134,21 +139,23 @@ class TeslaSessionTest {
         val fixedNonce = ByteArray(12) { 7 }
         val info = sessionInfo()
         val tag = TeslaSession.sessionInfoHmac(sessionKey, vin, challenge, info)
-        val session = TeslaSession.import(
-            privateKeyPkcs8 = client.privateKeyPkcs8,
-            publicKeyRaw = client.publicKeyRaw,
-            vin = vin,
-            challenge = challenge,
-            encodedInfo = info,
-            tag = tag,
-            clock = { 0 },
-            nonceGenerator = { fixedNonce },
-        )!!
-        val message = RoutableMessage(
-            to_destination = Destination(domain = Domain.DOMAIN_INFOTAINMENT),
-            from_destination = Destination(routing_address = ByteArray(16).toByteString()),
-            protobuf_message_as_bytes = "hello".toByteArray().toByteString(),
-        )
+        val session =
+            TeslaSession.import(
+                privateKeyPkcs8 = client.privateKeyPkcs8,
+                publicKeyRaw = client.publicKeyRaw,
+                vin = vin,
+                challenge = challenge,
+                encodedInfo = info,
+                tag = tag,
+                clock = { 0 },
+                nonceGenerator = { fixedNonce },
+            )!!
+        val message =
+            RoutableMessage(
+                to_destination = Destination(domain = Domain.DOMAIN_INFOTAINMENT),
+                from_destination = Destination(routing_address = ByteArray(16).toByteString()),
+                protobuf_message_as_bytes = "hello".toByteArray().toByteString(),
+            )
         val encrypted = session.encrypt(message, 5)!!
         assertArrayEquals(
             fixedNonce,
@@ -161,34 +168,38 @@ class TeslaSessionTest {
         plaintext: ByteArray,
         counter: Int,
     ): RoutableMessage {
-        val metadata = Metadata.sha256()
-            .add(
-                Tag.TAG_SIGNATURE_TYPE.value,
-                byteArrayOf(SignatureType.SIGNATURE_TYPE_AES_GCM_RESPONSE.value.toByte()),
-            )
-            .add(Tag.TAG_DOMAIN.value, byteArrayOf(Domain.DOMAIN_INFOTAINMENT.value.toByte()))
-            .add(Tag.TAG_PERSONALIZATION.value, vin.toByteArray())
-            .addUint32(Tag.TAG_COUNTER.value, counter)
-            .addUint32(Tag.TAG_FLAGS.value, 0)
-            .add(Tag.TAG_REQUEST_HASH.value, requestId)
-            .addUint32(Tag.TAG_FAULT.value, 0)
+        val metadata =
+            Metadata.sha256()
+                .add(
+                    Tag.TAG_SIGNATURE_TYPE.value,
+                    byteArrayOf(SignatureType.SIGNATURE_TYPE_AES_GCM_RESPONSE.value.toByte()),
+                )
+                .add(Tag.TAG_DOMAIN.value, byteArrayOf(Domain.DOMAIN_INFOTAINMENT.value.toByte()))
+                .add(Tag.TAG_PERSONALIZATION.value, vin.toByteArray())
+                .addUint32(Tag.TAG_COUNTER.value, counter)
+                .addUint32(Tag.TAG_FLAGS.value, 0)
+                .add(Tag.TAG_REQUEST_HASH.value, requestId)
+                .addUint32(Tag.TAG_FAULT.value, 0)
         val nonce = ByteArray(12) { 2 }
-        val (ciphertext, tag) = TeslaCrypto.encryptGcm(
-            sessionKey,
-            nonce,
-            plaintext,
-            metadata.checksum(byteArrayOf()),
-        )
+        val (ciphertext, tag) =
+            TeslaCrypto.encryptGcm(
+                sessionKey,
+                nonce,
+                plaintext,
+                metadata.checksum(byteArrayOf()),
+            )
         return RoutableMessage(
             from_destination = Destination(domain = Domain.DOMAIN_INFOTAINMENT),
             protobuf_message_as_bytes = ciphertext.toByteString(),
-            signature_data = SignatureData(
-                AES_GCM_Response_data = AES_GCM_Response_Signature_Data(
-                    nonce = nonce.toByteString(),
-                    counter = counter,
-                    tag = tag.toByteString(),
+            signature_data =
+                SignatureData(
+                    AES_GCM_Response_data =
+                        AES_GCM_Response_Signature_Data(
+                            nonce = nonce.toByteString(),
+                            counter = counter,
+                            tag = tag.toByteString(),
+                        ),
                 ),
-            ),
         )
     }
 }

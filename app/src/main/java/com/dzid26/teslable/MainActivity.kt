@@ -40,7 +40,6 @@ import com.dzid26.teslable.ui.SettingsScreen
 import com.dzid26.teslable.ui.TeslaBleTheme
 
 class MainActivity : ComponentActivity() {
-
     private lateinit var controller: TeslaBleController
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -72,28 +71,30 @@ class MainActivity : ComponentActivity() {
                 var requestedOnce by remember { mutableStateOf(false) }
                 var showSettings by rememberSaveable { mutableStateOf(false) }
 
-                val permissionLauncher = rememberLauncherForActivityResult(
-                    ActivityResultContracts.RequestMultiplePermissions()
-                ) { result ->
-                    permissionsGranted = result.values.all { it } && hasBlePermissions(context)
-                    if (permissionsGranted) {
-                        locationEnabled = isLocationEnabled(context)
-                        controller.startScan()
+                val permissionLauncher =
+                    rememberLauncherForActivityResult(
+                        ActivityResultContracts.RequestMultiplePermissions(),
+                    ) { result ->
+                        permissionsGranted = result.values.all { it } && hasBlePermissions(context)
+                        if (permissionsGranted) {
+                            locationEnabled = isLocationEnabled(context)
+                            controller.startScan()
+                        }
                     }
-                }
 
                 val requestPermissions: () -> Unit = {
                     val activity = context as? Activity
-                    val deniedForever = requestedOnce && activity != null &&
-                        requiredBlePermissions().none {
-                            ActivityCompat.shouldShowRequestPermissionRationale(activity, it)
-                        }
+                    val deniedForever =
+                        requestedOnce && activity != null &&
+                            requiredBlePermissions().none {
+                                ActivityCompat.shouldShowRequestPermissionRationale(activity, it)
+                            }
                     if (deniedForever) {
                         context.startActivity(
                             Intent(
                                 Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
                                 Uri.fromParts("package", context.packageName, null),
-                            ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
                         )
                     } else {
                         requestedOnce = true
@@ -101,25 +102,28 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                val notificationPermissionLauncher = rememberLauncherForActivityResult(
-                    ActivityResultContracts.RequestPermission()
-                ) {
-                    // Start tracking whether or not notifications were allowed: the
-                    // foreground service runs either way, it is just silent without
-                    // the permission.
-                    BleTrackingService.start(context)
-                }
+                val notificationPermissionLauncher =
+                    rememberLauncherForActivityResult(
+                        ActivityResultContracts.RequestPermission(),
+                    ) {
+                        // Start tracking whether or not notifications were allowed: the
+                        // foreground service runs either way, it is just silent without
+                        // the permission.
+                        BleTrackingService.start(context)
+                    }
 
                 // Once a car with an enrolled key is connected, hand off to the
                 // foreground service so BLE keeps running with the app backgrounded.
-                val trackingNeeded = state.trackingEnabled && state.connections.values.any { connection ->
-                    connection.phase == ConnectionPhase.READY &&
-                        (
-                            connection.pairing == PairingPhase.OK ||
-                                connection.keySlot != null ||
-                                connection.sessions.isNotEmpty()
-                            )
-                }
+                val trackingNeeded =
+                    state.trackingEnabled &&
+                        state.connections.values.any { connection ->
+                            connection.phase == ConnectionPhase.READY &&
+                                (
+                                    connection.pairing == PairingPhase.OK ||
+                                        connection.keySlot != null ||
+                                        connection.sessions.isNotEmpty()
+                                )
+                        }
                 LaunchedEffect(trackingNeeded) {
                     if (!trackingNeeded || BleTrackingService.isRunning) return@LaunchedEffect
                     if (!hasNotificationPermission(context)) {

@@ -6,7 +6,6 @@ import android.content.Context
 import com.dzid26.teslable.core.history.BatteryHistoryCsv
 import com.dzid26.teslable.core.history.BatterySample
 import com.dzid26.teslable.core.protocol.TeslaCommands
-import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -16,6 +15,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import java.io.File
 
 /**
  * Battery history as an append-only CSV in app storage, cached in memory and
@@ -25,7 +25,6 @@ import kotlinx.coroutines.sync.withLock
  * outgrow this.
  */
 class BatteryHistoryStore(context: Context) {
-
     private val file = File(context.filesDir, FILE_NAME)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val mutex = Mutex()
@@ -44,13 +43,14 @@ class BatteryHistoryStore(context: Context) {
         nowMillis: Long = System.currentTimeMillis(),
     ) {
         val percent = charge.batteryLevel ?: return
-        val sample = BatterySample(
-            timestampMillis = nowMillis,
-            percent = percent,
-            chargingState = charge.chargingState,
-            chargeLimit = charge.chargeLimit,
-            vehicleId = vehicleId,
-        )
+        val sample =
+            BatterySample(
+                timestampMillis = nowMillis,
+                percent = percent,
+                chargingState = charge.chargingState,
+                chargeLimit = charge.chargeLimit,
+                vehicleId = vehicleId,
+            )
         scope.launch {
             mutex.withLock {
                 val current = _samples.value
@@ -69,7 +69,7 @@ class BatteryHistoryStore(context: Context) {
                     file.writeText(
                         updated.joinToString(separator = "\n", postfix = "\n") {
                             BatteryHistoryCsv.encode(it)
-                        }
+                        },
                     )
                 }
                 _samples.value = updated

@@ -7,14 +7,14 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class BatteryHistoryCsvTest {
-
-    private val sample = BatterySample(
-        timestampMillis = 1_700_000_000_000L,
-        percent = 78,
-        chargingState = "Charging",
-        chargeLimit = 80,
-        vehicleId = "Se1f0941734830fe7C",
-    )
+    private val sample =
+        BatterySample(
+            timestampMillis = 1_700_000_000_000L,
+            percent = 78,
+            chargingState = "Charging",
+            chargeLimit = 80,
+            vehicleId = "Se1f0941734830fe7C",
+        )
 
     @Test
     fun roundTrips() {
@@ -23,13 +23,14 @@ class BatteryHistoryCsvTest {
 
     @Test
     fun roundTripsWithEmptyOptionalFields() {
-        val sparse = BatterySample(
-            timestampMillis = 1L,
-            percent = 50,
-            chargingState = null,
-            chargeLimit = null,
-            vehicleId = "S1a2b3c4d5e6f7080C",
-        )
+        val sparse =
+            BatterySample(
+                timestampMillis = 1L,
+                percent = 50,
+                chargingState = null,
+                chargeLimit = null,
+                vehicleId = "S1a2b3c4d5e6f7080C",
+            )
         assertEquals(sparse, BatteryHistoryCsv.parse(BatteryHistoryCsv.encode(sparse)))
     }
 
