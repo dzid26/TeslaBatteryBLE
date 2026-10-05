@@ -338,7 +338,8 @@ private fun VehicleCard(
     val display = connectionDisplay(row.connection, row.advert, showHints = true, vehicle = row.vehicle)
     val level = row.connection?.charge?.batteryLevel
     val paired =
-        row.connection?.keySlot != null ||
+        row.vehicle?.keySlot != null ||
+            row.connection?.keySlot != null ||
             row.connection?.sessions?.isNotEmpty() == true ||
             row.connection?.pairing == PairingPhase.OK
 
@@ -444,7 +445,7 @@ private fun CarScreen(
         ) {
             HeroCard(connection, advert, vehicle)
             ActionsRow(connection, onWake, onReadSoc)
-            PhoneKeyCard(connection, onPair)
+            PhoneKeyCard(connection, vehicle, onPair)
             VinCard(
                 bleName = bleName,
                 vehicle = vehicle,
@@ -560,10 +561,13 @@ private fun ActionsRow(
 @Composable
 private fun PhoneKeyCard(
     connection: TeslaConnection?,
+    vehicle: Vehicle?,
     onPair: () -> Unit,
 ) {
+    // The stored slot proves enrollment even before the car answers.
+    val keySlot = connection?.keySlot ?: vehicle?.keySlot
     val paired =
-        connection?.keySlot != null ||
+        keySlot != null ||
             connection?.sessions?.isNotEmpty() == true ||
             connection?.pairing == PairingPhase.OK
     Card(modifier = Modifier.fillMaxWidth()) {
@@ -575,7 +579,7 @@ private fun PhoneKeyCard(
                         text =
                             when {
                                 !paired -> "Not paired"
-                                connection.keySlot != null -> "Paired · slot ${connection.keySlot}"
+                                keySlot != null -> "Paired · slot $keySlot"
                                 else -> "Paired"
                             },
                         style = MaterialTheme.typography.bodySmall,
