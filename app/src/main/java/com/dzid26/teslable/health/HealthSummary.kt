@@ -56,6 +56,8 @@ data class HealthSummary(
     val ratedKwhPerMile: Float?,
     val capacitySwingPercent: Float?,
     val fullRangeMiles: Float?,
+    /** True when the full range came from the session's scale, not a reading. */
+    val fullRangeFromSession: Boolean,
     val rangeSocPercent: Float?,
     val confidence: HealthConfidence,
     /** A plain-language caveat when the inputs are thin, else null. */
@@ -152,6 +154,7 @@ fun healthSummary(
         ratedKwhPerMile = ratedKwhPerMile,
         capacitySwingPercent = (backboneSession ?: energySession)?.swingPercent,
         fullRangeMiles = fullRangeMiles,
+        fullRangeFromSession = backboneSession?.fullRangeMiles != null,
         rangeSocPercent = rangeSample?.batteryLevel?.toFloat(),
         confidence = confidenceFor(sessions.size),
         qualityNote = qualityNote(backboneSession ?: energySession ?: lastSession, rangeSample),
