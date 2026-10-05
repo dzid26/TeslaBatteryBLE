@@ -112,8 +112,14 @@ class FakeTeslaTransport(
 
     private companion object {
         const val RSSI_MS = 500L
-        const val DISCHARGE_MS = 60_000L
-        const val CHARGE_MS = 20_000L
+
+        /**
+         * The live demo drains about a percent an hour, like a parked Tesla, so
+         * the seeded history's slope dominates the chart's trailing windows
+         * instead of the fake's artificially fast samples.
+         */
+        const val DISCHARGE_MS = 60 * 60_000L
+        const val CHARGE_MS = 60_000L
         const val LATENCY_MS = 80L
     }
 }
