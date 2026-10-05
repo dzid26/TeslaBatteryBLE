@@ -118,8 +118,8 @@ fun connectionDisplay(
 }
 
 /**
- * The four connection states: disconnected, connected while asleep, connected
- * and reading, or connected with a battery percentage.
+ * The connection states: disconnected, connected while asleep, connected, or
+ * connected with a battery percentage.
  */
 private fun connectionStateText(
     connection: TeslaConnection?,
@@ -131,10 +131,10 @@ private fun connectionStateText(
         connection.phase == ConnectionPhase.READY && connection.status?.asleep == true ->
             "Connected \uD83D\uDCA4"
 
-        connection.phase == ConnectionPhase.READY && connection.status?.asleep == false ->
-            connection.charge?.batteryLevel?.let { "Connected · $it%" } ?: "Connected (reading)"
+        connection.phase == ConnectionPhase.READY && connection.charge?.batteryLevel != null ->
+            "Connected · ${connection.charge.batteryLevel}%"
 
-        connection.phase == ConnectionPhase.READY -> "Connected (reading)"
+        connection.phase == ConnectionPhase.READY -> "Connected"
 
         connection.phase == ConnectionPhase.FAILED ->
             if (showHints) "Disconnected · tap to retry" else "Disconnected"

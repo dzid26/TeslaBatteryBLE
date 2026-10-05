@@ -710,7 +710,7 @@ class TeslaBleController(
                     updateConnection(address) {
                         it.copy(pairing = PairingPhase.WAITING_FOR_CARD, pairingKeyId = pairingKeyId)
                     }
-                    log("No pairing response; tap the card and confirm on the car screen")
+                    log("${name()}: no pairing response yet; waiting for the card")
                 }
             }
 
@@ -719,7 +719,11 @@ class TeslaBleController(
                 override fun run() {
                     if (pairingPhase == PairingPhase.OK || pairingPhase == PairingPhase.ERROR) return
                     if (whitelistPollAttempts++ >= WHITELIST_MAX_ATTEMPTS) {
-                        log("Key not enrolled yet; tap the card and retry if needed")
+                        pairingPhase = PairingPhase.ERROR
+                        updateConnection(address) {
+                            it.copy(pairing = PairingPhase.ERROR, pairingKeyId = pairingKeyId)
+                        }
+                        log("${name()}: the car did not confirm the key; pair again when ready")
                         return
                     }
                     transport?.send(TeslaVcsec.buildWhitelistInfoRequest())
@@ -1200,6 +1204,13 @@ class TeslaBleController(
                     }
                 pairingPhase = phase
                 updateConnection(address) { it.copy(pairing = phase, pairingKeyId = pairingKeyId) }
+                if (phase == PairingPhase.OK) {
+                    // The car confirmed the key: save the vehicle, open a
+                    // session, and pull the whitelist so the slot resolves.
+                    rememberVehicle(address)
+                    startSession()
+                    requestKeySlot()
+                }
                 log("${name()}: pairing ${pairing.name.lowercase()}")
                 return
             }

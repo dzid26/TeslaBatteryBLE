@@ -52,6 +52,8 @@ class FakeCarProtocol(
     data class Response(
         val bytes: ByteArray,
         val delayMs: Long = 0,
+        /** Runs when the transport delivers this response, after [delayMs]. */
+        val onDelivered: (() -> Unit)? = null,
     )
 
     var asleep: Boolean = true
@@ -207,9 +209,15 @@ class FakeCarProtocol(
         val unsigned = runCatching { UnsignedMessage.ADAPTER.decode(payload) }.getOrNull() ?: return
         val addKey = unsigned.VCSEC_WhitelistOperation?.addKeyToWhitelistAndAddPermissions ?: return
         val publicKey = addKey.key?.PublicKeyRaw?.toByteArray() ?: return
-        setEnrolledKey(publicKey)
+        // The car only enrolls the key once the card tap is confirmed; until
+        // then the whitelist stays empty and the app keeps waiting.
         out += commandStatus(OperationStatus_E.OPERATIONSTATUS_WAIT)
-        out += commandStatus(OperationStatus_E.OPERATIONSTATUS_OK, CARD_TAP_MS)
+        out +=
+            commandStatus(
+                OperationStatus_E.OPERATIONSTATUS_OK,
+                CARD_TAP_MS,
+                onDelivered = { setEnrolledKey(publicKey) },
+            )
     }
 
     private fun handleSessionRequest(
@@ -219,7 +227,8 @@ class FakeCarProtocol(
         val domain = request.to_destination?.domain ?: return
         val clientPublic = request.session_info_request?.public_key?.toByteArray() ?: return
         val challenge = request.uuid?.toByteArray() ?: return
-        setEnrolledKey(clientPublic)
+        // Opening a session does not enroll the key; only the add-key pairing
+        // flow (or the transport pre-loading an already-paired app) does.
 
         val carKey = TeslaKeys.generate()
         val sessionKey = TeslaCrypto.sessionKey(carKey.privateKeyPkcs8, clientPublic)
@@ -373,10 +382,12 @@ class FakeCarProtocol(
     private fun commandStatus(
         status: OperationStatus_E,
         delayMs: Long = 0,
+        onDelivered: (() -> Unit)? = null,
     ): Response =
         Response(
             FromVCSECMessage(commandStatus = CommandStatus(operationStatus = status)).encode(),
             delayMs,
+            onDelivered,
         )
 
     private fun plaintext(

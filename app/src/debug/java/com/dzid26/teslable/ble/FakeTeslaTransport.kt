@@ -80,7 +80,12 @@ class FakeTeslaTransport(
         if (!connected) return false
         for (response in protocol.handle(payload.copyOf())) {
             handler.postDelayed(
-                { if (connected) listener.onMessage(response.bytes) },
+                {
+                    if (connected) {
+                        response.onDelivered?.invoke()
+                        listener.onMessage(response.bytes)
+                    }
+                },
                 LATENCY_MS + response.delayMs,
             )
         }

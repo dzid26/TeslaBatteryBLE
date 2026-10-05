@@ -123,7 +123,8 @@ if tap_text "AA:BB:CC:DD:EE:01"; then
   sleep 4
   adb exec-out screencap -p > "$OUT/03-car.png"
   if tap_text "Pair key"; then
-    sleep 3
+    # Capture the waiting state before the simulated card tap confirms.
+    sleep 1
     adb exec-out screencap -p > "$OUT/04-demo-card-tap.png"
     sleep 6
     adb exec-out screencap -p > "$OUT/05-demo-paired.png"
