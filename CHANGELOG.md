@@ -45,6 +45,10 @@ All notable changes to this project are documented here. The format is based on
 - The log panel is pinned to the bottom of the cars screen
 - An empty cars list starts scanning on its own; the Enable toggle still
   disables scanning, and pull-to-refresh remains the manual path
+- Waking a sleeping car now handshakes a fresh VCSEC session first: a car that
+  slept through a session rotation was dropping the wake command silently. The
+  cars-list long-press menu has Wake next to Edit VIN, and wake progress and
+  failures are logged ("wake requested", "wake not confirmed")
 - The history chart derives the charge projection from every sample (not just
   the visible range) and captions it ("projected 85% around 21:40"); the demo
   car now charges to its limit, so the dashed target is visible in demos
