@@ -44,19 +44,21 @@ reads wait until the car is already awake or you trigger a wake.
 3. Confirm on the vehicle screen when it asks. The app then verifies the new
    key appears in the car's key list.
 
-## Where are my keys stored?
+## Where are my vehicle keys stored?
 
 In app-private storage on your phone, which other apps cannot read. Vehicle
-keys (P-256) are generated on-device. By default the private key is encrypted
-with this device's Android Keystore and is kept out of backups, so a new phone
-requires re-pairing with an NFC card tap. You can opt in to "Include key in
-Android backup" in Settings; then on Android 12+ the key can be restored on a new
-phone when encrypted backup (device lock secret) is available, while Android 11
-and below keep it out of backup. The default `CHARGING_MANAGER` role limits
-impact to read + charge control — it cannot unlock or drive the car, and adding
-new keys always needs an NFC card tap plus vehicle confirmation. You can remove
-the app's key from the car's key list at any time. Uninstalling the app deletes
-local key material. Details:
+keys (P-256) are generated on-device. By default the private keys are encrypted
+with this device's hardware-backed Android Keystore (AES) and kept out of
+backups, so a new phone requires re-pairing with an NFC card tap. One setting
+applies to all paired cars: opting in to "Include vehicle keys in Android backup"
+lets Android restore them on a new phone; Android backups are encrypted with your
+Google account and device lock, and Android 12+ additionally requires that
+encrypted backup is available (Android 11 and below always keep keys out of
+backup). The default `CHARGING_MANAGER` role limits impact to read + charge
+control — keys cannot unlock or drive the car, and adding new keys always needs
+an NFC card tap plus vehicle confirmation. You can remove the app's key from a
+car's key list at any time. Uninstalling the app deletes local key material.
+Details:
 [session and pairing](protocol/session-and-pairing.md),
 [ADR-0005](adr/0005-plaintext-key-storage.md).
 
