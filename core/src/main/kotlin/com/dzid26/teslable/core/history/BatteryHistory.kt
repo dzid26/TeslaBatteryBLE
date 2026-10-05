@@ -18,6 +18,22 @@ data class BatterySample(
     val socPercent: Float? = null,
     /** Estimated or rated range in miles; null when the car reported none. */
     val rangeMiles: Float? = null,
+    /** Displayed SOC as reported (`battery_level`), before [socPercent] fallbacks. */
+    val batteryLevel: Int? = null,
+    /** Usable SOC as reported (`usable_battery_level`); can sit below [batteryLevel]. */
+    val usableBatteryLevel: Int? = null,
+    /** `battery_range`: rated range in miles at this SOC. */
+    val ratedRangeMiles: Float? = null,
+    /** `est_battery_range`: estimated range in miles at this SOC. */
+    val estRangeMiles: Float? = null,
+    /** `ideal_battery_range`: ideal range in miles at this SOC. */
+    val idealRangeMiles: Float? = null,
+    /** `charge_energy_added`: kWh added so far this session; 0 when idle. */
+    val chargeEnergyAdded: Float? = null,
+    /** `charge_miles_added_rated`: rated miles added so far this session. */
+    val chargeMilesAddedRated: Float? = null,
+    /** `charge_miles_added_ideal`: ideal miles added so far this session. */
+    val chargeMilesAddedIdeal: Float? = null,
 ) {
     val isCharging: Boolean get() = chargingState == "Charging"
 
