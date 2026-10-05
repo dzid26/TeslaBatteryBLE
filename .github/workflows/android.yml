@@ -19,9 +19,10 @@ permissions:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  # Only the newest run for a ref matters (main feeds the rolling preview).
-  # Tags are their own group, so releases are never cancelled by a push.
-  cancel-in-progress: true
+  # Main runs are never cancelled: the preview capture needs ~15 minutes and
+  # rapid pushes would otherwise kill it before it can publish. Only PR runs
+  # are superseded; queued previews collapse in the preview job below.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build:
@@ -154,7 +155,9 @@ jobs:
       (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     concurrency:
       group: preview-release
-      cancel-in-progress: true
+      # Let the in-flight capture finish; newer pending previews replace older
+      # pending ones, so the newest build still wins without killing the sheet.
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
