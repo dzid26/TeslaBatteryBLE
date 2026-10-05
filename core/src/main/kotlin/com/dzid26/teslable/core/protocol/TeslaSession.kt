@@ -125,7 +125,6 @@ class TeslaSession private constructor(
 
     companion object {
         const val LABEL_SESSION_INFO = "session info"
-        private const val LABEL_MESSAGE_AUTH = "authenticated command"
         private const val COUNTER_MAX = -1
 
         fun sessionInfoHmac(

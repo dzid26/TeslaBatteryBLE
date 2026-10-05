@@ -20,21 +20,26 @@ object EnergyDeltaEstimator {
         socEndPercent: Double,
         newCapacityKwh: Double? = null,
     ): CapacityEstimate? {
-        if (energyAddedKwh.isNaN() || energyAddedKwh.isInfinite()) return null
-        if (socStartPercent.isNaN() || socStartPercent.isInfinite()) return null
-        if (socEndPercent.isNaN() || socEndPercent.isInfinite()) return null
-        if (newCapacityKwh != null) {
-            if (newCapacityKwh.isNaN() || newCapacityKwh.isInfinite()) return null
-            if (newCapacityKwh <= 0.0) return null
-        }
-        if (energyAddedKwh <= 0.0) return null
-        if (socStartPercent < 0.0) return null
-        if (socEndPercent > 100.0) return null
-        if (socStartPercent >= socEndPercent) return null
+        if (!isValidInputs(energyAddedKwh, socStartPercent, socEndPercent, newCapacityKwh)) return null
         val delta = socEndPercent - socStartPercent
         if (delta < 5.0) return null
         val usableCapacity = energyAddedKwh / (delta / 100.0)
         val soh = newCapacityKwh?.let { usableCapacity / it * 100.0 }
         return CapacityEstimate(usableCapacity, soh, delta)
     }
+
+    private fun isValidInputs(
+        energyAddedKwh: Double,
+        socStartPercent: Double,
+        socEndPercent: Double,
+        newCapacityKwh: Double?,
+    ): Boolean =
+        energyAddedKwh.isFinite() &&
+            energyAddedKwh > 0.0 &&
+            socStartPercent.isFinite() &&
+            socStartPercent >= 0.0 &&
+            socEndPercent.isFinite() &&
+            socEndPercent <= 100.0 &&
+            socStartPercent < socEndPercent &&
+            (newCapacityKwh == null || (newCapacityKwh.isFinite() && newCapacityKwh > 0.0))
 }

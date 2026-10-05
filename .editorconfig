@@ -9,6 +9,8 @@ trim_trailing_whitespace = true
 [*.{kt,kts}]
 indent_style = space
 indent_size = 4
+# Uppercase names are the official convention for @Composable functions.
+ktlint_function_naming_ignore_when_annotated_with = Composable
 
 [*.{yml,yaml,toml,properties}]
 indent_style = space
