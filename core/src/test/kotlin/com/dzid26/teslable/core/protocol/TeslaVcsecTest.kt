@@ -22,7 +22,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TeslaVcsecTest {
-
     @Test
     fun `status request targets VCSEC with an information request payload`() {
         val request = RoutableMessage.ADAPTER.decode(TeslaVcsec.buildStatusRequest())
@@ -40,16 +39,19 @@ class TeslaVcsecTest {
 
     @Test
     fun `parses a vehicle status response`() {
-        val vcsecPayload = FromVCSECMessage(
-            vehicleStatus = VehicleStatus(
-                vehicleLockState = VehicleLockState_E.VEHICLELOCKSTATE_LOCKED,
-                vehicleSleepStatus = VehicleSleepStatus_E.VEHICLE_SLEEP_STATUS_ASLEEP,
-                userPresence = UserPresence_E.VEHICLE_USER_PRESENCE_NOT_PRESENT,
-            ),
-        ).encode()
-        val response = RoutableMessage(
-            protobuf_message_as_bytes = vcsecPayload.toByteString(),
-        ).encode()
+        val vcsecPayload =
+            FromVCSECMessage(
+                vehicleStatus =
+                    VehicleStatus(
+                        vehicleLockState = VehicleLockState_E.VEHICLELOCKSTATE_LOCKED,
+                        vehicleSleepStatus = VehicleSleepStatus_E.VEHICLE_SLEEP_STATUS_ASLEEP,
+                        userPresence = UserPresence_E.VEHICLE_USER_PRESENCE_NOT_PRESENT,
+                    ),
+            ).encode()
+        val response =
+            RoutableMessage(
+                protobuf_message_as_bytes = vcsecPayload.toByteString(),
+            ).encode()
 
         val status = TeslaVcsec.parseStatusResponse(response)
         assertNotNull(status)
@@ -77,14 +79,17 @@ class TeslaVcsecTest {
     @Test
     fun `parses whitelist info responses`() {
         val keyId = byteArrayOf(1, 2, 3, 4)
-        val payload = FromVCSECMessage(
-            whitelistInfo = WhitelistInfo(
-                numberOfEntries = 1,
-                whitelistEntries = listOf(
-                    KeyIdentifier(publicKeySHA1 = keyId.toByteString()),
-                ),
-            ),
-        ).encode()
+        val payload =
+            FromVCSECMessage(
+                whitelistInfo =
+                    WhitelistInfo(
+                        numberOfEntries = 1,
+                        whitelistEntries =
+                            listOf(
+                                KeyIdentifier(publicKeySHA1 = keyId.toByteString()),
+                            ),
+                    ),
+            ).encode()
         val response = RoutableMessage(protobuf_message_as_bytes = payload.toByteString()).encode()
 
         val info = TeslaVcsec.parseWhitelistInfoResponse(response)
@@ -108,12 +113,14 @@ class TeslaVcsecTest {
     @Test
     fun `parses whitelist entry responses`() {
         val keyId = byteArrayOf(9, 9, 9, 9)
-        val payload = FromVCSECMessage(
-            whitelistEntryInfo = WhitelistEntryInfo(
-                keyId = KeyIdentifier(publicKeySHA1 = keyId.toByteString()),
-                slot = 8,
-            ),
-        ).encode()
+        val payload =
+            FromVCSECMessage(
+                whitelistEntryInfo =
+                    WhitelistEntryInfo(
+                        keyId = KeyIdentifier(publicKeySHA1 = keyId.toByteString()),
+                        slot = 8,
+                    ),
+            ).encode()
         val response = RoutableMessage(protobuf_message_as_bytes = payload.toByteString()).encode()
 
         val info = TeslaVcsec.parseWhitelistEntryResponse(response)

@@ -18,7 +18,6 @@ import okio.ByteString.Companion.toByteString
 import java.security.SecureRandom
 
 object TeslaVcsec {
-
     private const val ADDRESS_LENGTH = 16
     private val random = SecureRandom()
 
@@ -28,11 +27,9 @@ object TeslaVcsec {
         val userPresent: Boolean,
     )
 
-    fun buildStatusRequest(): ByteArray =
-        buildInformationRequest(InformationRequestType.INFORMATION_REQUEST_TYPE_GET_STATUS)
+    fun buildStatusRequest(): ByteArray = buildInformationRequest(InformationRequestType.INFORMATION_REQUEST_TYPE_GET_STATUS)
 
-    fun buildWhitelistInfoRequest(): ByteArray =
-        buildInformationRequest(InformationRequestType.INFORMATION_REQUEST_TYPE_GET_WHITELIST_INFO)
+    fun buildWhitelistInfoRequest(): ByteArray = buildInformationRequest(InformationRequestType.INFORMATION_REQUEST_TYPE_GET_WHITELIST_INFO)
 
     fun buildWhitelistEntryRequest(slot: Int): ByteArray =
         buildInformationRequest(
@@ -63,19 +60,20 @@ object TeslaVcsec {
         return FromVCSECMessage.ADAPTER.decode(payload).whitelistEntryInfo
     }
 
-    fun parseCommandStatus(payload: ByteArray): OperationStatus_E? =
-        FromVCSECMessage.ADAPTER.decode(payload).commandStatus?.operationStatus
+    fun parseCommandStatus(payload: ByteArray): OperationStatus_E? = FromVCSECMessage.ADAPTER.decode(payload).commandStatus?.operationStatus
 
     private fun buildInformationRequest(
         type: InformationRequestType,
         slot: Int? = null,
     ): ByteArray {
-        val payload = UnsignedMessage(
-            VCSEC_InformationRequest = InformationRequest(
-                informationRequestType = type,
-                slot = slot,
-            ),
-        ).encode()
+        val payload =
+            UnsignedMessage(
+                VCSEC_InformationRequest =
+                    InformationRequest(
+                        informationRequestType = type,
+                        slot = slot,
+                    ),
+            ).encode()
         return RoutableMessage(
             to_destination = Destination(domain = Domain.DOMAIN_VEHICLE_SECURITY),
             from_destination = Destination(routing_address = randomBytes().toByteString()),

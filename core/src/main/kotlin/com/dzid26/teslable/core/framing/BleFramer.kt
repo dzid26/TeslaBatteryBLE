@@ -39,7 +39,10 @@ class BleFramer(
         const val MAX_MESSAGE_SIZE = 1024
         const val RX_TIMEOUT_MS = 1000L
 
-        fun encode(payload: ByteArray, chunkSize: Int): List<ByteArray> {
+        fun encode(
+            payload: ByteArray,
+            chunkSize: Int,
+        ): List<ByteArray> {
             require(chunkSize >= 1) { "chunkSize must be positive" }
             val framed = ByteArray(HEADER_SIZE + payload.size)
             framed[0] = ((payload.size shr 8) and 0xFF).toByte()

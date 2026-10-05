@@ -8,7 +8,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class HealthFusionTest {
-
     @Test
     fun `single source passes through`() {
         val result = HealthFusion.fuse(90.0, null)!!

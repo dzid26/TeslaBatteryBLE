@@ -18,7 +18,6 @@ import okio.ByteString
 import okio.ByteString.Companion.toByteString
 
 object TeslaPairing {
-
     enum class Result {
         OK,
         WAITING_FOR_CARD,
@@ -30,20 +29,24 @@ object TeslaPairing {
         role: Role = Role.ROLE_CHARGING_MANAGER,
         formFactor: KeyFormFactor = KeyFormFactor.KEY_FORM_FACTOR_ANDROID_DEVICE,
     ): ByteArray {
-        val payload = UnsignedMessage(
-            VCSEC_WhitelistOperation = WhitelistOperation(
-                addKeyToWhitelistAndAddPermissions = PermissionChange(
-                    key = PublicKey(PublicKeyRaw = publicKeyRaw.toByteString()),
-                    keyRole = role,
-                ),
-                metadataForKey = KeyMetadata(keyFormFactor = formFactor),
-            ),
-        ).encode()
+        val payload =
+            UnsignedMessage(
+                VCSEC_WhitelistOperation =
+                    WhitelistOperation(
+                        addKeyToWhitelistAndAddPermissions =
+                            PermissionChange(
+                                key = PublicKey(PublicKeyRaw = publicKeyRaw.toByteString()),
+                                keyRole = role,
+                            ),
+                        metadataForKey = KeyMetadata(keyFormFactor = formFactor),
+                    ),
+            ).encode()
         return ToVCSECMessage(
-            signedMessage = SignedMessage(
-                protobufMessageAsBytes = payload.toByteString(),
-                signatureType = SignatureType.SIGNATURE_TYPE_PRESENT_KEY,
-            ),
+            signedMessage =
+                SignedMessage(
+                    protobufMessageAsBytes = payload.toByteString(),
+                    signatureType = SignatureType.SIGNATURE_TYPE_PRESENT_KEY,
+                ),
         ).encode()
     }
 
@@ -57,9 +60,10 @@ object TeslaPairing {
     }
 
     private fun statusFrom(payload: ByteString): Result? {
-        val commandStatus = runCatching {
-            FromVCSECMessage.ADAPTER.decode(payload).commandStatus
-        }.getOrNull() ?: return null
+        val commandStatus =
+            runCatching {
+                FromVCSECMessage.ADAPTER.decode(payload).commandStatus
+            }.getOrNull() ?: return null
         return when (commandStatus.operationStatus) {
             OperationStatus_E.OPERATIONSTATUS_OK -> Result.OK
             OperationStatus_E.OPERATIONSTATUS_WAIT -> Result.WAITING_FOR_CARD

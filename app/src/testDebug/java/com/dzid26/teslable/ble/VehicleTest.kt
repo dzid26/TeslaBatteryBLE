@@ -8,17 +8,17 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class VehicleTest {
-
     // Verified on a real car: this VIN advertises as this BLE name.
     private val vin = "5YJ3E7EBXKF523421"
     private val bleName = "Se1f0941734830fe7C"
 
-    private fun vehicle(vin: String? = null) = Vehicle(
-        bleName = bleName,
-        address = "18:04:ED:84:79:80",
-        gattName = "\uD83D\uDD11 Teslak",
-        vin = vin,
-    )
+    private fun vehicle(vin: String? = null) =
+        Vehicle(
+            bleName = bleName,
+            address = "18:04:ED:84:79:80",
+            gattName = "\uD83D\uDD11 Teslak",
+            vin = vin,
+        )
 
     @Test
     fun acceptsTheVinThatMatchesTheAdvertisedName() {

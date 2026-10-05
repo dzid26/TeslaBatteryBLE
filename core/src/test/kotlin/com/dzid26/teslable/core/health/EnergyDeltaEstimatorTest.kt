@@ -6,7 +6,6 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class EnergyDeltaEstimatorTest {
-
     @Test
     fun `computes capacity and soh from a charge session`() {
         val result = EnergyDeltaEstimator.estimate(26.25, 20.0, 60.0, 75.0)!!

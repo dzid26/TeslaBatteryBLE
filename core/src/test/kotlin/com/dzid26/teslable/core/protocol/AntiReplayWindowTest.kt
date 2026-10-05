@@ -7,7 +7,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AntiReplayWindowTest {
-
     @Test
     fun `accepts a higher counter and shifts the window`() {
         val (counter, window, ok) = AntiReplayWindow.updateSlidingWindow(100, 1L or (1L shl 5), 101)

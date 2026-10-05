@@ -17,7 +17,6 @@ data class FusedSoH(
 )
 
 object HealthFusion {
-
     fun fuse(
         ratedRangeSohPercent: Double?,
         energyDeltaSohPercent: Double?,

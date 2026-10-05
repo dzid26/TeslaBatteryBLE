@@ -14,7 +14,6 @@ data class RatedRangeSoH(
 )
 
 object RatedRangeEstimator {
-
     fun estimate(
         displayedRangeMiles: Double,
         socPercent: Double,

@@ -26,7 +26,10 @@ enum class HistoryRange(val durationMillis: Long?) {
     ALL(null),
 }
 
-fun List<BatterySample>.within(range: HistoryRange, nowMillis: Long): List<BatterySample> {
+fun List<BatterySample>.within(
+    range: HistoryRange,
+    nowMillis: Long,
+): List<BatterySample> {
     val duration = range.durationMillis ?: return this
     val cutoff = nowMillis - duration
     return filter { it.timestampMillis >= cutoff }

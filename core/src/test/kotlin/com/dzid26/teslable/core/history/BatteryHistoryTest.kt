@@ -7,22 +7,25 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class BatteryHistoryTest {
-
-    private fun sample(minutes: Long, percent: Int, state: String? = "Disconnected") =
-        BatterySample(
-            timestampMillis = minutes * 60_000L,
-            percent = percent,
-            chargingState = state,
-            chargeLimit = null,
-        )
+    private fun sample(
+        minutes: Long,
+        percent: Int,
+        state: String? = "Disconnected",
+    ) = BatterySample(
+        timestampMillis = minutes * 60_000L,
+        percent = percent,
+        chargingState = state,
+        chargeLimit = null,
+    )
 
     @Test
     fun withinFiltersByRange() {
-        val samples = listOf(
-            sample(minutes = 0, percent = 80),
-            sample(minutes = 60, percent = 79),
-            sample(minutes = 600, percent = 70),
-        )
+        val samples =
+            listOf(
+                sample(minutes = 0, percent = 80),
+                sample(minutes = 60, percent = 79),
+                sample(minutes = 600, percent = 70),
+            )
         val now = 600 * 60_000L
 
         assertEquals(1, samples.within(HistoryRange.SIX_HOURS, now).size)
@@ -44,13 +47,14 @@ class BatteryHistoryTest {
 
     @Test
     fun chargeStatsSinceLastChargeEnd() {
-        val samples = listOf(
-            sample(0, 70),
-            sample(30, 80, "Charging"),
-            sample(60, 85, "Charging"),
-            sample(90, 84),
-            sample(120, 78),
-        )
+        val samples =
+            listOf(
+                sample(0, 70),
+                sample(30, 80, "Charging"),
+                sample(60, 85, "Charging"),
+                sample(90, 84),
+                sample(120, 78),
+            )
 
         val stats = chargeStats(samples)!!
         assertEquals(90 * 60_000L, stats.sinceMillis)
@@ -63,12 +67,13 @@ class BatteryHistoryTest {
 
     @Test
     fun chargeStatsUseLastCharge() {
-        val samples = listOf(
-            sample(0, 60, "Charging"),
-            sample(30, 70),
-            sample(60, 80, "Charging"),
-            sample(90, 75),
-        )
+        val samples =
+            listOf(
+                sample(0, 60, "Charging"),
+                sample(30, 70),
+                sample(60, 80, "Charging"),
+                sample(90, 75),
+            )
 
         val stats = chargeStats(samples)!!
         assertEquals(90 * 60_000L, stats.sinceMillis)

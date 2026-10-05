@@ -11,7 +11,6 @@ import android.content.Context
  * and polling keep working with the screen off.
  */
 object BleControllerHolder {
-
     @Volatile
     private var instance: TeslaBleController? = null
 

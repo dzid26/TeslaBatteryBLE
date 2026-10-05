@@ -14,7 +14,6 @@ data class CapacityEstimate(
 )
 
 object EnergyDeltaEstimator {
-
     fun estimate(
         energyAddedKwh: Double,
         socStartPercent: Double,

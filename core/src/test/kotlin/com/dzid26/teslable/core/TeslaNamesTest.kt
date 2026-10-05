@@ -8,7 +8,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TeslaNamesTest {
-
     @Test
     fun `derives advertised name from VIN`() {
         assertEquals("S3acc31774a738ea0C", TeslaNames.bleName("5YJ3E1EA7KF000001"))

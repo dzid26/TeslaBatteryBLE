@@ -26,7 +26,6 @@ import org.junit.Test
  * production parsers.
  */
 class FakeCarProtocolTest {
-
     private val vin = "5YJ3DEMO000000001"
     private val client = TeslaKeys.generate()
     private val protocol = FakeCarProtocol(vin)
@@ -46,9 +45,10 @@ class FakeCarProtocolTest {
     fun `whitelist reports the enrolled key`() {
         protocol.setEnrolledKey(client.publicKeyRaw)
 
-        val info = TeslaVcsec.parseWhitelistInfoResponse(
-            protocol.handle(TeslaVcsec.buildWhitelistInfoRequest()).single().bytes,
-        )
+        val info =
+            TeslaVcsec.parseWhitelistInfoResponse(
+                protocol.handle(TeslaVcsec.buildWhitelistInfoRequest()).single().bytes,
+            )
         assertNotNull(info)
         assertEquals(1, info!!.numberOfEntries)
         assertTrue(
@@ -57,9 +57,10 @@ class FakeCarProtocolTest {
                 .contentEquals(client.keyId),
         )
 
-        val entry = TeslaVcsec.parseWhitelistEntryResponse(
-            protocol.handle(TeslaVcsec.buildWhitelistEntryRequest(0)).single().bytes,
-        )
+        val entry =
+            TeslaVcsec.parseWhitelistEntryResponse(
+                protocol.handle(TeslaVcsec.buildWhitelistEntryRequest(0)).single().bytes,
+            )
         assertNotNull(entry)
         assertEquals(0, entry!!.slot)
         assertArrayEquals(client.publicKeyRaw, entry.publicKey?.PublicKeyRaw?.toByteArray())
@@ -67,9 +68,10 @@ class FakeCarProtocolTest {
 
     @Test
     fun `empty whitelist when no key is enrolled`() {
-        val info = TeslaVcsec.parseWhitelistInfoResponse(
-            protocol.handle(TeslaVcsec.buildWhitelistInfoRequest()).single().bytes,
-        )
+        val info =
+            TeslaVcsec.parseWhitelistInfoResponse(
+                protocol.handle(TeslaVcsec.buildWhitelistInfoRequest()).single().bytes,
+            )
         assertEquals(0, info!!.numberOfEntries)
     }
 
@@ -89,11 +91,12 @@ class FakeCarProtocolTest {
     @Test
     fun `wake decrypts, replies ok, and clears asleep`() {
         val session = session(Domain.DOMAIN_VEHICLE_SECURITY)
-        val plaintext = authenticated(
-            session,
-            Domain.DOMAIN_VEHICLE_SECURITY,
-            TeslaCommands.buildWakeRequest(),
-        )
+        val plaintext =
+            authenticated(
+                session,
+                Domain.DOMAIN_VEHICLE_SECURITY,
+                TeslaCommands.buildWakeRequest(),
+            )
 
         assertEquals(
             OperationStatus_E.OPERATIONSTATUS_OK,
@@ -105,11 +108,12 @@ class FakeCarProtocolTest {
     @Test
     fun `charge decrypts to a charge state`() {
         val session = session(Domain.DOMAIN_INFOTAINMENT)
-        val plaintext = authenticated(
-            session,
-            Domain.DOMAIN_INFOTAINMENT,
-            TeslaCommands.buildChargeStateRequest(),
-        )
+        val plaintext =
+            authenticated(
+                session,
+                Domain.DOMAIN_INFOTAINMENT,
+                TeslaCommands.buildChargeStateRequest(),
+            )
 
         val charge = TeslaCommands.parseChargeState(plaintext)
         assertNotNull(charge)
@@ -131,15 +135,17 @@ class FakeCarProtocolTest {
 
     private fun session(domain: Domain): TeslaSession {
         val uuid = TeslaCrypto.randomBytes(16)
-        val request = TeslaSessionRequests.buildSessionInfoRequest(
-            domain = domain,
-            publicKeyRaw = client.publicKeyRaw,
-            routingAddress = TeslaCrypto.randomBytes(16),
-            uuid = uuid,
-        )
-        val response = RoutableMessage.ADAPTER.decode(
-            protocol.handle(request).single().bytes,
-        )
+        val request =
+            TeslaSessionRequests.buildSessionInfoRequest(
+                domain = domain,
+                publicKeyRaw = client.publicKeyRaw,
+                routingAddress = TeslaCrypto.randomBytes(16),
+                uuid = uuid,
+            )
+        val response =
+            RoutableMessage.ADAPTER.decode(
+                protocol.handle(request).single().bytes,
+            )
         return TeslaSession.import(
             privateKeyPkcs8 = client.privateKeyPkcs8,
             publicKeyRaw = client.publicKeyRaw,
@@ -156,17 +162,19 @@ class FakeCarProtocolTest {
         payload: ByteArray,
     ): ByteArray {
         val uuid = TeslaCrypto.randomBytes(16)
-        val message = TeslaSessionRequests.buildAuthenticatedRequest(
-            domain = domain,
-            payload = payload,
-            routingAddress = TeslaCrypto.randomBytes(16),
-            uuid = uuid,
-        )
+        val message =
+            TeslaSessionRequests.buildAuthenticatedRequest(
+                domain = domain,
+                payload = payload,
+                routingAddress = TeslaCrypto.randomBytes(16),
+                uuid = uuid,
+            )
         val encrypted = session.encrypt(message, 5)!!
         val requestId = session.requestId(encrypted)!!
-        val response = RoutableMessage.ADAPTER.decode(
-            protocol.handle(encrypted.encode()).single().bytes,
-        )
+        val response =
+            RoutableMessage.ADAPTER.decode(
+                protocol.handle(encrypted.encode()).single().bytes,
+            )
         return session.decrypt(response, requestId, AntiReplayWindow())!!
     }
 }

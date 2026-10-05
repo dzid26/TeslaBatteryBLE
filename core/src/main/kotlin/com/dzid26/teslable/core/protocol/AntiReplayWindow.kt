@@ -2,7 +2,6 @@
 package com.dzid26.teslable.core.protocol
 
 class AntiReplayWindow {
-
     private var history = 0L
     private var counter = 0
     private var used = false
@@ -24,7 +23,11 @@ class AntiReplayWindow {
     companion object {
         const val WINDOW_SIZE = 32
 
-        fun updateSlidingWindow(counter: Int, window: Long, newCounter: Int): Triple<Int, Long, Boolean> {
+        fun updateSlidingWindow(
+            counter: Int,
+            window: Long,
+            newCounter: Int,
+        ): Triple<Int, Long, Boolean> {
             val current = counter.toLong() and UINT32_MASK
             val incoming = newCounter.toLong() and UINT32_MASK
 
@@ -44,11 +47,12 @@ class AntiReplayWindow {
             }
 
             val shift = incoming - current
-            val updatedWindow = if (shift >= Long.SIZE_BITS) {
-                0L
-            } else {
-                (window shl shift.toInt()) or (1L shl (shift - 1).toInt())
-            }
+            val updatedWindow =
+                if (shift >= Long.SIZE_BITS) {
+                    0L
+                } else {
+                    (window shl shift.toInt()) or (1L shl (shift - 1).toInt())
+                }
             return Triple(newCounter, updatedWindow, true)
         }
 
