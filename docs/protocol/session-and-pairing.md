@@ -3,9 +3,13 @@
 ## Key material
 
 - Vehicle keys are P-256 (secp256r1) key pairs generated on-device.
-- The private key is encrypted with an AES key held in the Android Keystore.
-- Keys never leave the device and are never logged. TEE/StrongBox-backed ECDH is a
-  future hardening step (see the master plan).
+- The private key is stored as PKCS#8 base64 in app-private SharedPreferences so
+  Android's system backup can restore pairing on a new phone (ADR-0005).
+- Legacy Keystore-encrypted material is decrypted and migrated transparently on
+  first load; the IV is removed after migration.
+- Keys never leave the device and are never logged. The default enrolled role is
+  `CHARGING_MANAGER` (read + charge control, no unlock/drive). TEE/StrongBox-backed
+  storage is a future hardening step if higher-privilege roles are added.
 
 ## Session handshake (per domain)
 

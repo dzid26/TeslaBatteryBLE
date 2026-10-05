@@ -1,5 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- API 26-30: keep user data in backup, but never the pairing key material. -->
-<full-backup-content>
-    <exclude domain="sharedpref" path="pairing_key.xml" />
-</full-backup-content>
