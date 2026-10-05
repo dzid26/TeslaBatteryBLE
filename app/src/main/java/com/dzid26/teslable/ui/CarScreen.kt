@@ -678,13 +678,6 @@ private fun BatteryChart(
                         pathEffect = PathEffect.dashPathEffect(floatArrayOf(8.dp.toPx(), 6.dp.toPx())),
                     ),
             )
-            // The projected endpoint sits at the right edge (it is in the
-            // future); a dot marks the target so the line reads as a target.
-            drawCircle(
-                color = chargingColor,
-                radius = 3.dp.toPx(),
-                center = end,
-            )
         }
 
         discharge?.let { target ->
@@ -705,11 +698,6 @@ private fun BatteryChart(
                         width = 2.dp.toPx(),
                         pathEffect = PathEffect.dashPathEffect(floatArrayOf(8.dp.toPx(), 6.dp.toPx())),
                     ),
-            )
-            drawCircle(
-                color = lineColor,
-                radius = 3.dp.toPx(),
-                center = end,
             )
         }
 
