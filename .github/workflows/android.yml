@@ -12,6 +12,12 @@ on:
       - 'fastlane/**'
       - 'LICENSE'
   pull_request:
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'website/**'
+      - 'fastlane/**'
+      - 'LICENSE'
   workflow_dispatch:
 
 permissions:
@@ -143,6 +149,7 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         env:
           GH_TOKEN: ${{ github.token }}
+          ATTACHMENTS_TOKEN: ${{ secrets.ATTACHMENTS_TOKEN }}
         run: bash .github/scripts/publish-tag-release.sh
 
       # Release bot: point the committed screenshots (README + website) at the
@@ -265,6 +272,7 @@ jobs:
       - name: Publish preview release
         env:
           GH_TOKEN: ${{ github.token }}
+          ATTACHMENTS_TOKEN: ${{ secrets.ATTACHMENTS_TOKEN }}
         run: bash .github/scripts/publish-preview-release.sh
 
   go-vectors:

@@ -248,7 +248,7 @@ footer ul {
 
 .skip-link {
   position: absolute;
-  top: -2.5rem;
+  top: 0;
   left: 1rem;
   background: var(--accent);
   color: #ffffff;
@@ -256,10 +256,13 @@ footer ul {
   border-radius: 0 0 var(--radius) var(--radius);
   text-decoration: none;
   z-index: 100;
+  /* Hide it fully regardless of its own height: the old fixed top offset left
+     a blue sliver at the top of the page (issue #77). */
+  transform: translateY(-150%);
 }
 
 .skip-link:focus {
-  top: 0;
+  transform: translateY(0);
 }
 
 @media (max-width: 24rem) {
