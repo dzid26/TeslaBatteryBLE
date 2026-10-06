@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 package com.dzid26.teslable.ui
 
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
@@ -49,6 +50,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
@@ -207,6 +209,7 @@ private fun HeroCard(
     vehicle: Vehicle?,
     history: List<BatterySample>,
 ) {
+    val context = LocalContext.current
     val display = connectionDisplay(connection, advert, vehicle = vehicle)
     val charge = connection?.charge
     val level = charge?.batteryLevel
@@ -248,7 +251,14 @@ private fun HeroCard(
                         )
                     }
                 }
-                StatusPill(connection)
+                StatusPill(
+                    connection = connection,
+                    onAsleepClick = {
+                        Toast
+                            .makeText(context, "Swipe down to wake the car", Toast.LENGTH_SHORT)
+                            .show()
+                    },
+                )
             }
             Spacer(Modifier.height(12.dp))
             SocBlock(level = level, lastKnown = lastKnown, stateText = display.stateText)

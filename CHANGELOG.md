@@ -8,6 +8,8 @@ All notable changes to this project are documented here. The format is based on
 
 ### Added
 
+- Tapping the Asleep status pill on the car screen shows a toast: "Swipe down
+  to wake the car"
 - Discharge projection on the history chart: while parked, a dashed line and
   caption ("Discharging · projected 71% by 09:20") carry the recent drain rate
   over a trailing window scaled to the range (2 h / 6 h / 24 h / 7 d) twelve
