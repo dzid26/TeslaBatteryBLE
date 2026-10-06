@@ -355,17 +355,12 @@ if wait_for_text "Allow Bluetooth access" 2; then
   sleep 3
 fi
 
-# 02 - the scan finding the simulated cars. An empty list scans on its own; a
-# pull is the fallback when that first scan was dropped while the app was still
-# starting. The scan can finish before "Scanning:" is ever dumped, so retry
-# until the address appears.
-if wait_for_text "AA:BB:CC:DD:EE:01" 30 || pull_until_text "AA:BB:CC:DD:EE:01" 3 20; then
-  sleep 1
-  capture 02-scanning.png
-else
-  echo "  ! scan results never appeared" >&2
-  debug_dump "scan-missing"
-fi
+# The scan shot is taken later, once the car is known, so the light and dark
+# passes show the same list state. For now only the address must appear: an
+# empty list scans on its own, and a pull is the fallback when that first scan
+# was dropped while the app was still starting.
+wait_for_text "AA:BB:CC:DD:EE:01" 30 || pull_until_text "AA:BB:CC:DD:EE:01" 3 20 ||
+  { echo "  ! scan results never appeared" >&2; debug_dump "scan-missing"; }
 
 # Open the simulated car and drive the demo flow. These steps are skipped
 # silently on real builds, which share this script.
@@ -409,6 +404,14 @@ if tap_text "AA:BB:CC:DD:EE:01" 30; then
     else
       echo "  ! could not open settings" >&2
       debug_dump "settings-entry"
+    fi
+    # 02 — the scan list once the car is known, matching the dark pass state.
+    if wait_for_text "Demo Tesla" 20; then
+      sleep 1
+      capture 02-scanning.png
+    else
+      echo "  ! cars list did not show the known car" >&2
+      debug_dump "scan-known"
     fi
   else
     echo "  ! car detail did not open" >&2
