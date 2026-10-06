@@ -15,15 +15,11 @@ app, pair a key with an NFC card tap on the console, and read the car directly.
 
 ## Screenshots
 
-| Overview | Scanning | Car | History | Settings |
-| --- | --- | --- | --- | --- |
-| ![Overview](website/images/01-overview.png) | ![Scanning](website/images/02-scanning.png) | ![Car](website/images/03-car.png) | ![History](website/images/04-history.png) | ![Settings](website/images/05-settings.png) |
-
-Dark mode:
+Each cell follows your theme, so there is no separate dark-mode table.
 
 | Overview | Scanning | Car | History | Settings |
 | --- | --- | --- | --- | --- |
-| ![Overview in dark mode](website/images/01-overview-dark.png) | ![Scanning in dark mode](website/images/02-scanning-dark.png) | ![Car in dark mode](website/images/03-car-dark.png) | ![History in dark mode](website/images/04-history-dark.png) | ![Settings in dark mode](website/images/05-settings-dark.png) |
+| <picture><source srcset="website/images/01-overview-dark.png" media="(prefers-color-scheme: dark)"><img src="website/images/01-overview.png" alt="Overview"></picture> | <picture><source srcset="website/images/02-scanning-dark.png" media="(prefers-color-scheme: dark)"><img src="website/images/02-scanning.png" alt="Scanning for nearby cars"></picture> | <picture><source srcset="website/images/03-car-dark.png" media="(prefers-color-scheme: dark)"><img src="website/images/03-car.png" alt="Car detail with the battery reading"></picture> | <picture><source srcset="website/images/04-history-dark.png" media="(prefers-color-scheme: dark)"><img src="website/images/04-history.png" alt="Battery history chart"></picture> | <picture><source srcset="website/images/05-settings-dark.png" media="(prefers-color-scheme: dark)"><img src="website/images/05-settings.png" alt="Settings"></picture> |
 
 ## Features
 
