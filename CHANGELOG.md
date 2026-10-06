@@ -8,6 +8,8 @@ All notable changes to this project are documented here. The format is based on
 
 ### Added
 
+- Tapping the Asleep status pill on the car screen shows a toast: "Swipe down
+  to wake the car"
 - Battery health card on the car view: measured usable capacity from the
   session's rated constant (energy added over rated miles added) times its
   full-range scale, and full range from the session scale with a rated-range

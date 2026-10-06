@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 package com.dzid26.teslable.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -624,7 +625,10 @@ internal fun TrackingToggle(
 
 /** Shared by the cars list and the car view. */
 @Composable
-internal fun StatusPill(connection: TeslaConnection?) {
+internal fun StatusPill(
+    connection: TeslaConnection?,
+    onAsleepClick: (() -> Unit)? = null,
+) {
     val (container, content, label) =
         when {
             connection?.phase == ConnectionPhase.READY && connection.status?.asleep == false ->
@@ -655,7 +659,13 @@ internal fun StatusPill(connection: TeslaConnection?) {
                     if (connection?.phase == ConnectionPhase.CONNECTING) "Connecting" else "Disconnected",
                 )
         }
-    Surface(color = container, contentColor = content, shape = RoundedCornerShape(50)) {
+    val asleep = connection?.phase == ConnectionPhase.READY && connection.status?.asleep == true
+    Surface(
+        color = container,
+        contentColor = content,
+        shape = RoundedCornerShape(50),
+        modifier = if (asleep && onAsleepClick != null) Modifier.clickable { onAsleepClick() } else Modifier,
+    ) {
         Text(
             text = label,
             style = MaterialTheme.typography.labelMedium,
