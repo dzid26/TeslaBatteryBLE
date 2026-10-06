@@ -12,6 +12,12 @@ on:
       - 'fastlane/**'
       - 'LICENSE'
   pull_request:
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'website/**'
+      - 'fastlane/**'
+      - 'LICENSE'
   workflow_dispatch:
 
 permissions:
