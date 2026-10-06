@@ -11,12 +11,14 @@ VERSION="${TAG#v}"
 APK="dist/TeslaBatteryBLE-${TAG}.apk"
 NOTES="release-notes.md"
 SHEET="screenshots/screenshot-sheet.png"
-SHEET_NAME="$(basename "$SHEET")"
-SHEET_URL="https://github.com/$REPO/releases/download/$TAG/$SHEET_NAME"
 
 if [ "$TAG" != "${TAG%-*}" ]; then PRE_FLAG="--prerelease"; else PRE_FLAG=""; fi
 
 [ -f "$APK" ] || { echo "missing $APK (the build job stages it for tags)" >&2; exit 1; }
+
+[ -f "$SHEET" ] || { echo "missing $SHEET (the capture step must succeed)" >&2; exit 1; }
+# Host the sheet as a user attachment so the release page keeps only the APK.
+SHEET_URL="$(bash .github/scripts/upload-screenshot.sh "$SHEET" "screenshot-sheet-${TAG}.png" screenshots)"
 
 {
   awk -v h="## [$VERSION]" '
@@ -43,12 +45,10 @@ else
   gh release create "$TAG" --title "$TAG" --notes-file "$NOTES" $PRE_FLAG
 fi
 
-[ -f "$SHEET" ] || { echo "missing $SHEET (the capture step must succeed)" >&2; exit 1; }
 gh release upload "$TAG" "$APK" --clobber
-gh release upload "$TAG" "$SHEET" --clobber
 
-# The release is not done until both assets are actually attached.
+# The release is not done until its APK is actually attached.
 assets="$(gh release view "$TAG" --json assets --jq '.assets[].name')"
-for expected in "$(basename "$APK")" "$SHEET_NAME"; do
+for expected in "$(basename "$APK")"; do
   printf '%s\n' "$assets" | grep -qx "$expected" || { echo "release $TAG is missing $expected" >&2; exit 1; }
 done
