@@ -74,6 +74,7 @@ import com.dzid26.teslable.core.history.dischargeProjection
 import com.dzid26.teslable.core.history.projectionWindowMillis
 import com.dzid26.teslable.core.history.within
 import com.dzid26.teslable.core.protocol.TeslaCommands
+import com.dzid26.teslable.health.healthSummary
 import kotlinx.coroutines.delay
 import java.time.Instant
 import java.time.ZoneId
@@ -106,6 +107,7 @@ internal fun CarScreen(
             history.filter { it.vehicleId == vehicle.bleName }
         }
     val paired = isPaired(connection, vehicle)
+    val health = remember(vehicleHistory) { healthSummary(vehicleHistory) }
     // What a pull on this screen will do, and the feedback while it runs.
     val pullLabel =
         when {
@@ -197,6 +199,7 @@ internal fun CarScreen(
                     KeyCard(connection, vehicle, onPair)
                 }
                 BatteryHistoryCard(vehicleHistory)
+                BatteryHealthCard(health)
             }
         }
     }

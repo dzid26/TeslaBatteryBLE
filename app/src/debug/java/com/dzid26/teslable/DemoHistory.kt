@@ -52,25 +52,36 @@ internal object DemoHistory {
     ): List<BatterySample> {
         val points =
             buildList {
-                // 48 h ago: parked at 64%, shedding about a percent an hour.
-                addAll(segment(2880, 2520, 64, 63, 60, "Disconnected"))
-                // A two-hour drive: 63 -> 54.
-                addAll(segment(2520, 2400, 63, 54, 15, "Disconnected"))
-                // Parked overnight: 54 -> 52.
-                addAll(segment(2400, 1680, 54, 52, 60, "Disconnected"))
-                // Another short drive: 52 -> 47.
-                addAll(segment(1680, 1560, 52, 47, 15, "Disconnected"))
-                // Parked: 47 -> 46.
-                addAll(segment(1560, 1440, 47, 46, 60, "Disconnected"))
-                // A four-hour AC charge to the limit.
-                addAll(segment(1440, 1200, 46, 85, 10, "Charging"))
+                // 48 h ago: parked at 64%, then a morning drive to 55.
+                addAll(segment(2880, 2700, 64, 63, 60, "Disconnected"))
+                addAll(segment(2700, 2580, 63, 55, 15, "Disconnected"))
+                // Parked: 55 -> 54.
+                addAll(segment(2580, 2460, 55, 54, 60, "Disconnected"))
+                // First charge of the window: a two-hour AC session to 66.
+                addAll(segment(2460, 2340, 54, 66, 10, "Charging"))
+                // Drive to work: 66 -> 58.
+                addAll(segment(2340, 2220, 66, 58, 15, "Disconnected"))
+                // Parked: 58 -> 57.
+                addAll(segment(2220, 2100, 58, 57, 60, "Disconnected"))
+                // Second charge: a two-hour session to 69.
+                addAll(segment(2100, 1980, 57, 69, 10, "Charging"))
+                // Drive home: 69 -> 60.
+                addAll(segment(1980, 1860, 69, 60, 15, "Disconnected"))
+                // Parked overnight: 60 -> 58.
+                addAll(segment(1860, 1440, 60, 58, 60, "Disconnected"))
+                // Third charge: the four-hour AC session to the limit.
+                addAll(segment(1440, 1200, 58, 85, 10, "Charging"))
                 // Complete at the limit, then the slow parked drain to 78%.
                 add(Point(1200, 85, "Complete"))
                 addAll(segment(1140, 360, 84, 80, 60, "Disconnected"))
                 addAll(segment(360, 10, 80, 78, 30, "Disconnected"))
             }
+        // A segment's end and the next segment's start share a timestamp; keep
+        // the newer one so a charge session starts on its own first sample.
         return points
+            .reversed()
             .distinctBy { it.minutesAgo }
+            .reversed()
             .map { point -> sample(now, vehicleId, point) }
     }
 
