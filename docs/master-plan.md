@@ -32,7 +32,7 @@ account, nothing leaves the phone."*
 - [ ] Builds: `:core:test` + `:app:assembleDebug` (lint when wired).
 - [ ] Tests cover new behavior; protocol changes always ship vectors.
 - [ ] No secrets, VINs, or keys in logs.
-- [ ] User-visible changes are documented (README / docs / CHANGELOG).
+- [ ] User-visible changes are documented (README / docs).
 - [ ] No new back-compat or migration code for pre-release states; change formats freely and document any reset (re-pair / reinstall).
 - [ ] Checkboxes here updated; ADR added when an architecture decision was made.
 
@@ -56,7 +56,7 @@ A trustworthy shell around the existing protocol work. No user-facing features.
 - [x] In-app license/credits screen data (with the About screen, Phase 1).
 - [x] README: pitch, badges, screenshots, features, install (GitHub / Obtainium), build, architecture diagram, license, "not affiliated with Tesla, Inc.".
 - [x] App icon: adaptive + monochrome (512 px store export still pending).
-- [x] `SECURITY.md`, `PRIVACY.md` ("nothing leaves the device"), `CODE_OF_CONDUCT.md`, `CONTRIBUTING.md`, `CHANGELOG.md`.
+- [x] `SECURITY.md`, `PRIVACY.md` ("nothing leaves the device"), `CODE_OF_CONDUCT.md`, `CONTRIBUTING.md`.
 - [x] Issue forms (bug: car model/year, vehicle software, Android version, logs; feature request), PR template, `.editorconfig`.
 - [x] CI gates: Android lint, app unit tests, concurrency cancel, least-privilege permissions, Dependabot.
 - [x] CI hardening: pinned action SHAs (#16); ktlint + detekt gates (#19).

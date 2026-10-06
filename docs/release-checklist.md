@@ -12,7 +12,7 @@
 - [ ] Run `./gradlew :core:test` — must pass.
 - [ ] Run `./gradlew :app:testDebugUnitTest` — must pass.
 - [ ] Run `./gradlew :app:lintDebug` — must be clean.
-- [ ] Update `CHANGELOG.md` with the curated changelog for this version.
+- [ ] Release notes are generated from the commits since the previous tag at tag time; there is no hand-edited changelog.
 - [ ] Confirm the relevant `docs/master-plan.md` checkboxes are updated.
 - [ ] Real-car validation (see `docs/master-plan.md` section 4): pair key, wake car, SOC read, background tracking survives screen off, notification updates, key survives app restart.
 
@@ -21,7 +21,7 @@
 - [ ] Create and push tag `vX.Y.Z` (e.g. `git tag v0.2.0 && git push origin v0.2.0`).
 - [ ] CI builds the APK, attaches it as `TeslaBatteryBLE-<tag>.apk`, captures screenshots from the simulated car on the emulator, composes one `screenshot-sheet.png`, and attaches it.
 - [ ] The capture is required: a failed capture or a missing sheet fails the run, and the release is not published without its screenshots.
-- [ ] CI sets the release title, marks tags containing `-` as prereleases, and writes notes from the matching `CHANGELOG.md` section plus the sheet.
+- [ ] CI sets the release title, marks tags containing `-` as prereleases, and writes notes from the commits since the previous tag plus the sheet.
 - [ ] Verify the release page: correct tag/version, notes, screenshots, and installable APK artifact.
 - [ ] The rolling preview is removed automatically when the tagged commit matches it; otherwise it remains until the next un-released push.
 
@@ -41,7 +41,7 @@
 
 ## Post-release
 
-- [ ] Update `CHANGELOG.md` if anything changed during release.
+- [ ] Review the generated release notes and correct any commit subjects that read poorly.
 - [ ] Verify the rolling preview still rebuilds green.
 - [ ] Close the release milestone.
 - [ ] Announce (release notes link; channels per master plan).
@@ -50,4 +50,4 @@
 
 - [ ] Delete the release or mark it as pre-release/draft on GitHub if it is broken.
 - [ ] If the `preview` tag was moved, re-point it at the last good commit and re-run CI.
-- [ ] File a follow-up issue and note it in `CHANGELOG.md`.
+- [ ] File a follow-up issue for anything that changed during the release.

@@ -25,7 +25,7 @@ Master plan: `docs/master-plan.md` — read it first and update its checkboxes w
 - Never log VINs, private keys, session keys, or decrypted payloads.
 - `core` stays multiplatform-ready: no Android, no JVM-only crypto that would block KMP.
 - New source files get `SPDX-License-Identifier: AGPL-3.0-only`.
-- User-visible changes update README/CHANGELOG; architecture decisions get an ADR in `docs/adr/`.
+- User-visible changes update the README; architecture decisions get an ADR in `docs/adr/`. Release notes are generated from commits at tag time; there is no hand-edited changelog, so pull requests never collide on one.
 - Pre-1.0: no back-compat or migration code for states that only exist on old betas or dev machines; change formats freely and document the reset (re-pair / reinstall).
 - Merge PRs with a merge commit after rebasing the branch on `main`: `gh pr merge <n> --merge`. Never rebase-merge — history keeps PR provenance and reverts stay one command.
 - Specs, plans, and product docs never name competitor products; competitive research lives in `docs/research/` only.

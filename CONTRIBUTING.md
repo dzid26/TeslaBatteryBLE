@@ -49,7 +49,7 @@ find it (`sdk.dir=...`).
 ## Pull requests
 
 1. Fork / branch from `main`.
-2. Make the change, add tests and docs (README/CHANGELOG/plan as applicable).
+2. Make the change, add tests and docs (README/plan as applicable).
 3. Open the PR and fill in the template. Contributions are licensed under
    AGPL-3.0-only, matching the project (no CLA). Small, focused PRs merge fastest.
 

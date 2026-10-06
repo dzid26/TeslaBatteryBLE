@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: AGPL-3.0-only
-# Publish a tagged release: the CHANGELOG section plus the screenshot sheet
-# captured by CI. Run from a checkout with the debug APK built and the
-# emulator screenshots captured into `screenshots/`.
+# Publish a tagged release: the changes since the previous tag plus the
+# screenshot sheet captured by CI. Run from a checkout with the debug APK
+# built and the emulator screenshots captured into `screenshots/`.
 set -euo pipefail
 
 TAG="${GITHUB_REF_NAME:?GITHUB_REF_NAME is required}"
@@ -20,12 +20,24 @@ if [ "$TAG" != "${TAG%-*}" ]; then PRE_FLAG="--prerelease"; else PRE_FLAG=""; fi
 # Host the sheet as a user attachment so the release page keeps only the APK.
 SHEET_URL="$(bash .github/scripts/upload-screenshot.sh "$SHEET" "screenshot-sheet-${TAG}.png")"
 
+# Notes come from the commits since the previous tag; there is no
+# hand-edited changelog, so pull requests never collide on one.
+git fetch --tags origin
+PREV_TAG="$(git describe --tags --abbrev=0 --match 'v*' "$TAG^" 2>/dev/null || true)"
+
 {
-  awk -v h="## [$VERSION]" '
-    index($0, h) == 1 { found = 1 }
-    found && /^## \[/ && index($0, h) != 1 { exit }
-    found { print }
-  ' CHANGELOG.md
+  if [ -n "$PREV_TAG" ]; then
+    echo "Changes since [$PREV_TAG](https://github.com/$REPO/releases/tag/$PREV_TAG):"
+  else
+    echo "Changes:"
+  fi
+  echo
+  if [ -n "$PREV_TAG" ]; then
+    git log --no-merges --pretty=format:'- %s ([%h](https://github.com/'"$REPO"'/commit/%H))' "$PREV_TAG..$TAG"
+  else
+    git log --no-merges --pretty=format:'- %s ([%h](https://github.com/'"$REPO"'/commit/%H))' "$TAG"
+  fi
+  echo
 
   if [ -f "$SHEET" ]; then
     echo
@@ -36,7 +48,7 @@ SHEET_URL="$(bash .github/scripts/upload-screenshot.sh "$SHEET" "screenshot-shee
 } > "$NOTES"
 
 if [ ! -s "$NOTES" ]; then
-  echo "See [CHANGELOG.md](https://github.com/$REPO/blob/main/CHANGELOG.md)." > "$NOTES"
+  echo "See the [commit history](https://github.com/$REPO/commits/$TAG)." > "$NOTES"
 fi
 
 if gh release view "$TAG" > /dev/null 2>&1; then
