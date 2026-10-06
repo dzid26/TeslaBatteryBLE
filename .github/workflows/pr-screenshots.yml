@@ -13,6 +13,7 @@ on:
       - 'app/**'
       - '.github/scripts/capture-screenshots.sh'
       - '.github/scripts/build-screenshot-sheet.sh'
+      - '.github/scripts/upload-screenshot.sh'
       - '.github/workflows/pr-screenshots.yml'
   workflow_dispatch:
 

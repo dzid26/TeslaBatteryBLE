@@ -31,7 +31,7 @@ echo "user-attachments upload failed; falling back to the $TAG release asset" >&
 cp "$FILE" "$NAME"
 if ! gh release view "$TAG" > /dev/null 2>&1; then
   gh release create "$TAG" --title "Screenshots" --prerelease \
-    --notes "Hosted screenshots for release notes and PR comments."
+    --notes "Hosted screenshots for release notes and PR comments." > /dev/null
 fi
 gh release upload "$TAG" "$NAME" --clobber > /dev/null
 printf 'https://github.com/%s/releases/download/%s/%s\n' "$REPO" "$TAG" "$NAME"
