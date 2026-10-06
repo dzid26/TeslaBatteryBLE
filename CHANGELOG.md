@@ -8,6 +8,13 @@ All notable changes to this project are documented here. The format is based on
 
 ### Added
 
+- Battery health card on the car view: measured usable capacity from the
+  session's rated constant (energy added over rated miles added) times its
+  full-range scale, and full range from the session scale with a rated-range
+  fallback, from the car's own readings, with a confidence pill, the
+  session-count learning gate, and thin-data flags; a SoH percentage stays
+  hidden until the factory range is configured, and the card never claims cell
+  imbalance, pack temperatures, or lifespan
 - Discharge projection on the history chart: while parked, a dashed line and
   caption ("Discharging · projected 71% by 09:20") carry the recent drain rate
   over a trailing window scaled to the range (2 h / 6 h / 24 h / 7 d) twelve

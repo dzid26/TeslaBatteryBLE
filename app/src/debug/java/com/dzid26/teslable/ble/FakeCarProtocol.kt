@@ -67,6 +67,7 @@ class FakeCarProtocol(
 
     /** The demo scenario: plugged in and charging until the limit is reached. */
     private var charging = false
+    private var chargeSessionStartLevel = batteryLevel
 
     private val sessions = mutableMapOf<Domain, ByteArray>()
     private val epochs = mutableMapOf<Domain, ByteArray>()
@@ -83,6 +84,7 @@ class FakeCarProtocol(
 
     fun setCharging(value: Boolean) {
         charging = value
+        if (value) chargeSessionStartLevel = batteryLevel
     }
 
     fun dischargeOnePercent() {
@@ -340,6 +342,18 @@ class FakeCarProtocol(
                             battery_range = batteryLevel * RATED_MILES_PER_PERCENT,
                             est_battery_range = batteryLevel * ESTIMATED_MILES_PER_PERCENT,
                             charge_limit_soc = CHARGE_LIMIT,
+                            charge_energy_added =
+                                if (charging) {
+                                    (batteryLevel - chargeSessionStartLevel) * KWH_PER_PERCENT
+                                } else {
+                                    0f
+                                },
+                            charge_miles_added_rated =
+                                if (charging) {
+                                    (batteryLevel - chargeSessionStartLevel) * RATED_MILES_PER_PERCENT
+                                } else {
+                                    0f
+                                },
                             charging_state =
                                 if (charging) {
                                     ChargeState.ChargingState(Charging = Void())
@@ -440,5 +454,6 @@ class FakeCarProtocol(
         const val CHARGE_LIMIT = 85
         const val RATED_MILES_PER_PERCENT = 3.0f
         const val ESTIMATED_MILES_PER_PERCENT = 2.9f
+        const val KWH_PER_PERCENT = 0.75f
     }
 }
