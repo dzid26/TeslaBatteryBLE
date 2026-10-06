@@ -2,9 +2,9 @@
 name: Preview health
 
 # Validates the rolling preview release: after every Android CI run on main and
-# on a periodic sweep, check that the release carries its APK and screenshot
-# sheet and that the sheet is not stale. A problem opens (or updates) a
-# tracking issue; the issue closes itself when the release is healthy again.
+# on a periodic sweep, check that the release carries its APK and a screenshot
+# image in its notes, and that the preview is not stale. A problem opens (or
+# updates) a tracking issue; the issue closes itself when healthy again.
 on:
   workflow_run:
     workflows: [ Android CI ]
@@ -33,23 +33,24 @@ jobs:
           release="$(gh api "repos/$REPO/releases/tags/preview" 2>/dev/null || echo '{}')"
           assets="$(jq -r '[.assets[].name] | join(",")' <<< "$release")"
           apk="$(jq -r '[.assets[] | select(.name | startswith("TeslaBatteryBLE-preview"))][0].name // empty' <<< "$release")"
-          sheet_updated="$(jq -r '[.assets[] | select(.name | startswith("screenshot-sheet"))][0].updated_at // empty' <<< "$release")"
+          apk_updated="$(jq -r '[.assets[] | select(.name | startswith("TeslaBatteryBLE-preview"))][0].updated_at // empty' <<< "$release")"
           has_section="$(jq -r '.body | contains("## Screenshots")' <<< "$release")"
+          has_image="$(jq -r '.body | contains("![")' <<< "$release")"
 
           problem=""
           if [ -z "$apk" ]; then problem="the preview APK asset is missing"; fi
-          if [ -z "$sheet_updated" ]; then problem="${problem:+$problem; }the screenshot sheet is missing"; fi
           if [ "$has_section" != "true" ]; then problem="${problem:+$problem; }the notes have no Screenshots section"; fi
+          if [ "$has_image" != "true" ]; then problem="${problem:+$problem; }the Screenshots section has no image"; fi
 
           head_date="$(gh api "repos/$REPO/commits/main" --jq '.commit.committer.date')"
-          if [ -n "$sheet_updated" ]; then
-            age=$(( $(date -u -d "$head_date" +%s) - $(date -u -d "$sheet_updated" +%s) ))
+          if [ -n "$apk_updated" ]; then
+            age=$(( $(date -u -d "$head_date" +%s) - $(date -u -d "$apk_updated" +%s) ))
             if [ "$age" -gt 7200 ]; then
-              problem="${problem:+$problem; }the sheet is stale (last updated $sheet_updated, main is at $head_date)"
+              problem="${problem:+$problem; }the preview is stale (APK updated $apk_updated, main is at $head_date)"
             fi
           fi
 
-          echo "assets=$assets sheet_updated=${sheet_updated:-none} head=$head_date problem=${problem:-none}"
+          echo "assets=$assets apk_updated=${apk_updated:-none} head=$head_date problem=${problem:-none}"
 
           title="Preview release is missing screenshots"
           existing="$(gh issue list --repo "$REPO" --state open --search "$title in:title" --json number --jq '.[0].number // empty')"

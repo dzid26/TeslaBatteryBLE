@@ -14,8 +14,6 @@ SHORT_SHA="${SHA:0:7}"
 APK="dist/app-debug.apk"
 ASSET_APK="TeslaBatteryBLE-preview-${SHORT_SHA}.apk"
 SHEET="screenshots/screenshot-sheet.png"
-SHEET_NAME="screenshot-sheet-${SHORT_SHA}.png"
-SHEET_URL="https://github.com/$REPO/releases/download/$TAG/$SHEET_NAME"
 
 [ -f "$APK" ] || { echo "missing $APK" >&2; exit 1; }
 cp "$APK" "$ASSET_APK"
@@ -45,8 +43,13 @@ fi
 git tag -f "$TAG" "$SHA"
 git push origin "refs/tags/$TAG" --force
 
+[ -f "$SHEET" ] || { echo "missing $SHEET (the capture step must succeed)" >&2; exit 1; }
+SHEET_NAME="screenshot-sheet-${SHORT_SHA}.png"
+# Host the sheet as a user attachment so the release page keeps only the APK.
+SHEET_URL="$(bash .github/scripts/upload-screenshot.sh "$SHEET" "$SHEET_NAME")"
+
 {
-  echo "Rolling preview of \`main\` — rebuilt on every push. The APK is a debug build."
+  echo "Rolling preview of \`main\` - rebuilt on every push. The APK is a debug build."
   echo
   echo "**APK**: [\`$ASSET_APK\`](https://github.com/$REPO/releases/download/$TAG/$ASSET_APK)"
   echo
@@ -81,13 +84,10 @@ if gh release view "$TAG" > /dev/null 2>&1; then
 fi
 gh release create "$TAG" --title "$TITLE" --prerelease --notes-file preview-notes.md
 
-[ -f "$SHEET" ] || { echo "missing $SHEET (the capture step must succeed)" >&2; exit 1; }
-cp "$SHEET" "$SHEET_NAME"
 gh release upload "$TAG" "$ASSET_APK" --clobber
-gh release upload "$TAG" "$SHEET_NAME" --clobber
 
-# The release is not done until both assets are actually attached.
+# The release is not done until its APK is actually attached.
 assets="$(gh release view "$TAG" --json assets --jq '.assets[].name')"
-for expected in "$ASSET_APK" "$SHEET_NAME"; do
+for expected in "$ASSET_APK"; do
   printf '%s\n' "$assets" | grep -qx "$expected" || { echo "release $TAG is missing $expected" >&2; exit 1; }
 done
