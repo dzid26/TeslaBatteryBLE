@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -24,6 +25,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -216,21 +218,23 @@ private fun vehicleRows(
     history: List<BatterySample>,
 ): List<VehicleRow> {
     val known =
-        state.vehicles.map { vehicle ->
-            VehicleRow(
-                bleName = vehicle.bleName,
-                address = vehicle.address,
-                title = vehicle.title,
-                vehicle = vehicle,
-                connection = state.connections[vehicle.address],
-                advert = state.devices.firstOrNull { it.name == vehicle.bleName },
-                lastKnown = history.lastOrNull { it.vehicleId == vehicle.bleName },
-            )
-        }
+        state.vehicles
+            .sortedBy { it.bleName }
+            .map { vehicle ->
+                VehicleRow(
+                    bleName = vehicle.bleName,
+                    address = vehicle.address,
+                    title = vehicle.title,
+                    vehicle = vehicle,
+                    connection = state.connections[vehicle.address],
+                    advert = state.devices.firstOrNull { it.name == vehicle.bleName },
+                    lastKnown = history.lastOrNull { it.vehicleId == vehicle.bleName },
+                )
+            }
     val discovered =
         state.devices
             .filter { device -> state.vehicles.none { it.bleName == device.name } }
-            .sortedByDescending { it.rssi ?: Int.MIN_VALUE }
+            .sortedBy { it.name }
             .map { device ->
                 VehicleRow(
                     bleName = device.name,
@@ -340,28 +344,24 @@ private fun ConnectionsScreen(
                 }
 
                 val connectedCount = state.connections.values.count { it.phase == ConnectionPhase.READY }
-                val statusText =
-                    when {
-                        state.scanning ->
-                            "Scanning: ${state.devices.size} Tesla(s), $connectedCount connected"
-
-                        state.discovering ->
-                            "Looking for your cars..."
-
-                        rows.isNotEmpty() ->
-                            "${rows.size} car(s), $connectedCount connected"
-
-                        else -> "No scan yet"
-                    }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = statusText,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.weight(1f),
-                    )
-                    if (state.scanning) {
-                        TextButton(onClick = onToggleScan) { Text("Stop") }
+                    if (state.scanning || state.discovering) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp,
+                        )
+                    } else {
+                        Text(
+                            text =
+                                if (rows.isNotEmpty()) {
+                                    "${rows.size} car(s), $connectedCount connected"
+                                } else {
+                                    "No scan yet"
+                                },
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f),
+                        )
                     }
                 }
                 Spacer(Modifier.height(12.dp))

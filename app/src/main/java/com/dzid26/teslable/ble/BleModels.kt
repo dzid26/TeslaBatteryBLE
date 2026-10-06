@@ -164,8 +164,9 @@ fun connectionDisplay(
     return ConnectionDisplay(
         title = title,
         stateText = connectionStateText(connection),
-        // RSSI is a live reading; show it only while connected.
-        rssi = if (connection?.phase == ConnectionPhase.READY) connection.rssi ?: advert?.rssi else null,
+        // Live RSSI while connected; otherwise the scan advert's, so unpaired
+        // cars show signal strength too.
+        rssi = if (connection?.phase == ConnectionPhase.READY) connection.rssi ?: advert?.rssi else advert?.rssi,
     )
 }
 
