@@ -11,7 +11,12 @@ on:
     - cron: '23 5 * * *'
 
 permissions:
-  contents: read
+  contents: write # the refresh step commits screenshots back to main
+
+concurrency:
+  # Never cancel a capture mid-flight; a queued run waits instead.
+  group: demo-smoke
+  cancel-in-progress: false
 
 jobs:
   demo:
@@ -95,3 +100,29 @@ jobs:
           name: demo-screenshots
           path: demo-screenshots
           if-no-files-found: warn
+
+      # Release bot: keep the committed screenshots (README + website) in sync
+      # with the demo build. Only on main, and only when a PNG actually
+      # changed; website/** is ignored by Android CI, so this does not rebuild
+      # the app or the rolling preview.
+      - name: Refresh the committed screenshots
+        if: (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
+        run: |
+          set -euo pipefail
+          changed=false
+          for name in 01-overview 02-scanning 03-car 04-history 05-settings \
+              01-overview-dark 02-scanning-dark 03-car-dark 04-history-dark 05-settings-dark; do
+            if ! cmp -s "demo-screenshots/$name.png" "website/images/$name.png"; then
+              cp "demo-screenshots/$name.png" "website/images/$name.png"
+              changed=true
+            fi
+          done
+          if [ "$changed" != true ]; then
+            echo "screenshots unchanged; nothing to commit"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add website/images
+          git commit -m "Refresh screenshots from the demo capture"
+          git push
