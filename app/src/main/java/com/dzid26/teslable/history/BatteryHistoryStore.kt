@@ -3,9 +3,12 @@
 package com.dzid26.teslable.history
 
 import android.content.Context
-import com.dzid26.teslable.core.history.BatteryHistoryCsv
+import com.dzid26.teslable.core.history.BatteryHistoryLog
 import com.dzid26.teslable.core.history.BatterySample
+import com.dzid26.teslable.core.history.toBatterySample
+import com.dzid26.teslable.core.history.withTimestamp
 import com.dzid26.teslable.core.protocol.TeslaCommands
+import com.tesla.generated.carserver.vehicle.ChargeState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -16,26 +19,32 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 
 /**
- * Battery history as an append-only CSV in app storage, cached in memory and
- * exposed as a [StateFlow]. One line per SOC read, tagged with the vehicle it
- * came from; repeated identical readings within a minute are skipped so polling
- * does not flood the file. First cut per ADR-0002: Room/SQLite when queries
- * outgrow this.
+ * Battery history as an append-only log of raw Tesla `ChargeState` records,
+ * one file per vehicle in `filesDir/battery-history/`, cached in memory and
+ * exposed as a [StateFlow]. One record per SOC read; repeated identical
+ * readings within a minute are skipped so polling does not flood the log.
+ * Records are the car's raw response (ADR-0006), so new car fields never drop
+ * old rows. Pre-store CSV history is not migrated (pre-1.0 reset).
  */
 class BatteryHistoryStore(
     context: Context,
 ) {
-    private val file = File(context.filesDir, FILE_NAME)
+    private val historyDir = File(context.filesDir, HISTORY_DIR_NAME)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val mutex = Mutex()
     private val _samples = MutableStateFlow<List<BatterySample>>(emptyList())
     val samples: StateFlow<List<BatterySample>> = _samples.asStateFlow()
 
+    /** Records per vehicle file, so appends know when a file needs trimming. */
+    private val recordCounts = mutableMapOf<String, Int>()
+
     init {
         scope.launch {
-            mutex.withLock { _samples.value = readFile() }
+            mutex.withLock { _samples.value = readLogs() }
         }
     }
 
@@ -44,22 +53,9 @@ class BatteryHistoryStore(
         charge: TeslaCommands.Charge,
         nowMillis: Long = System.currentTimeMillis(),
     ) {
-        val batteryLevel = charge.batteryLevel ?: return
-        val sample =
-            BatterySample(
-                timestampMillis = nowMillis,
-                batteryLevel = batteryLevel,
-                chargingState = charge.chargingState,
-                chargeLimit = charge.chargeLimit,
-                vehicleId = vehicleId,
-                usableBatteryLevel = charge.usableBatteryLevel,
-                ratedRangeMiles = charge.batteryRange,
-                estRangeMiles = charge.estBatteryRange,
-                idealRangeMiles = charge.idealBatteryRange,
-                chargeEnergyAdded = charge.chargeEnergyAdded,
-                chargeMilesAddedRated = charge.chargeMilesAddedRated,
-                chargeMilesAddedIdeal = charge.chargeMilesAddedIdeal,
-            )
+        // Only the car's raw response is logged; Charge is a parsed view.
+        val record = charge.raw?.withTimestamp(nowMillis) ?: return
+        val sample = record.toBatterySample(vehicleId) ?: return
         scope.launch {
             mutex.withLock {
                 val current = _samples.value
@@ -67,30 +63,68 @@ class BatteryHistoryStore(
                 if (isDuplicate(last, sample)) {
                     return@withLock
                 }
-                val updated = (current + sample).takeLast(MAX_SAMPLES)
-                if (updated.size > current.size) {
-                    file.appendText(BatteryHistoryCsv.encode(sample) + "\n")
-                } else {
-                    file.writeText(
-                        updated.joinToString(separator = "\n", postfix = "\n") {
-                            BatteryHistoryCsv.encode(it)
-                        },
-                    )
-                }
-                _samples.value = updated
+                appendRecord(vehicleId, record)
+                _samples.value = (current + sample).takeLast(MAX_SAMPLES)
             }
         }
     }
 
-    private fun readFile(): List<BatterySample> {
-        if (!file.exists()) return emptyList()
-        return runCatching {
-            file
-                .readLines()
-                .mapNotNull(BatteryHistoryCsv::parse)
+    private fun appendRecord(
+        vehicleId: String,
+        record: ChargeState,
+    ) {
+        historyDir.mkdirs()
+        val file = fileFor(vehicleId)
+        val count = (recordCounts[vehicleId] ?: 0) + 1
+        if (count > MAX_RECORDS_PER_FILE) {
+            val kept =
+                (BatteryHistoryLog.decode(file.readBytes()) + record).takeLast(MAX_RECORDS_PER_FILE)
+            writeAtomically(file, BatteryHistoryLog.encode(kept))
+            recordCounts[vehicleId] = kept.size
+        } else {
+            file.appendBytes(BatteryHistoryLog.encodeFrame(record))
+            recordCounts[vehicleId] = count
+        }
+    }
+
+    private fun readLogs(): List<BatterySample> =
+        runCatching {
+            readRecordFiles()
+                .flatMap { (vehicleId, records) ->
+                    records.mapNotNull { it.toBatterySample(vehicleId) }
+                }.sortedBy { it.timestampMillis }
                 .takeLast(MAX_SAMPLES)
         }.getOrDefault(emptyList())
+
+    /** Decodes every vehicle log and refreshes [recordCounts]. */
+    private fun readRecordFiles(): Map<String, List<ChargeState>> {
+        val logs =
+            historyDir
+                .listFiles()
+                ?.filter { it.isFile && it.name.endsWith(LOG_SUFFIX) }
+                .orEmpty()
+        val recordsByVehicle = mutableMapOf<String, List<ChargeState>>()
+        for (file in logs) {
+            val vehicleId = vehicleIdOf(file)
+            val records = BatteryHistoryLog.decode(file.readBytes())
+            recordCounts[vehicleId] = records.size
+            recordsByVehicle[vehicleId] = records
+        }
+        return recordsByVehicle
     }
+
+    private fun writeAtomically(
+        file: File,
+        bytes: ByteArray,
+    ) {
+        val tmp = File(file.parentFile, "${file.name}.tmp")
+        tmp.writeBytes(bytes)
+        Files.move(tmp.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING)
+    }
+
+    private fun fileFor(vehicleId: String): File = File(historyDir, "${vehicleId.ifEmpty { LEGACY_VEHICLE_STEM }}$LOG_SUFFIX")
+
+    private fun vehicleIdOf(file: File): String = file.name.removeSuffix(LOG_SUFFIX).let { if (it == LEGACY_VEHICLE_STEM) "" else it }
 
     private fun isDuplicate(
         last: BatterySample?,
@@ -102,8 +136,13 @@ class BatteryHistoryStore(
             sample.timestampMillis - last.timestampMillis < DEDUPE_WINDOW_MS
 
     private companion object {
-        const val FILE_NAME = "battery-history.csv"
+        const val HISTORY_DIR_NAME = "battery-history"
+        const val LOG_SUFFIX = ".pblog"
+
+        /** File stem for rows with a pre-ADR-0004 empty vehicle id. */
+        const val LEGACY_VEHICLE_STEM = "legacy"
         const val MAX_SAMPLES = 20_000
+        const val MAX_RECORDS_PER_FILE = 20_000
         const val DEDUPE_WINDOW_MS = 60_000L
     }
 }

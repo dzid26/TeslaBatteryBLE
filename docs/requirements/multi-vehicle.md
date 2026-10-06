@@ -131,7 +131,7 @@ Out of scope (unchanged unless stated):
 - The single stored VIN applies to the vehicle whose advertised name matches
   `sha1(vin)[:8]`. If nothing matches, keep the VIN in a pending state so the
   user can assign it.
-- Existing `battery-history.csv` samples are assigned to that same vehicle.
+- Existing history is already per vehicle in `battery-history/<vehicleId>.pblog` logs, so no re-assignment is needed.
 - The key pair is untouched; enrollment is re-verified per vehicle on the next
   connect.
 - No data loss; keep reading old preference keys for at least one release.
