@@ -5,11 +5,11 @@
 # Usage: capture-screenshots.sh <apk> <output-dir> [package] [activity]
 #
 # Walks the simulated-car flow (demo builds, `assembleDebug -PdemoCar=true`):
-# the cars list, a scan, the car detail with a battery reading, the history
-# graph and Settings, then repeats every screen in dark mode. Taps wait for the
-# target UI text through uiautomator instead of fixed sleeps, so slow emulators
-# stay reliable. On a plain debug build the car steps are skipped silently and
-# only the scan is captured.
+# the scan on the cars list, the car detail with a battery reading, and
+# Settings, then repeats them in dark mode. Taps wait for the target UI text
+# through uiautomator instead of fixed sleeps, so slow emulators stay reliable.
+# On a plain debug build the car steps are skipped silently and only the scan
+# is captured.
 set -euo pipefail
 
 # Git Bash on Windows rewrites /sdcard paths passed to adb; keep them literal.
@@ -154,10 +154,6 @@ center_y() {
     awk '{print int(($1 + $2) / 2)}'
 }
 
-top_of() {
-  sed -E 's/.*\[(-?[0-9]+),(-?[0-9]+)\]\[(-?[0-9]+),(-?[0-9]+)\].*/\2/' <<< "$1"
-}
-
 # Wait until a node with text/content-desc starting with $2 exists. On success
 # FOUND_NODE holds the node's tag.
 wait_for_node() {
@@ -261,40 +257,6 @@ pull_until_contains() {
   return 1
 }
 
-# Scroll until the text node sits in the upper part of the screen, so the card
-# below it is framed. Swipes are slow so flings cannot overshoot the end of the
-# content, and a card that sits near the bottom is accepted once it is high
-# enough to fill the frame.
-scroll_to_text() {
-  local text="$1" tries=0 node bounds top distance
-  while [ "$tries" -lt 6 ]; do
-    if ui_dump; then
-      node="$(node_for_text "$text")"
-      if [ -n "$node" ]; then
-        bounds="$(bounds_of "$node")"
-        top="$(top_of "$bounds")"
-        if [ -n "$top" ] && [ "$top" -ge 0 ] && [ "$top" -lt 1100 ]; then
-          echo "  framed '$text' at y=$top"
-          return 0
-        fi
-        if [ -n "$top" ] && [ "$top" -ge 1100 ]; then
-          distance=$((top - 500))
-          [ "$distance" -gt 900 ] && distance=900
-          adb shell input swipe 540 1700 540 $((1700 - distance)) 600
-        else
-          # Scrolled past the text: bring it back down into view.
-          adb shell input swipe 540 700 540 1200 600
-        fi
-      else
-        adb shell input swipe 540 1700 540 1000 600
-      fi
-    fi
-    sleep 1
-    tries=$((tries + 1))
-  done
-  return 1
-}
-
 capture() {
   local name="$1"
   if adb exec-out screencap -p > "$OUT/$name" && [ -s "$OUT/$name" ]; then
@@ -389,32 +351,9 @@ if tap_text "AA:BB:CC:DD:EE:01" 30; then
       echo "  ! no charge reading appeared" >&2
       debug_dump "charge-reading"
     fi
-    # 04 — the history graph, framed by scrolling to the card.
-    if scroll_to_text "Battery history"; then
-      sleep 1
-      capture 04-history.png
-    elif wait_for_text "Battery history" 5; then
-      # The card is on screen but the page cannot scroll it any higher.
-      echo "  ... history card is already as high as the page allows" >&2
-      sleep 1
-      capture 04-history.png
-    else
-      echo "  ! could not frame the history card" >&2
-      debug_dump "history"
-    fi
-    # 01 — the cars list with the connected, paired car.
+    # 05 — Settings with the vehicle-key card, back out of the car view first.
     adb shell input keyevent KEYCODE_BACK
-    if wait_for_text "Cars" 20 &&
-      wait_for_text "Demo Tesla" 20 &&
-      wait_for_text "Connected · " 20; then
-      sleep 1
-      capture 01-overview.png
-    else
-      echo "  ! cars list did not show the connected car" >&2
-      debug_dump "overview"
-    fi
-    # 05 — Settings with the vehicle-key card.
-    if tap_desc "Settings" 20; then
+    if wait_for_text "Cars" 20 && tap_desc "Settings" 20; then
       if wait_for_text "Vehicle key" 20; then
         sleep 1
         capture 05-settings.png
@@ -423,6 +362,9 @@ if tap_text "AA:BB:CC:DD:EE:01" 30; then
         debug_dump "settings"
       fi
       adb shell input keyevent KEYCODE_BACK
+    else
+      echo "  ! could not open settings" >&2
+      debug_dump "settings-entry"
     fi
   else
     echo "  ! car detail did not open" >&2
@@ -447,9 +389,6 @@ if adb shell cmd uimode night yes > /dev/null 2>&1; then
     wait_for_text "Cars" 15 || true
   fi
   if wait_for_text "Cars" 5; then
-    sleep 1
-    capture 01-overview-dark.png
-
     # 02 - the scan, with the simulated car already known from the light pass
     # (its address is no longer shown, so wait for the other car's address).
     if pull_until_text "AA:BB:CC:DD:EE:02" 4 20; then
@@ -469,19 +408,6 @@ if adb shell cmd uimode night yes > /dev/null 2>&1; then
       if wait_for_contains "Charge limit" 20; then
         sleep 1
         capture 03-car-dark.png
-
-        # 04 — the history graph, framed like the light pass.
-        if scroll_to_text "Battery history"; then
-          sleep 1
-          capture 04-history-dark.png
-        elif wait_for_text "Battery history" 5; then
-          echo "  ... dark history card is already as high as the page allows" >&2
-          sleep 1
-          capture 04-history-dark.png
-        else
-          echo "  ! could not frame the dark history card" >&2
-          debug_dump "dark-history"
-        fi
 
         # 05 — Settings.
         adb shell input keyevent KEYCODE_BACK
@@ -507,14 +433,14 @@ if adb shell cmd uimode night yes > /dev/null 2>&1; then
       debug_dump "dark-car-unreachable"
     fi
   else
-    echo "  ! dark overview not reachable" >&2
-    debug_dump "dark-overview"
+    echo "  ! dark cars list not reachable" >&2
+    debug_dump "dark-cars"
   fi
 fi
 
-required="01-overview.png 02-scanning.png 03-car.png 04-history.png 05-settings.png"
+required="02-scanning.png 03-car.png 05-settings.png"
 if [ "$dark_pass" = true ]; then
-  required="$required 01-overview-dark.png 02-scanning-dark.png 03-car-dark.png 04-history-dark.png 05-settings-dark.png"
+  required="$required 02-scanning-dark.png 03-car-dark.png 05-settings-dark.png"
 fi
 missing=0
 for name in $required; do
