@@ -145,6 +145,34 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: bash .github/scripts/publish-tag-release.sh
 
+      # Release bot: point the committed screenshots (README + website) at the
+      # build that was just released. Tags only, commits to main, and only when
+      # a PNG actually changed; website/** is ignored by Android CI, so the
+      # commit does not rebuild the app or the rolling preview.
+      - name: Refresh the committed screenshots
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git checkout -B release-shots origin/main
+          changed=false
+          for name in 01-overview 02-scanning 03-car 04-history 05-settings \
+              01-overview-dark 02-scanning-dark 03-car-dark 04-history-dark 05-settings-dark; do
+            if [ -f "screenshots/$name.png" ] && ! cmp -s "screenshots/$name.png" "website/images/$name.png"; then
+              cp "screenshots/$name.png" "website/images/$name.png"
+              changed=true
+            fi
+          done
+          if [ "$changed" != true ]; then
+            echo "screenshots unchanged; nothing to commit"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add website/images
+          git commit -m "Refresh screenshots from ${{ github.ref_name }}"
+          git push origin HEAD:main
+
   preview:
     name: Rolling preview release
     needs: build
