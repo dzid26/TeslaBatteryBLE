@@ -158,9 +158,15 @@ jobs:
           changed=false
           for name in 02-scanning 03-car 05-settings \
               02-scanning-dark 03-car-dark 05-settings-dark; do
-            if [ -f "screenshots/$name.png" ] && ! cmp -s "screenshots/$name.png" "website/images/$name.png"; then
-              cp "screenshots/$name.png" "website/images/$name.png"
+            [ -f "screenshots/$name.png" ] || continue
+            # The README renders these at 33%; keep the committed files at the
+            # website's declared 360x800 so a release does not bloat them.
+            magick "screenshots/$name.png" -resize 360x800 "$name.resized.png"
+            if ! cmp -s "$name.resized.png" "website/images/$name.png"; then
+              mv "$name.resized.png" "website/images/$name.png"
               changed=true
+            else
+              rm -f "$name.resized.png"
             fi
           done
           if [ "$changed" != true ]; then
