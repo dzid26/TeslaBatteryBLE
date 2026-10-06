@@ -26,6 +26,16 @@ WORK="$(mktemp -d)"
 DUMP="$WORK/window.xml"
 trap 'rm -rf "$WORK"' EXIT
 
+# Git Bash on Windows hands adb.exe MSYS paths it cannot resolve: adb would
+# write to C:\tmp\... while bash reads /tmp/.... Convert paths meant for adb.
+adb_path() {
+  if command -v cygpath > /dev/null 2>&1; then
+    cygpath -w "$1"
+  else
+    printf '%s' "$1"
+  fi
+}
+
 adb wait-for-device
 
 # UI interaction needs more than sys.boot_completed: the input service and the
@@ -95,7 +105,7 @@ adb shell cmd location set-location-enabled true || true
 # every caller treats a failed dump as "not found yet" and retries.
 ui_dump() {
   adb shell uiautomator dump /sdcard/window.xml > /dev/null 2>&1 &&
-    adb pull /sdcard/window.xml "$DUMP" > /dev/null 2>&1
+    adb pull /sdcard/window.xml "$(adb_path "$DUMP")" > /dev/null 2>&1
 }
 
 # Wait until the raw hierarchy contains a literal string (usually `text="...`).
@@ -113,6 +123,12 @@ wait_for_literal() {
 
 wait_for_text() {
   wait_for_literal "text=\"$1" "${2:-30}"
+}
+
+# Wait until the raw hierarchy contains a literal anywhere, for values embedded
+# in a composed line instead of starting their own text node.
+wait_for_contains() {
+  wait_for_literal "$1" "${2:-30}"
 }
 
 # First <node> tag whose text starts with $1 (empty when there is none).
@@ -230,6 +246,21 @@ pull_until_text() {
   return 1
 }
 
+# Pull until the raw hierarchy contains a literal anywhere, for values
+# embedded in a composed line instead of starting their own text node.
+pull_until_contains() {
+  local wait="$1" attempts="${2:-3}" timeout="${3:-15}" attempt
+  for attempt in $(seq 1 "$attempts"); do
+    pull_refresh
+    if wait_for_literal "$wait" "$timeout"; then
+      return 0
+    fi
+    echo "  ... pull did not lead to '$wait' (attempt $attempt)" >&2
+    sleep 1
+  done
+  return 1
+}
+
 # Scroll until the text node sits in the upper part of the screen, so the card
 # below it is framed. Swipes are slow so flings cannot overshoot the end of the
 # content, and a card that sits near the bottom is accepted once it is high
@@ -274,6 +305,24 @@ capture() {
   fi
 }
 
+# Save what a CI failure needs to explain itself: the window hierarchy (plus
+# the dump command's own error), the focused window, a logcat tail, and a
+# screenshot. Files land in $OUT/debug/ next to the screenshots.
+debug_dump() {
+  local label="$1" texts=""
+  mkdir -p "$OUT/debug"
+  if adb shell uiautomator dump /sdcard/window.xml > "$OUT/debug/$label-dump.txt" 2>&1 &&
+    adb pull /sdcard/window.xml "$(adb_path "$OUT/debug/$label-window.xml")" > /dev/null 2>&1; then
+    texts="$(grep -oE 'text="[^"]*"' "$OUT/debug/$label-window.xml" | head -n 14 | tr '\n' ' ' || true)"
+    echo "  state at $label: $texts" >&2
+  else
+    echo "  state at $label: uiautomator dump failed: $(tail -n 1 "$OUT/debug/$label-dump.txt" 2>/dev/null || true)" >&2
+  fi
+  adb shell dumpsys window 2>/dev/null | grep -E 'mCurrentFocus|mFocusedApp' | head -n 2 > "$OUT/debug/$label-focus.txt" || true
+  adb logcat -d -v time -t 1000 > "$OUT/debug/$label-logcat.txt" 2>/dev/null || true
+  adb exec-out screencap -p > "$OUT/debug/$label-screen.png" 2>/dev/null || true
+}
+
 # Bring the app to the foreground and wait until its window has focus.
 adb shell am start -W -n "$ACTIVITY" > /dev/null
 focused=false
@@ -291,30 +340,54 @@ if [ "$focused" != true ]; then
 fi
 sleep 2
 
-# 02 - the scan finding the simulated cars. A pull on the cars list starts it;
-# without Bluetooth hardware the app keeps running and reports it in the log,
-# so this works on emulators too. The scan can finish before "Scanning:" is
-# ever dumped, and one pull may not take, so retry until the address appears.
-if pull_until_text "AA:BB:CC:DD:EE:01" 3 20; then
+# A grant that raced the install leaves the permission card up and the list
+# never scans; re-grant and relaunch once.
+if wait_for_text "Allow Bluetooth access" 2; then
+  echo "  ... permission card is showing; re-granting and relaunching" >&2
+  for permission in \
+    BLUETOOTH_SCAN \
+    BLUETOOTH_CONNECT \
+    ACCESS_FINE_LOCATION \
+    POST_NOTIFICATIONS; do
+    adb shell pm grant "$PKG" "android.permission.$permission" || true
+  done
+  adb shell am start -n "$ACTIVITY" > /dev/null
+  sleep 3
+fi
+
+# 02 - the scan finding the simulated cars. An empty list scans on its own; a
+# pull is the fallback when that first scan was dropped while the app was still
+# starting. The scan can finish before "Scanning:" is ever dumped, so retry
+# until the address appears.
+if wait_for_text "AA:BB:CC:DD:EE:01" 30 || pull_until_text "AA:BB:CC:DD:EE:01" 3 20; then
   sleep 1
   capture 02-scanning.png
 else
   echo "  ! scan results never appeared" >&2
+  debug_dump "scan-missing"
 fi
 
 # Open the simulated car and drive the demo flow. These steps are skipped
 # silently on real builds, which share this script.
-if tap_text "AA:BB:CC:DD:EE:01"; then
-  if wait_for_text "Pair key" 30; then
-    tap_and_wait "Pair key" "Paired" 30 || echo "  ! pairing did not finish" >&2
+if tap_text "AA:BB:CC:DD:EE:01" 30; then
+  if wait_for_text "Battery history" 30; then
+    # A fresh install shows the app-key card; pair when it is there. The
+    # enrolled state reads "App key paired" in the hero.
+    if wait_for_text "Pair key" 5; then
+      tap_and_wait "Pair key" "App key paired" 45 ||
+        { echo "  ! pairing did not finish" >&2; debug_dump "pairing"; }
+    fi
     # Pull-to-refresh replaced the Wake and Read buttons: one pull wakes the
-    # car, the next reads the battery once the status refresh lands.
-    pull_until_text "Awake" 2 || echo "  ! car never reported awake" >&2
-    if pull_until_text "Charge limit" 3; then
+    # car, the next reads the battery once the status refresh lands. The wake
+    # state is the status pill's own "Awake" text.
+    pull_until_contains "Awake" 3 20 ||
+      { echo "  ! car never reported awake" >&2; debug_dump "wake"; }
+    if pull_until_contains "Charge limit" 4 20; then
       sleep 1
       capture 03-car.png
     else
       echo "  ! no charge reading appeared" >&2
+      debug_dump "charge-reading"
     fi
     # 04 — the history graph, framed by scrolling to the card.
     if scroll_to_text "Battery history"; then
@@ -327,6 +400,7 @@ if tap_text "AA:BB:CC:DD:EE:01"; then
       capture 04-history.png
     else
       echo "  ! could not frame the history card" >&2
+      debug_dump "history"
     fi
     # 01 — the cars list with the connected, paired car.
     adb shell input keyevent KEYCODE_BACK
@@ -337,6 +411,7 @@ if tap_text "AA:BB:CC:DD:EE:01"; then
       capture 01-overview.png
     else
       echo "  ! cars list did not show the connected car" >&2
+      debug_dump "overview"
     fi
     # 05 — Settings with the vehicle-key card.
     if tap_desc "Settings" 20; then
@@ -345,14 +420,17 @@ if tap_text "AA:BB:CC:DD:EE:01"; then
         capture 05-settings.png
       else
         echo "  ! settings screen did not open" >&2
+        debug_dump "settings"
       fi
       adb shell input keyevent KEYCODE_BACK
     fi
   else
     echo "  ! car detail did not open" >&2
+    debug_dump "car-detail"
   fi
 else
   echo "  ! simulated car not listed (is this a demo build?)" >&2
+  debug_dump "car-not-listed"
 fi
 
 # Dark-mode pass: every screen again with the dark theme. The theme change
@@ -374,20 +452,21 @@ if adb shell cmd uimode night yes > /dev/null 2>&1; then
 
     # 02 - the scan, with the simulated car already known from the light pass
     # (its address is no longer shown, so wait for the other car's address).
-    if pull_until_text "AA:BB:CC:DD:EE:02" 3 20; then
+    if pull_until_text "AA:BB:CC:DD:EE:02" 4 20; then
       sleep 1
       capture 02-scanning-dark.png
     else
       echo "  ! dark scan results never appeared" >&2
+      debug_dump "dark-scan"
     fi
 
     # 03 — the car detail; after a process restart the car is asleep again.
     if tap_text "Demo Tesla" 20; then
-      if ! wait_for_text "Charge limit" 5; then
-        pull_until_text "Awake" 2 || true
-        pull_until_text "Charge limit" 3 || true
+      if ! wait_for_contains "Charge limit" 10; then
+        pull_until_contains "Awake" 3 20 || true
+        pull_until_contains "Charge limit" 4 20 || true
       fi
-      if wait_for_text "Charge limit" 10; then
+      if wait_for_contains "Charge limit" 20; then
         sleep 1
         capture 03-car-dark.png
 
@@ -401,6 +480,7 @@ if adb shell cmd uimode night yes > /dev/null 2>&1; then
           capture 04-history-dark.png
         else
           echo "  ! could not frame the dark history card" >&2
+          debug_dump "dark-history"
         fi
 
         # 05 — Settings.
@@ -411,19 +491,24 @@ if adb shell cmd uimode night yes > /dev/null 2>&1; then
             capture 05-settings-dark.png
           else
             echo "  ! dark settings screen did not open" >&2
+            debug_dump "dark-settings"
           fi
           adb shell input keyevent KEYCODE_BACK
         else
           echo "  ! could not open dark settings" >&2
+          debug_dump "dark-settings-entry"
         fi
       else
         echo "  ! dark car detail has no reading" >&2
+        debug_dump "dark-car"
       fi
     else
       echo "  ! dark car detail not reachable" >&2
+      debug_dump "dark-car-unreachable"
     fi
   else
     echo "  ! dark overview not reachable" >&2
+    debug_dump "dark-overview"
   fi
 fi
 
@@ -440,6 +525,7 @@ for name in $required; do
 done
 ls -l "$OUT"
 if [ "$missing" -ne 0 ]; then
+  debug_dump "final"
   echo "screenshot capture incomplete" >&2
   exit 1
 fi
