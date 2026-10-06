@@ -2,10 +2,11 @@
 name: PR screenshots
 
 # Capture the demo build on pull requests that touch the app UI or the capture
-# flow and post the screenshot sheet in one bot comment, so reviews see the
-# visual result. The sheet is uploaded to the rolling pr-shots release and the
-# comment is updated on every push. Note: PRs from forks get a read-only token,
-# so the upload/comment steps fail there by design.
+# flow and post the screenshot sheet in one sticky bot comment, so reviews see
+# the visual result. The sheet is hosted as a user attachment, so neither the PR
+# nor the releases carry image assets, and the comment is updated on every push.
+# Note: PRs from forks get a read-only token, so the upload/comment steps fail
+# there by design.
 on:
   pull_request:
     paths:
@@ -105,40 +106,42 @@ jobs:
       - name: Compose the screenshot sheet
         run: bash .github/scripts/build-screenshot-sheet.sh screenshots screenshots/screenshot-sheet.png
 
-      - name: Upload the sheet to the pr-shots release
+      - name: Resolve the pull request number
+        id: pr
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          SHORT="$(git rev-parse --short HEAD)"
-          NAME="screenshot-sheet-$SHORT.png"
-          cp screenshots/screenshot-sheet.png "$NAME"
-          if ! gh release view pr-shots > /dev/null 2>&1; then
-            gh release create pr-shots --title "PR screenshots" --prerelease \
-              --notes "Screenshot sheets for PR review comments. An asset is added per push; old ones can be pruned."
+          number="${{ github.event.pull_request.number }}"
+          if [ -z "$number" ]; then
+            number="$(gh pr list --head "${{ github.ref_name }}" --state open --json number --jq '.[0].number // empty')"
           fi
-          gh release upload pr-shots "$NAME" --clobber
+          echo "number=$number" >> "$GITHUB_OUTPUT"
 
-      - name: Post or update the screenshots comment
+      # Host the sheet as a user attachment (release-asset fallback inside the
+      # helper), so no image asset lives on the PR or the releases.
+      - name: Upload the screenshot sheet
+        id: sheet
         env:
           GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
-          PR="$PR_NUMBER"
-          if [ -z "$PR" ]; then
-            PR="$(gh pr list --head "${{ github.ref_name }}" --state open --json number --jq '.[0].number // empty')"
-          fi
-          if [ -z "$PR" ]; then
-            echo "no open PR for ${{ github.ref_name }}; skipping the comment"
-            exit 0
-          fi
-          SHORT="$(git rev-parse --short HEAD)"
-          URL="https://github.com/${{ github.repository }}/releases/download/pr-shots/screenshot-sheet-$SHORT.png"
-          BODY="<!-- pr-screenshots -->"$'\n'"## Screenshots ($SHORT)"$'\n\n'"![App screenshots: light and dark]($URL)"$'\n\n'"Captured from the demo build at $SHORT."
-          COMMENT_ID="$(gh api "repos/${{ github.repository }}/issues/$PR/comments" --paginate --jq '[.[] | select(.body | contains("<!-- pr-screenshots -->")) | .id] | .[0] // empty')"
-          if [ -n "$COMMENT_ID" ]; then
-            gh api -X PATCH "repos/${{ github.repository }}/issues/comments/$COMMENT_ID" -f body="$BODY" > /dev/null
-          else
-            gh pr comment "$PR" --body "$BODY"
-          fi
+          short="$(git rev-parse --short HEAD)"
+          url="$(bash .github/scripts/upload-screenshot.sh screenshots/screenshot-sheet.png "screenshot-sheet-$short.png" screenshots)"
+          echo "short=$short" >> "$GITHUB_OUTPUT"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+
+      - name: Comment on the pull request
+        if: steps.pr.outputs.number != ''
+        uses: thollander/actions-comment-pull-request@24bffb9b452ba05a4f3f77933840a6a841d1b32b # v3.0.1
+        with:
+          message: |
+            <!-- pr-screenshots -->
+            ## Screenshots
+
+            ![App screenshots: light and dark](${{ steps.sheet.outputs.url }})
+
+            Captured from the demo build at ${{ steps.sheet.outputs.short }}.
+          comment-tag: pr-screenshots
+          pr-number: ${{ steps.pr.outputs.number }}
+          github-token: ${{ github.token }}
