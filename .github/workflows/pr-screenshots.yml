@@ -141,10 +141,11 @@ jobs:
         id: sheet
         env:
           GH_TOKEN: ${{ github.token }}
+          ATTACHMENTS_TOKEN: ${{ secrets.ATTACHMENTS_TOKEN }}
         run: |
           set -euo pipefail
           short="$(git rev-parse --short HEAD)"
-          url="$(bash .github/scripts/upload-screenshot.sh screenshots/screenshot-sheet.png "screenshot-sheet-$short.png" screenshots)"
+          url="$(bash .github/scripts/upload-screenshot.sh screenshots/screenshot-sheet.png "screenshot-sheet-$short.png")"
           echo "short=$short" >> "$GITHUB_OUTPUT"
           echo "url=$url" >> "$GITHUB_OUTPUT"
 

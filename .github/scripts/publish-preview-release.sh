@@ -46,7 +46,7 @@ git push origin "refs/tags/$TAG" --force
 [ -f "$SHEET" ] || { echo "missing $SHEET (the capture step must succeed)" >&2; exit 1; }
 SHEET_NAME="screenshot-sheet-${SHORT_SHA}.png"
 # Host the sheet as a user attachment so the release page keeps only the APK.
-SHEET_URL="$(bash .github/scripts/upload-screenshot.sh "$SHEET" "$SHEET_NAME" screenshots)"
+SHEET_URL="$(bash .github/scripts/upload-screenshot.sh "$SHEET" "$SHEET_NAME")"
 
 {
   echo "Rolling preview of \`main\` - rebuilt on every push. The APK is a debug build."
