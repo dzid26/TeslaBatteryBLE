@@ -166,9 +166,10 @@ jobs:
           for name in 02-scanning 03-car 05-settings \
               02-scanning-dark 03-car-dark 05-settings-dark; do
             [ -f "screenshots/$name.png" ] || continue
-            # The README renders these at 33%; keep the committed files at the
-            # website's declared 360x800 so a release does not bloat them.
-            magick "screenshots/$name.png" -resize 360x800 "$name.resized.png"
+            # The README renders these at 33% with the gap baked in as
+            # transparent padding; keep the committed files at 540x1200 with a
+            # 16 px inset so a release does not bloat them.
+            magick "screenshots/$name.png" -resize 508x1168 -background none -gravity center -extent 540x1200 "$name.resized.png"
             if ! cmp -s "$name.resized.png" "website/images/$name.png"; then
               mv "$name.resized.png" "website/images/$name.png"
               changed=true

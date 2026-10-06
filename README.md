@@ -19,11 +19,11 @@ Light and dark themes, side by side.
 
 **Light**
 
-<p><img src="website/images/02-scanning.png" alt="Scanning for nearby cars (light)" width="30%">&nbsp;&nbsp;&nbsp;<img src="website/images/03-car.png" alt="Car detail with the battery reading (light)" width="30%">&nbsp;&nbsp;&nbsp;<img src="website/images/05-settings.png" alt="Settings (light)" width="30%"></p>
+<p><img src="website/images/02-scanning.png" alt="Scanning for nearby cars (light)" width="33%"><img src="website/images/03-car.png" alt="Car detail with the battery reading (light)" width="33%"><img src="website/images/05-settings.png" alt="Settings (light)" width="33%"></p>
 
 **Dark**
 
-<p><img src="website/images/02-scanning-dark.png" alt="Scanning for nearby cars (dark)" width="30%">&nbsp;&nbsp;&nbsp;<img src="website/images/03-car-dark.png" alt="Car detail with the battery reading (dark)" width="30%">&nbsp;&nbsp;&nbsp;<img src="website/images/05-settings-dark.png" alt="Settings (dark)" width="30%"></p>
+<p><img src="website/images/02-scanning-dark.png" alt="Scanning for nearby cars (dark)" width="33%"><img src="website/images/03-car-dark.png" alt="Car detail with the battery reading (dark)" width="33%"><img src="website/images/05-settings-dark.png" alt="Settings (dark)" width="33%"></p>
 
 ## Features
 
