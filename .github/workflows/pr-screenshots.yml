@@ -2,13 +2,16 @@
 name: PR screenshots
 
 # Capture the demo build on pull requests that touch the app UI or the capture
-# flow and post the screenshot sheet in one sticky bot comment, so reviews see
-# the visual result. The sheet is hosted as a user attachment, so neither the PR
-# nor the releases carry image assets, and the comment is updated on every push.
+# flow and post the screenshot sheet as a comment, so reviews see the visual
+# result. One comment per ready revision (tagged by SHA), so flipping a PR back
+# to ready after rework posts the next round's screenshots instead of
+# overwriting the reviewed one; draft pushes are skipped. The sheet is hosted as
+# a user attachment, so neither the PR nor the releases carry image assets.
 # Note: PRs from forks get a read-only token, so the upload/comment steps fail
 # there by design.
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - 'app/**'
       - '.github/scripts/capture-screenshots.sh'
@@ -28,6 +31,9 @@ concurrency:
 jobs:
   screenshots:
     name: Capture and post screenshots
+    # Skip while a PR is a draft: rework pushes do not need screenshots, and the
+    # ready_for_review event posts the next review round's comment.
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -153,6 +159,6 @@ jobs:
             ![App screenshots: light and dark](${{ steps.sheet.outputs.url }})
 
             Captured from the demo build at ${{ steps.sheet.outputs.short }}.
-          comment-tag: pr-screenshots
+          comment-tag: pr-screenshots-${{ steps.sheet.outputs.short }}
           pr-number: ${{ steps.pr.outputs.number }}
           github-token: ${{ github.token }}
