@@ -107,6 +107,16 @@ jobs:
       - name: Compose the screenshot sheet
         run: bash .github/scripts/build-screenshot-sheet.sh screenshots screenshots/screenshot-sheet.png
 
+      # Keep the capture diagnostics (window XML, logcat tail, screenshots) when
+      # a capture fails, so the next flake is debuggable.
+      - name: Upload the capture diagnostics
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: pr-screenshots-capture
+          path: screenshots
+          if-no-files-found: warn
+
       - name: Resolve the pull request number
         id: pr
         env:
