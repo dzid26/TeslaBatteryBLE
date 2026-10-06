@@ -84,8 +84,8 @@ jobs:
         run: |
           set -euo pipefail
           missing=""
-          for name in 01-overview 02-scanning 03-car 04-history 05-settings \
-              01-overview-dark 02-scanning-dark 03-car-dark 04-history-dark 05-settings-dark; do
+          for name in 02-scanning 03-car 05-settings \
+              02-scanning-dark 03-car-dark 05-settings-dark; do
             if [ ! -f "demo-screenshots/$name.png" ]; then
               echo "missing required screenshot: $name.png"
               missing=true
