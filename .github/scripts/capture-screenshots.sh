@@ -154,6 +154,10 @@ center_y() {
     awk '{print int(($1 + $2) / 2)}'
 }
 
+top_of() {
+  sed -E 's/.*\[(-?[0-9]+),(-?[0-9]+)\]\[(-?[0-9]+),(-?[0-9]+)\].*/\2/' <<< "$1"
+}
+
 # Wait until a node with text/content-desc starting with $2 exists. On success
 # FOUND_NODE holds the node's tag.
 wait_for_node() {
@@ -257,6 +261,40 @@ pull_until_contains() {
   return 1
 }
 
+# Scroll until the text node sits in the upper part of the screen, so the card
+# below it is framed. Swipes are slow so flings cannot overshoot the end of the
+# content, and a card that sits near the bottom is accepted once it is high
+# enough to fill the frame.
+scroll_to_text() {
+  local text="$1" tries=0 node bounds top distance
+  while [ "$tries" -lt 6 ]; do
+    if ui_dump; then
+      node="$(node_for_text "$text")"
+      if [ -n "$node" ]; then
+        bounds="$(bounds_of "$node")"
+        top="$(top_of "$bounds")"
+        if [ -n "$top" ] && [ "$top" -ge 0 ] && [ "$top" -lt 1100 ]; then
+          echo "  framed '$text' at y=$top"
+          return 0
+        fi
+        if [ -n "$top" ] && [ "$top" -ge 1100 ]; then
+          distance=$((top - 500))
+          [ "$distance" -gt 900 ] && distance=900
+          adb shell input swipe 540 1700 540 $((1700 - distance)) 600
+        else
+          # Scrolled past the text: bring it back down into view.
+          adb shell input swipe 540 700 540 1200 600
+        fi
+      else
+        adb shell input swipe 540 1700 540 1000 600
+      fi
+    fi
+    sleep 1
+    tries=$((tries + 1))
+  done
+  return 1
+}
+
 capture() {
   local name="$1"
   if adb exec-out screencap -p > "$OUT/$name" && [ -s "$OUT/$name" ]; then
@@ -346,6 +384,12 @@ if tap_text "AA:BB:CC:DD:EE:01" 30; then
       { echo "  ! car never reported awake" >&2; debug_dump "wake"; }
     if pull_until_contains "Charge limit" 4 20; then
       sleep 1
+      # The health card sits under the history chart; frame it when present so
+      # the shot shows the measured state.
+      if wait_for_text "Battery health" 5; then
+        scroll_to_text "Battery health" || true
+        sleep 1
+      fi
       capture 03-car.png
     else
       echo "  ! no charge reading appeared" >&2
@@ -407,6 +451,10 @@ if adb shell cmd uimode night yes > /dev/null 2>&1; then
       fi
       if wait_for_contains "Charge limit" 20; then
         sleep 1
+        if wait_for_text "Battery health" 5; then
+          scroll_to_text "Battery health" || true
+          sleep 1
+        fi
         capture 03-car-dark.png
 
         # 05 — Settings.
