@@ -2,8 +2,17 @@
 
 package com.dzid26.teslable.ble
 
-/** A BLE link to one Tesla: real over GATT, fake for demos and tests. */
+/**
+ * A BLE link to one Tesla: real over GATT, fake for demos and tests.
+ *
+ * Call every method on the main thread.
+ */
 interface TeslaTransport {
+    /**
+     * Link events. Every callback arrives on the main thread, so a listener can
+     * use main-thread state without locking, and it may call back into the
+     * transport from a callback, e.g. [TeslaTransport.close] from [onPhase].
+     */
     interface Listener {
         fun onPhase(phase: ConnectionPhase)
 
