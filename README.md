@@ -53,8 +53,9 @@ OBD path for pack-level data. See:
 ### GitHub Releases (preview channel)
 
 The rolling [preview release](https://github.com/dzid26/TeslaBatteryBLE/releases/tag/preview)
-is rebuilt from `main` on every push. **Preview APKs are debug builds** — installable
-side by side with a future stable release, but do not treat them as production-signed.
+is rebuilt from `main` on every push. **Preview APKs are debug builds**, signed with the
+same key as releases and sharing their app ID, so a later release installs over a preview
+in place.
 
 ### Obtainium (auto-updates from GitHub)
 
@@ -70,7 +71,7 @@ one available. Signed stable releases and F-Droid are on the
 
 ## Build from source
 
-Requirements: JDK 21 (Temurin recommended), Android SDK 35, Git.
+Requirements: JDK 21 (Temurin recommended), Android SDK 37, Git.
 
 ```bash
 ./gradlew :app:assembleDebug        # debug APK
