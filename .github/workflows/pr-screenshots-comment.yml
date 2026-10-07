@@ -8,7 +8,8 @@ name: PR screenshots comment
 # itself and of the scripts, never checks out or runs pull request code, and
 # treats the artifact as untrusted input. The upload token comes from the
 # `release` environment. The sheet is hosted as a user attachment, so neither
-# the PR nor the releases carry image assets.
+# the PR nor the releases carry image assets. The comment also links the debug
+# APK that Android CI built for the same commit, when there is one.
 on:
   workflow_run:
     workflows: ["PR screenshots"]
@@ -29,7 +30,7 @@ jobs:
       github.event.workflow_run.conclusion == 'success'
     environment: release
     permissions:
-      actions: read        # download the capture run's artifact
+      actions: read        # download the capture run's artifact; find the Android CI run's APK
       contents: read       # check out the scripts; the upload helper reads the repo id
       pull-requests: write # post/update the comment
     runs-on: ubuntu-latest
@@ -86,6 +87,48 @@ jobs:
           url="$(bash .github/scripts/upload-screenshot.sh "$RUNNER_TEMP/screenshot-sheet.png" "screenshot-sheet-$SHORT_SHA.png")"
           echo "url=$url" >> "$GITHUB_OUTPUT"
 
+      # Link the debug APK that Android CI built for the same commit. The run is
+      # looked up by the event's head SHA, never by artifact content. The line
+      # is optional: no run, a failed run or a lookup error leaves it out.
+      - name: Find the debug APK
+        id: apk
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          caveat="It's signed with this CI run's throwaway debug key, so uninstall the installed app first, which also removes its pairing."
+          runs_url="https://github.com/$GITHUB_REPOSITORY/actions/runs"
+          line=""
+          if [[ ! "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::warning::unexpected head SHA; posting without the APK line"
+          elif ! run="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/android.yml/runs?head_sha=$HEAD_SHA&event=pull_request&per_page=1" \
+              --jq '.workflow_runs[0] // empty | "\(.id) \(.status) \(.conclusion // "none")"')"; then
+            echo "::warning::could not look up the Android CI run; posting without the APK line"
+          elif [ -z "$run" ]; then
+            echo "No Android CI run for this commit; posting without the APK line."
+          else
+            read -r run_id status conclusion <<< "$run"
+            if [[ ! "$run_id" =~ ^[0-9]+$ ]]; then
+              echo "::warning::unexpected Android CI run id; posting without the APK line"
+            elif [ "$status" != completed ]; then
+              line="Debug APK: still building in [Android CI]($runs_url/$run_id); the zip appears there when it finishes (GitHub sign-in needed). $caveat"
+            elif [ "$conclusion" = success ]; then
+              artifact_id="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run_id/artifacts" \
+                --jq '[.artifacts[] | select(.name == "teslable-debug-apk" and (.expired | not))] | sort_by(.created_at) | last | .id // empty')" ||
+                artifact_id=""
+              if [[ "$artifact_id" =~ ^[0-9]+$ ]]; then
+                line="Debug APK: [zip from Android CI]($runs_url/$run_id/artifacts/$artifact_id) (GitHub sign-in needed). $caveat"
+              else
+                echo "Android CI run $run_id has no debug APK artifact; posting without the APK line."
+              fi
+            else
+              echo "Android CI run $run_id concluded $conclusion; posting without the APK line."
+            fi
+          fi
+          echo "line=$line" >> "$GITHUB_OUTPUT"
+
       - name: Comment on the pull request
         uses: thollander/actions-comment-pull-request@24bffb9b452ba05a4f3f77933840a6a841d1b32b # v3.0.1
         with:
@@ -96,6 +139,8 @@ jobs:
             ![App screenshots: light and dark](${{ steps.sheet.outputs.url }})
 
             Captured from the demo build at ${{ steps.meta.outputs.short }}.
+
+            ${{ steps.apk.outputs.line }}
           comment-tag: pr-screenshots-${{ steps.meta.outputs.short }}
           pr-number: ${{ steps.meta.outputs.pr }}
           github-token: ${{ github.token }}
