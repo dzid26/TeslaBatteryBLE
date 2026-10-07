@@ -36,7 +36,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
@@ -56,7 +55,6 @@ import androidx.compose.ui.unit.dp
 import com.dzid26.teslable.ble.BleUiState
 import com.dzid26.teslable.ble.ConnectionPhase
 import com.dzid26.teslable.ble.LogEntry
-import com.dzid26.teslable.ble.PairingPhase
 import com.dzid26.teslable.ble.TeslaAdvert
 import com.dzid26.teslable.ble.TeslaConnection
 import com.dzid26.teslable.ble.Vehicle
@@ -158,14 +156,6 @@ fun MainScreen(
                     onRequestPermissions()
                 }
             },
-            onPair = { name, rowAddress, ready ->
-                if (!permissionsGranted) {
-                    onRequestPermissions()
-                } else {
-                    viewingBleName = name
-                    if (ready) onPairKey(rowAddress) else onOpenVehicle(rowAddress)
-                }
-            },
             onEditVin = { name -> vinTarget = name },
             onWake = onWake,
             onOpenSettings = onOpenSettings,
@@ -260,7 +250,6 @@ private fun ConnectionsScreen(
     onToggleScan: () -> Unit,
     onToggleTracking: (Boolean) -> Unit,
     onOpen: (String, String) -> Unit,
-    onPair: (String, String, Boolean) -> Unit,
     onEditVin: (String) -> Unit,
     onWake: (String) -> Unit,
     onOpenSettings: () -> Unit,
@@ -308,12 +297,17 @@ private fun ConnectionsScreen(
                     .fillMaxSize()
                     .padding(innerPadding),
             indicator = {
-                RefreshPill(
-                    state = pullState,
-                    isRefreshing = state.scanning,
-                    pullLabel = "Scan for cars",
-                    refreshingLabel = "Scanning…",
-                )
+                // The pill is the manual-pull affordance only; the status row
+                // below carries the scan spinner, so a running scan never
+                // shows two spinners.
+                if (pullState.distanceFraction > 0f) {
+                    RefreshPill(
+                        state = pullState,
+                        isRefreshing = state.scanning,
+                        pullLabel = "Scan for cars",
+                        refreshingLabel = null,
+                    )
+                }
             },
         ) {
             Column(
@@ -368,10 +362,8 @@ private fun ConnectionsScreen(
 
                 VehicleList(
                     rows = rows,
-                    explicitScan = state.explicitScan,
                     scanning = state.scanning,
                     onOpen = onOpen,
-                    onPair = onPair,
                     onEditVin = onEditVin,
                     onWake = onWake,
                     modifier = Modifier.weight(1f),
@@ -387,10 +379,8 @@ private fun ConnectionsScreen(
 @Composable
 private fun VehicleList(
     rows: List<VehicleRow>,
-    explicitScan: Boolean,
     scanning: Boolean,
     onOpen: (String, String) -> Unit,
-    onPair: (String, String, Boolean) -> Unit,
     onEditVin: (String) -> Unit,
     onWake: (String) -> Unit,
     modifier: Modifier = Modifier,
@@ -429,15 +419,7 @@ private fun VehicleList(
             items(rows, key = { it.bleName }) { row ->
                 VehicleCard(
                     row = row,
-                    explicitScan = explicitScan,
                     onOpen = { onOpen(row.bleName, row.address) },
-                    onPair = {
-                        onPair(
-                            row.bleName,
-                            row.address,
-                            row.connection?.phase == ConnectionPhase.READY,
-                        )
-                    },
                     onEditVin = { onEditVin(row.bleName) },
                     onWake = { onWake(row.bleName) },
                 )
@@ -474,9 +456,7 @@ private fun PermissionCard(
 @Composable
 private fun VehicleCard(
     row: VehicleRow,
-    explicitScan: Boolean,
     onOpen: () -> Unit,
-    onPair: () -> Unit,
     onEditVin: () -> Unit,
     onWake: () -> Unit,
 ) {
@@ -485,10 +465,6 @@ private fun VehicleCard(
     val canWake =
         row.connection?.status?.asleep == true &&
             row.connection?.sessions?.contains("DOMAIN_VEHICLE_SECURITY") == true
-    val paired =
-        row.vehicle?.keySlot != null ||
-            row.connection?.keySlot != null ||
-            row.connection?.pairing == PairingPhase.OK
     val vin = row.vehicle?.vin
     var menuOpen by remember { mutableStateOf(false) }
 
@@ -519,18 +495,6 @@ private fun VehicleCard(
                         fontFamily = if (vin != null) FontFamily.Monospace else null,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    if (explicitScan && !paired && row.connection != null) {
-                        val pairingInProgress =
-                            row.connection.pairing == PairingPhase.CHECKING ||
-                                row.connection.pairing == PairingPhase.SENDING ||
-                                row.connection.pairing == PairingPhase.WAITING_FOR_CARD
-                        TextButton(
-                            onClick = onPair,
-                            enabled = !pairingInProgress,
-                        ) {
-                            Text("Pair")
-                        }
-                    }
                 }
                 if (reading != null) {
                     Text(
