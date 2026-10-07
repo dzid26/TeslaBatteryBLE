@@ -20,6 +20,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
@@ -64,6 +65,10 @@ class MainActivity : ComponentActivity() {
                 val state by controller.state.collectAsState()
                 val batteryHistory by controller.batteryHistory.collectAsState()
                 var screen by rememberSaveable { mutableStateOf(AppScreen.MAIN) }
+                // MainScreen leaves the composition while Settings is open; keep its
+                // saved state (list vs. car view) so Back returns where the user was
+                // instead of re-running the restore-last-car step.
+                val screenStates = rememberSaveableStateHolder()
 
                 val notificationPermissionLauncher =
                     rememberLauncherForActivityResult(
@@ -108,30 +113,32 @@ class MainActivity : ComponentActivity() {
                             AboutScreen(onBack = { screen = AppScreen.SETTINGS })
 
                         AppScreen.MAIN ->
-                            MainScreen(
-                                state = state,
-                                history = batteryHistory,
-                                permissionsGranted = permissionsGranted,
-                                locationServicesEnabled = locationEnabled,
-                                onRequestPermissions = requestPermissions,
-                                onToggleScan = {
-                                    if (state.scanning) {
-                                        controller.stopScan()
-                                    } else if (permissionsGranted) {
-                                        controller.startScan()
-                                    } else {
-                                        requestPermissions()
-                                    }
-                                },
-                                onToggleTracking = controller::setTrackingEnabled,
-                                onOpenVehicle = controller::openVehicle,
-                                onOpenRequestConsumed = controller::consumeOpenVehicleRequest,
-                                onPairKey = controller::pairKey,
-                                onSaveVin = controller::saveVin,
-                                onWake = { bleName -> controller.wakeVehicle(bleName) },
-                                onReadSoc = { controller.requestChargeState() },
-                                onOpenSettings = { screen = AppScreen.SETTINGS },
-                            )
+                            screenStates.SaveableStateProvider(AppScreen.MAIN.name) {
+                                MainScreen(
+                                    state = state,
+                                    history = batteryHistory,
+                                    permissionsGranted = permissionsGranted,
+                                    locationServicesEnabled = locationEnabled,
+                                    onRequestPermissions = requestPermissions,
+                                    onToggleScan = {
+                                        if (state.scanning) {
+                                            controller.stopScan()
+                                        } else if (permissionsGranted) {
+                                            controller.startScan()
+                                        } else {
+                                            requestPermissions()
+                                        }
+                                    },
+                                    onToggleTracking = controller::setTrackingEnabled,
+                                    onOpenVehicle = controller::openVehicle,
+                                    onOpenRequestConsumed = controller::consumeOpenVehicleRequest,
+                                    onPairKey = controller::pairKey,
+                                    onSaveVin = controller::saveVin,
+                                    onWake = { bleName -> controller.wakeVehicle(bleName) },
+                                    onReadSoc = { controller.requestChargeState() },
+                                    onOpenSettings = { screen = AppScreen.SETTINGS },
+                                )
+                            }
                     }
                 }
             }
