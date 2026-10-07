@@ -5,7 +5,7 @@ package com.dzid26.teslable
 import android.content.Context
 import com.dzid26.teslable.ble.DemoMode
 import com.dzid26.teslable.core.TeslaNames
-import com.dzid26.teslable.core.history.BatteryHistoryLog
+import com.dzid26.teslable.core.history.ProtoLog
 import com.tesla.generated.carserver.common.Void
 import com.tesla.generated.carserver.vehicle.ChargeState
 import java.io.File
@@ -38,7 +38,7 @@ internal object DemoHistory {
         val file = File(dir, "$vehicleId$LOG_SUFFIX")
         if (file.exists()) return
         dir.mkdirs()
-        file.writeBytes(BatteryHistoryLog.encode(samples(System.currentTimeMillis())))
+        file.writeBytes(ProtoLog.encode(samples(System.currentTimeMillis())))
     }
 
     /** One reading in the seeded timeline; [chargeStartPercent] marks a session. */

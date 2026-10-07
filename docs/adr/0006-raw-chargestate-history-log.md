@@ -15,8 +15,9 @@ buys nothing.
 ## Decision
 
 - History is an append-only log of the car's raw `ChargeState` records,
-  length-delimited (varint length + `ChargeState` bytes, `BatteryHistoryLog`).
-  No custom proto, no per-record envelope.
+  length-delimited (varint length + message bytes, `ProtoLog`, which frames any
+  Wire message and will serve drive records too). No custom proto, no
+  per-record envelope.
 - One file per vehicle: `filesDir/battery-history/<vehicleId>.pblog`, where
   `<vehicleId>` is the advertised BLE name the app records (ADR-0004's stable
   key). Tesla names are `S` + the first 8 bytes of SHA-1(VIN) in hex + a

@@ -3,8 +3,8 @@
 package com.dzid26.teslable.history
 
 import android.content.Context
-import com.dzid26.teslable.core.history.BatteryHistoryLog
 import com.dzid26.teslable.core.history.BatterySample
+import com.dzid26.teslable.core.history.ProtoLog
 import com.dzid26.teslable.core.history.toBatterySample
 import com.dzid26.teslable.core.history.withTimestamp
 import com.dzid26.teslable.core.protocol.TeslaCommands
@@ -78,11 +78,11 @@ class BatteryHistoryStore(
         val count = (recordCounts[vehicleId] ?: 0) + 1
         if (count > MAX_RECORDS_PER_FILE) {
             val kept =
-                (BatteryHistoryLog.decode(file.readBytes()) + record).takeLast(MAX_RECORDS_PER_FILE)
-            writeAtomically(file, BatteryHistoryLog.encode(kept))
+                (ProtoLog.decode(file.readBytes(), ChargeState.ADAPTER) + record).takeLast(MAX_RECORDS_PER_FILE)
+            writeAtomically(file, ProtoLog.encode(kept))
             recordCounts[vehicleId] = kept.size
         } else {
-            file.appendBytes(BatteryHistoryLog.encodeFrame(record))
+            file.appendBytes(ProtoLog.encodeFrame(record))
             recordCounts[vehicleId] = count
         }
     }
@@ -106,7 +106,7 @@ class BatteryHistoryStore(
         val recordsByVehicle = mutableMapOf<String, List<ChargeState>>()
         for (file in logs) {
             val vehicleId = vehicleIdOf(file)
-            val records = BatteryHistoryLog.decode(file.readBytes())
+            val records = ProtoLog.decode(file.readBytes(), ChargeState.ADAPTER)
             recordCounts[vehicleId] = records.size
             recordsByVehicle[vehicleId] = records
         }

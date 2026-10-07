@@ -2,52 +2,57 @@
 
 package com.dzid26.teslable.core.history
 
-import com.tesla.generated.carserver.vehicle.ChargeState
+import com.squareup.wire.Message
+import com.squareup.wire.ProtoAdapter
 import java.io.ByteArrayOutputStream
 
 /**
- * Length-delimited codec for the append-only history log (ADR-0006).
+ * Length-delimited codec for append-only logs of Tesla messages (ADR-0006).
  *
- * Each record is a varint byte length followed by the car's raw [ChargeState].
- * There is no envelope: the record is exactly what the car reported. Readers
- * ignore unknown fields, so new car fields never drop old rows. A truncated
- * trailing record (an interrupted append) is ignored on load; records after
- * it are not read.
+ * Each record is a varint byte length followed by one raw Wire message. There
+ * is no envelope: the record is exactly what the car reported. Readers ignore
+ * unknown fields, so new car fields never drop old rows. A truncated trailing
+ * record (an interrupted append) is ignored on load; records after it are not
+ * read. The same codec frames every message type; charge and (later) drive
+ * records differ only in the adapter passed to [decode].
  */
-object BatteryHistoryLog {
-    /** Encodes all [records] into one buffer, for a full rewrite. */
-    fun encode(records: List<ChargeState>): ByteArray {
+object ProtoLog {
+    /** Encodes all [messages] into one buffer, for a full rewrite. */
+    fun encode(messages: List<Message<*, *>>): ByteArray {
         val out = ByteArrayOutputStream()
-        for (record in records) {
-            out.write(encodeFrame(record))
+        for (message in messages) {
+            out.write(encodeFrame(message))
         }
         return out.toByteArray()
     }
 
-    /** Encodes one record as a length-delimited frame, for an append. */
-    fun encodeFrame(record: ChargeState): ByteArray {
-        val payload = record.encode()
+    /** Encodes one message as a length-delimited frame, for an append. */
+    fun encodeFrame(message: Message<*, *>): ByteArray {
+        val payload = message.encode()
         val out = ByteArrayOutputStream()
         writeVarint(payload.size, out)
         out.write(payload)
         return out.toByteArray()
     }
 
-    /** Reads every complete record; stops at a truncated or unreadable tail. */
-    fun decode(bytes: ByteArray): List<ChargeState> {
-        val records = mutableListOf<ChargeState>()
+    /** Reads every complete record with [adapter]; stops at a truncated or unreadable tail. */
+    fun <M : Message<M, *>> decode(
+        bytes: ByteArray,
+        adapter: ProtoAdapter<M>,
+    ): List<M> {
+        val messages = mutableListOf<M>()
         var offset = 0
         while (offset < bytes.size) {
             val (length, next) = readVarint(bytes, offset) ?: break
             if (length <= 0 || next + length > bytes.size) break
-            val record =
+            val message =
                 runCatching {
-                    ChargeState.ADAPTER.decode(bytes.copyOfRange(next, next + length))
+                    adapter.decode(bytes.copyOfRange(next, next + length))
                 }.getOrNull() ?: break
-            records += record
+            messages += message
             offset = next + length
         }
-        return records
+        return messages
     }
 
     private fun writeVarint(
