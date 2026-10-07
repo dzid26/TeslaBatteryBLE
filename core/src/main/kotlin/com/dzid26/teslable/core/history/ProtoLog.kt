@@ -4,6 +4,7 @@ package com.dzid26.teslable.core.history
 
 import com.squareup.wire.Message
 import com.squareup.wire.ProtoAdapter
+import com.squareup.wire.ProtoReader
 import com.squareup.wire.ProtoWriter
 import okio.Buffer
 
@@ -43,46 +44,14 @@ object ProtoLog {
         bytes: ByteArray,
         adapter: ProtoAdapter<M>,
     ): List<M> {
-        // Positions are tracked here, not on the buffer: Wire's ProtoReader
-        // buffers ahead, so sharing one reader with direct buffer reads drops
-        // records, and its readBytes() does not read standalone frames. The
-        // length prefix is parsed below; the payload itself still decodes
-        // through the message adapter.
         val messages = mutableListOf<M>()
-        var offset = 0
-        while (offset < bytes.size) {
-            val (length, next) = readVarint(bytes, offset) ?: break
-            if (length <= 0 || next + length > bytes.size) break
-            val message =
-                runCatching {
-                    adapter.decode(bytes.copyOfRange(next, next + length))
-                }.getOrNull() ?: break
-            messages += message
-            offset = next + length
+        val reader = ProtoReader(Buffer().write(bytes))
+        while (true) {
+            val length = runCatching { reader.nextLengthDelimited() }.getOrNull() ?: break
+            if (length == 0) break
+            val payload = runCatching { reader.readBytes() }.getOrNull() ?: break
+            messages += runCatching { adapter.decode(payload) }.getOrNull() ?: break
         }
         return messages
     }
-
-    /** Returns the value and the offset after it, or null when truncated. */
-    private fun readVarint(
-        bytes: ByteArray,
-        start: Int,
-    ): Pair<Int, Int>? {
-        var value = 0
-        var shift = 0
-        var offset = start
-        while (offset < bytes.size && shift < VARINT_MAX_BITS) {
-            val byte = bytes[offset].toInt()
-            value = value or ((byte and VARINT_PAYLOAD) shl shift)
-            offset++
-            if (byte and VARINT_CONTINUATION == 0) return value to offset
-            shift += VARINT_SHIFT
-        }
-        return null
-    }
-
-    private const val VARINT_CONTINUATION = 0x80
-    private const val VARINT_PAYLOAD = 0x7F
-    private const val VARINT_SHIFT = 7
-    private const val VARINT_MAX_BITS = 32
 }
