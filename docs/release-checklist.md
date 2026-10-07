@@ -19,7 +19,6 @@
 ## Release
 
 - [ ] Create and push tag `vX.Y.Z` (e.g. `git tag v0.2.0 && git push origin v0.2.0`).
-- [ ] If the `release` environment requires a reviewer, approve the tag run's deployment (Actions → the run → Review deployments); the release job waits for it.
 - [ ] CI builds the APK, attaches it as `TeslaBatteryBLE-<tag>.apk`, captures screenshots from the simulated car on the emulator, and embeds them (light/dark rows) as user attachments.
 - [ ] The capture is required: a failed capture or a missing screenshot fails the run, and the release is not published without its screenshots.
 - [ ] CI sets the release title, marks tags containing `-` as prereleases, and writes notes from the commits since the previous tag plus the screenshots.
@@ -28,7 +27,7 @@
 
 ## Current status
 
-- Stable signing: one owner-held keystore signs local builds, preview builds and tagged releases. Gradle reads the gitignored `keystore.properties`; CI writes it from the `SIGNING_*` secrets in the `release` environment, and only the tag-release and rolling-preview jobs read them. Pull request builds, like the `build` job on every run, get no secrets and use the default debug key. Keep the keystore and its password backed up - losing them means no further updates to installed apps.
+- Stable signing: one owner-held keystore signs local builds, preview builds and tagged releases. Gradle reads the gitignored `keystore.properties`; CI writes it from the `SIGNING_*` secrets in the `release` environment (Settings → Environments; limited to `main` and `v*` tags, no required reviewer), and only the tag-release and rolling-preview jobs read them. Pull request builds, like the `build` job on every run, get no secrets and use the default debug key. Keep the keystore and its password backed up - losing them means no further updates to installed apps.
 - The preview channel ships signed debug APKs on the rolling `preview` tag, rebuilt from `main` on every push.
 - Switching signing keys (or installing a build signed elsewhere, e.g. F-Droid) requires uninstall + reinstall, which also deletes the car pairing key (re-pair with the NFC card).
 - Screenshots live in `website/images/` — one set shared by the README and the landing page; release notes embed the same CI capture as individual shots.
