@@ -1,9 +1,13 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 name: Website preview
 
-# Render the static site for pull requests that touch it and post the preview as
-# a comment, so website changes can be reviewed without checking out. One
-# comment per ready revision (tagged by SHA); draft PRs are skipped.
+# Render the static site for pull requests that touch it, so website changes
+# can be reviewed without checking out. This workflow renders pull request
+# content, so it runs without secrets and with a read-only token: it uploads
+# the render, the PR number and the short SHA as the `website-preview`
+# artifact, and website-preview-comment.yml posts it from the default branch.
+# One comment per ready revision (tagged by SHA); draft PRs are skipped.
+# Manual runs only render; the image stays in the run's artifacts.
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
@@ -13,8 +17,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write      # the upload helper reads the repo id
-  pull-requests: write # post/update the comment
+  contents: read
 
 concurrency:
   group: website-preview-${{ github.event.pull_request.number || github.ref }}
@@ -22,7 +25,7 @@ concurrency:
 
 jobs:
   preview:
-    name: Render and post the website preview
+    name: Render the website preview
     if: github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     steps:
@@ -43,41 +46,22 @@ jobs:
             http://127.0.0.1:8099/index.html website-preview.png
           ls -l website-preview.png
 
-      - name: Resolve the pull request number
-        id: pr
+      # Hand-off to website-preview-comment.yml: only the render, the PR number
+      # (empty on manual runs, which nothing posts) and the short SHA of the
+      # rendered commit.
+      - name: Stage the preview for the comment
         env:
-          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
-          number="${{ github.event.pull_request.number }}"
-          if [ -z "$number" ]; then
-            number="$(gh pr list --head "${{ github.ref_name }}" --state open --json number --jq '.[0].number // empty')"
-          fi
-          echo "number=$number" >> "$GITHUB_OUTPUT"
+          mkdir -p website-preview
+          cp website-preview.png website-preview/website-preview.png
+          printf '%s\n' "$PR_NUMBER" > website-preview/pr-number
+          git rev-parse --short HEAD > website-preview/short-sha
 
-      - name: Upload the preview
-        id: shot
-        env:
-          GH_TOKEN: ${{ github.token }}
-          ATTACHMENTS_TOKEN: ${{ secrets.ATTACHMENTS_TOKEN }}
-        run: |
-          set -euo pipefail
-          short="$(git rev-parse --short HEAD)"
-          url="$(bash .github/scripts/upload-screenshot.sh website-preview.png "website-preview-$short.png")"
-          echo "short=$short" >> "$GITHUB_OUTPUT"
-          echo "url=$url" >> "$GITHUB_OUTPUT"
-
-      - name: Comment on the pull request
-        if: steps.pr.outputs.number != ''
-        uses: thollander/actions-comment-pull-request@24bffb9b452ba05a4f3f77933840a6a841d1b32b # v3.0.1
+      - name: Upload the preview for the comment
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          message: |
-            <!-- website-preview -->
-            ## Website preview
-
-            ![Rendered website](${{ steps.shot.outputs.url }})
-
-            Rendered from the PR at ${{ steps.shot.outputs.short }}.
-          comment-tag: website-preview-${{ steps.shot.outputs.short }}
-          pr-number: ${{ steps.pr.outputs.number }}
-          github-token: ${{ github.token }}
+          name: website-preview
+          path: website-preview
+          if-no-files-found: error

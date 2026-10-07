@@ -1,0 +1,90 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+name: Website preview comment
+
+# Post the render from "Website preview" in a pull request comment. The render
+# runs pull request content, so it gets no secrets and hands over only the
+# `website-preview` artifact: the PNG, the PR number and the short SHA. This
+# workflow runs the default branch's copy of itself and of the scripts, never
+# checks out or runs pull request code, and treats the artifact as untrusted
+# input. The upload token comes from the `release` environment. The image is
+# hosted as a user attachment, so the PR carries no image asset.
+on:
+  workflow_run:
+    workflows: ["Website preview"]
+    types: [completed]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: website-preview-comment-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: false
+
+jobs:
+  comment:
+    name: Post the website preview
+    if: >-
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success'
+    environment: release
+    permissions:
+      actions: read        # download the render run's artifact
+      contents: read       # check out the scripts; the upload helper reads the repo id
+      pull-requests: write # post/update the comment
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the default branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      # Outside the checkout, so nothing in the artifact lands next to the
+      # scripts.
+      - name: Download the preview
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: website-preview
+          path: ${{ runner.temp }}/website-preview
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+
+      # Accept only a numeric PR number for the pull request the render ran
+      # for, the short SHA of the rendered commit, and the PNG, which is copied
+      # to website-preview-checked/.
+      - name: Validate the artifact
+        id: meta
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          HEAD_REPO: ${{ github.event.workflow_run.head_repository.full_name }}
+        run: |
+          bash .github/scripts/validate-pr-artifact.sh "$RUNNER_TEMP/website-preview" "$RUNNER_TEMP/website-preview-checked" \
+            website-preview.png
+
+      # Host the render as a user attachment, so no image asset lives on the PR.
+      - name: Upload the preview
+        id: shot
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ATTACHMENTS_TOKEN: ${{ secrets.ATTACHMENTS_TOKEN }}
+          SHORT_SHA: ${{ steps.meta.outputs.short }}
+        run: |
+          set -euo pipefail
+          url="$(bash .github/scripts/upload-screenshot.sh "$RUNNER_TEMP/website-preview-checked/website-preview.png" "website-preview-$SHORT_SHA.png")"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+
+      - name: Comment on the pull request
+        uses: thollander/actions-comment-pull-request@24bffb9b452ba05a4f3f77933840a6a841d1b32b # v3.0.1
+        with:
+          message: |
+            <!-- website-preview -->
+            ## Website preview
+
+            ![Rendered website](${{ steps.shot.outputs.url }})
+
+            Rendered from the PR at ${{ steps.meta.outputs.short }}.
+          comment-tag: website-preview-${{ steps.meta.outputs.short }}
+          pr-number: ${{ steps.meta.outputs.pr }}
+          github-token: ${{ github.token }}

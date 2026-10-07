@@ -8,7 +8,8 @@ name: PR screenshots comment
 # itself and of the scripts, never checks out or runs pull request code, and
 # treats the artifact as untrusted input. The upload token comes from the
 # `release` environment. The sheet is hosted as a user attachment, so neither
-# the PR nor the releases carry image assets.
+# the PR nor the releases carry image assets. The comment also links the debug
+# APK that Android CI built for the same commit, when there is one.
 on:
   workflow_run:
     workflows: ["PR screenshots"]
@@ -29,7 +30,7 @@ jobs:
       github.event.workflow_run.conclusion == 'success'
     environment: release
     permissions:
-      actions: read        # download the capture run's artifact
+      actions: read        # download the capture run's artifact; find the Android CI run's APK
       contents: read       # check out the scripts; the upload helper reads the repo id
       pull-requests: write # post/update the comment
     runs-on: ubuntu-latest
@@ -51,55 +52,19 @@ jobs:
           github-token: ${{ github.token }}
 
       # Accept only a numeric PR number for the pull request the capture ran
-      # for, the short SHA of the captured commit, and the six expected PNGs.
+      # for, the short SHA of the captured commit, and the six expected PNGs,
+      # which are copied to pr-sheet/.
       - name: Validate the artifact
         id: meta
         env:
           GH_TOKEN: ${{ github.token }}
-          ARTIFACT_DIR: ${{ runner.temp }}/pr-screenshots
-          SHOTS_DIR: ${{ runner.temp }}/pr-sheet
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
           HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
           HEAD_REPO: ${{ github.event.workflow_run.head_repository.full_name }}
         run: |
-          set -euo pipefail
-          for meta in pr-number short-sha; do
-            if [ ! -f "$ARTIFACT_DIR/$meta" ] || [ -L "$ARTIFACT_DIR/$meta" ]; then
-              echo "::error::the artifact has no $meta file"
-              exit 1
-            fi
-          done
-          pr="$(head -c 32 "$ARTIFACT_DIR/pr-number")"
-          short="$(head -c 64 "$ARTIFACT_DIR/short-sha")"
-          if [[ ! "$pr" =~ ^[1-9][0-9]{0,9}$ ]]; then
-            echo "::error::the PR number in the artifact is not numeric"
-            exit 1
-          fi
-          if [[ ! "$short" =~ ^[0-9a-f]{7,40}$ ]] || [[ "$HEAD_SHA" != "$short"* ]]; then
-            echo "::error::the short SHA in the artifact does not match the captured commit"
-            exit 1
-          fi
-          pr_head="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$pr" --jq '(.head.repo.full_name // "") + ":" + .head.ref')"
-          if [ -z "$HEAD_REPO" ] || [ "$pr_head" != "$HEAD_REPO:$HEAD_BRANCH" ]; then
-            echo "::error::PR #$pr is not the pull request the capture ran for"
-            exit 1
-          fi
-          mkdir -p "$SHOTS_DIR"
-          for name in 02-scanning 03-car 05-settings \
-              02-scanning-dark 03-car-dark 05-settings-dark; do
-            file="$ARTIFACT_DIR/$name.png"
-            if [ ! -f "$file" ] || [ -L "$file" ]; then
-              echo "::error::the artifact has no $name.png"
-              exit 1
-            fi
-            if [ "$(head -c 8 "$file" | od -An -tx1 | tr -d ' \n')" != 89504e470d0a1a0a ]; then
-              echo "::error::$name.png is not a PNG"
-              exit 1
-            fi
-            cp "$file" "$SHOTS_DIR/$name.png"
-          done
-          echo "pr=$pr" >> "$GITHUB_OUTPUT"
-          echo "short=$short" >> "$GITHUB_OUTPUT"
+          bash .github/scripts/validate-pr-artifact.sh "$RUNNER_TEMP/pr-screenshots" "$RUNNER_TEMP/pr-sheet" \
+            02-scanning.png 03-car.png 05-settings.png \
+            02-scanning-dark.png 03-car-dark.png 05-settings-dark.png
 
       - name: Install ImageMagick
         run: sudo apt-get install -y imagemagick
@@ -122,6 +87,47 @@ jobs:
           url="$(bash .github/scripts/upload-screenshot.sh "$RUNNER_TEMP/screenshot-sheet.png" "screenshot-sheet-$SHORT_SHA.png")"
           echo "url=$url" >> "$GITHUB_OUTPUT"
 
+      # Link the debug APK that Android CI built for the same commit. The run is
+      # looked up by the event's head SHA, never by artifact content. The line
+      # is optional: no run, a failed run or a lookup error leaves it out.
+      - name: Find the debug APK
+        id: apk
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          runs_url="https://github.com/$GITHUB_REPOSITORY/actions/runs"
+          line=""
+          if [[ ! "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::warning::unexpected head SHA; posting without the APK line"
+          elif ! run="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/android.yml/runs?head_sha=$HEAD_SHA&event=pull_request&per_page=1" \
+              --jq '.workflow_runs[0] // empty | "\(.id) \(.status) \(.conclusion // "none")"')"; then
+            echo "::warning::could not look up the Android CI run; posting without the APK line"
+          elif [ -z "$run" ]; then
+            echo "No Android CI run for this commit; posting without the APK line."
+          else
+            read -r run_id status conclusion <<< "$run"
+            if [[ ! "$run_id" =~ ^[0-9]+$ ]]; then
+              echo "::warning::unexpected Android CI run id; posting without the APK line"
+            elif [ "$status" != completed ]; then
+              line="Debug APK: still building in [Android CI]($runs_url/$run_id) (GitHub sign-in needed)"
+            elif [ "$conclusion" = success ]; then
+              artifact_id="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run_id/artifacts" \
+                --jq '[.artifacts[] | select(.name == "teslable-debug-apk" and (.expired | not))] | sort_by(.created_at) | last | .id // empty')" ||
+                artifact_id=""
+              if [[ "$artifact_id" =~ ^[0-9]+$ ]]; then
+                line="Debug APK: [zip from Android CI]($runs_url/$run_id/artifacts/$artifact_id) (GitHub sign-in needed)"
+              else
+                echo "Android CI run $run_id has no debug APK artifact; posting without the APK line."
+              fi
+            else
+              echo "Android CI run $run_id concluded $conclusion; posting without the APK line."
+            fi
+          fi
+          echo "line=$line" >> "$GITHUB_OUTPUT"
+
       - name: Comment on the pull request
         uses: thollander/actions-comment-pull-request@24bffb9b452ba05a4f3f77933840a6a841d1b32b # v3.0.1
         with:
@@ -132,6 +138,8 @@ jobs:
             ![App screenshots: light and dark](${{ steps.sheet.outputs.url }})
 
             Captured from the demo build at ${{ steps.meta.outputs.short }}.
+
+            ${{ steps.apk.outputs.line }}
           comment-tag: pr-screenshots-${{ steps.meta.outputs.short }}
           pr-number: ${{ steps.meta.outputs.pr }}
           github-token: ${{ github.token }}
