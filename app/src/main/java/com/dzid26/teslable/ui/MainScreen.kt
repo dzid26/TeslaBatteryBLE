@@ -340,22 +340,21 @@ private fun ConnectionsScreen(
 
                 val connectedCount = state.connections.values.count { it.phase == ConnectionPhase.READY }
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text =
+                            if (rows.isNotEmpty()) {
+                                "${rows.size} car(s), $connectedCount connected"
+                            } else {
+                                "No scan yet"
+                            },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f),
+                    )
                     if (state.scanning || state.discovering) {
                         CircularProgressIndicator(
                             modifier = Modifier.size(18.dp),
                             strokeWidth = 2.dp,
-                        )
-                    } else {
-                        Text(
-                            text =
-                                if (rows.isNotEmpty()) {
-                                    "${rows.size} car(s), $connectedCount connected"
-                                } else {
-                                    "No scan yet"
-                                },
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.weight(1f),
                         )
                     }
                 }
