@@ -1,0 +1,137 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+name: PR screenshots comment
+
+# Post the screenshots captured by "PR screenshots" as a sheet in a pull
+# request comment. The capture builds pull request code, so it runs without
+# secrets and hands over only the `pr-screenshots` artifact: six PNGs, the PR
+# number and the short SHA. This workflow runs the default branch's copy of
+# itself and of the scripts, never checks out or runs pull request code, and
+# treats the artifact as untrusted input. The upload token comes from the
+# `release` environment. The sheet is hosted as a user attachment, so neither
+# the PR nor the releases carry image assets.
+on:
+  workflow_run:
+    workflows: ["PR screenshots"]
+    types: [completed]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-screenshots-comment-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: false
+
+jobs:
+  comment:
+    name: Post the screenshot sheet
+    if: >-
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success'
+    environment: release
+    permissions:
+      actions: read        # download the capture run's artifact
+      contents: read       # check out the scripts; the upload helper reads the repo id
+      pull-requests: write # post/update the comment
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the default branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      # Outside the checkout, so nothing in the artifact lands next to the
+      # scripts.
+      - name: Download the screenshots
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: pr-screenshots
+          path: ${{ runner.temp }}/pr-screenshots
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+
+      # Accept only a numeric PR number for the pull request the capture ran
+      # for, the short SHA of the captured commit, and the six expected PNGs.
+      - name: Validate the artifact
+        id: meta
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_DIR: ${{ runner.temp }}/pr-screenshots
+          SHOTS_DIR: ${{ runner.temp }}/pr-sheet
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          HEAD_REPO: ${{ github.event.workflow_run.head_repository.full_name }}
+        run: |
+          set -euo pipefail
+          for meta in pr-number short-sha; do
+            if [ ! -f "$ARTIFACT_DIR/$meta" ] || [ -L "$ARTIFACT_DIR/$meta" ]; then
+              echo "::error::the artifact has no $meta file"
+              exit 1
+            fi
+          done
+          pr="$(head -c 32 "$ARTIFACT_DIR/pr-number")"
+          short="$(head -c 64 "$ARTIFACT_DIR/short-sha")"
+          if [[ ! "$pr" =~ ^[1-9][0-9]{0,9}$ ]]; then
+            echo "::error::the PR number in the artifact is not numeric"
+            exit 1
+          fi
+          if [[ ! "$short" =~ ^[0-9a-f]{7,40}$ ]] || [[ "$HEAD_SHA" != "$short"* ]]; then
+            echo "::error::the short SHA in the artifact does not match the captured commit"
+            exit 1
+          fi
+          pr_head="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$pr" --jq '(.head.repo.full_name // "") + ":" + .head.ref')"
+          if [ -z "$HEAD_REPO" ] || [ "$pr_head" != "$HEAD_REPO:$HEAD_BRANCH" ]; then
+            echo "::error::PR #$pr is not the pull request the capture ran for"
+            exit 1
+          fi
+          mkdir -p "$SHOTS_DIR"
+          for name in 02-scanning 03-car 05-settings \
+              02-scanning-dark 03-car-dark 05-settings-dark; do
+            file="$ARTIFACT_DIR/$name.png"
+            if [ ! -f "$file" ] || [ -L "$file" ]; then
+              echo "::error::the artifact has no $name.png"
+              exit 1
+            fi
+            if [ "$(head -c 8 "$file" | od -An -tx1 | tr -d ' \n')" != 89504e470d0a1a0a ]; then
+              echo "::error::$name.png is not a PNG"
+              exit 1
+            fi
+            cp "$file" "$SHOTS_DIR/$name.png"
+          done
+          echo "pr=$pr" >> "$GITHUB_OUTPUT"
+          echo "short=$short" >> "$GITHUB_OUTPUT"
+
+      - name: Install ImageMagick
+        run: sudo apt-get install -y imagemagick
+
+      - name: Compose the screenshot sheet
+        env:
+          SHOTS_DIR: ${{ runner.temp }}/pr-sheet
+        run: bash .github/scripts/build-screenshot-sheet.sh "$SHOTS_DIR" "$RUNNER_TEMP/screenshot-sheet.png"
+
+      # Host the sheet as a user attachment, so no image asset lives on the PR
+      # or the releases.
+      - name: Upload the screenshot sheet
+        id: sheet
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ATTACHMENTS_TOKEN: ${{ secrets.ATTACHMENTS_TOKEN }}
+          SHORT_SHA: ${{ steps.meta.outputs.short }}
+        run: |
+          set -euo pipefail
+          url="$(bash .github/scripts/upload-screenshot.sh "$RUNNER_TEMP/screenshot-sheet.png" "screenshot-sheet-$SHORT_SHA.png")"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+
+      - name: Comment on the pull request
+        uses: thollander/actions-comment-pull-request@24bffb9b452ba05a4f3f77933840a6a841d1b32b # v3.0.1
+        with:
+          message: |
+            <!-- pr-screenshots -->
+            ## Screenshots
+
+            ![App screenshots: light and dark](${{ steps.sheet.outputs.url }})
+
+            Captured from the demo build at ${{ steps.meta.outputs.short }}.
+          comment-tag: pr-screenshots-${{ steps.meta.outputs.short }}
+          pr-number: ${{ steps.meta.outputs.pr }}
+          github-token: ${{ github.token }}
