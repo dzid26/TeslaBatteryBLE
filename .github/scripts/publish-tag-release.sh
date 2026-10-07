@@ -51,10 +51,13 @@ PREV_TAG="$(git describe --tags --abbrev=0 --match 'v*' "$TAG^" 2>/dev/null || t
   echo
   echo "## Screenshots"
   echo
-  echo "| Theme | Scanning | Car | Settings |"
-  echo "| --- | --- | --- | --- |"
-  echo "| Light | ![Scanning for nearby cars (light)]($SCAN_URL) | ![Car detail with the battery reading (light)]($CAR_URL) | ![Settings (light)]($SETTINGS_URL) |"
-  echo "| Dark | ![Scanning for nearby cars (dark)]($SCAN_DARK_URL) | ![Car detail with the battery reading (dark)]($CAR_DARK_URL) | ![Settings (dark)]($SETTINGS_DARK_URL) |"
+  echo "**Light**"
+  echo
+  echo "<p><img src=\"$SCAN_URL\" alt=\"Scanning for nearby cars (light)\" width=\"32%\"><img src=\"$CAR_URL\" alt=\"Car detail with the battery reading (light)\" width=\"32%\"><img src=\"$SETTINGS_URL\" alt=\"Settings (light)\" width=\"32%\"></p>"
+  echo
+  echo "**Dark**"
+  echo
+  echo "<p><img src=\"$SCAN_DARK_URL\" alt=\"Scanning for nearby cars (dark)\" width=\"32%\"><img src=\"$CAR_DARK_URL\" alt=\"Car detail with the battery reading (dark)\" width=\"32%\"><img src=\"$SETTINGS_DARK_URL\" alt=\"Settings (dark)\" width=\"32%\"></p>"
 } > "$NOTES"
 
 if [ ! -s "$NOTES" ]; then
