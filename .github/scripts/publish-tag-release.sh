@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: AGPL-3.0-only
 # Publish a tagged release: the changes since the previous tag plus the
-# screenshot sheet captured by CI. Run from a checkout with the debug APK
+# screenshots captured by CI. Run from a checkout with the debug APK
 # built and the emulator screenshots captured into `screenshots/`.
 set -euo pipefail
 
@@ -10,15 +10,24 @@ REPO="${GITHUB_REPOSITORY:?GITHUB_REPOSITORY is required}"
 VERSION="${TAG#v}"
 APK="dist/TeslaBatteryBLE-${TAG}.apk"
 NOTES="release-notes.md"
-SHEET="screenshots/screenshot-sheet.png"
+SHOTS_DIR="screenshots"
+# README-table-style columns: the scan, the car detail, Settings; light row + dark row.
+SHOTS="02-scanning.png 03-car.png 05-settings.png 02-scanning-dark.png 03-car-dark.png 05-settings-dark.png"
 
 if [ "$TAG" != "${TAG%-*}" ]; then PRE_FLAG="--prerelease"; else PRE_FLAG=""; fi
 
 [ -f "$APK" ] || { echo "missing $APK (the build job stages it for tags)" >&2; exit 1; }
 
-[ -f "$SHEET" ] || { echo "missing $SHEET (the capture step must succeed)" >&2; exit 1; }
-# Host the sheet as a user attachment so the release page keeps only the APK.
-SHEET_URL="$(bash .github/scripts/upload-screenshot.sh "$SHEET" "screenshot-sheet-${TAG}.png")"
+for name in $SHOTS; do
+  [ -f "$SHOTS_DIR/$name" ] || { echo "missing $SHOTS_DIR/$name (the capture step must succeed)" >&2; exit 1; }
+done
+# Host the shots as user attachments so the release page keeps only the APK.
+SCAN_URL="$(bash .github/scripts/upload-screenshot.sh "$SHOTS_DIR/02-scanning.png" "02-scanning-${TAG}.png")"
+CAR_URL="$(bash .github/scripts/upload-screenshot.sh "$SHOTS_DIR/03-car.png" "03-car-${TAG}.png")"
+SETTINGS_URL="$(bash .github/scripts/upload-screenshot.sh "$SHOTS_DIR/05-settings.png" "05-settings-${TAG}.png")"
+SCAN_DARK_URL="$(bash .github/scripts/upload-screenshot.sh "$SHOTS_DIR/02-scanning-dark.png" "02-scanning-dark-${TAG}.png")"
+CAR_DARK_URL="$(bash .github/scripts/upload-screenshot.sh "$SHOTS_DIR/03-car-dark.png" "03-car-dark-${TAG}.png")"
+SETTINGS_DARK_URL="$(bash .github/scripts/upload-screenshot.sh "$SHOTS_DIR/05-settings-dark.png" "05-settings-dark-${TAG}.png")"
 
 # Notes come from the commits since the previous tag; there is no
 # hand-edited changelog, so pull requests never collide on one.
@@ -39,12 +48,13 @@ PREV_TAG="$(git describe --tags --abbrev=0 --match 'v*' "$TAG^" 2>/dev/null || t
   fi
   echo
 
-  if [ -f "$SHEET" ]; then
-    echo
-    echo "## Screenshots"
-    echo
-    echo "![App screenshots: light and dark]($SHEET_URL)"
-  fi
+  echo
+  echo "## Screenshots"
+  echo
+  echo "| Theme | Scanning | Car | Settings |"
+  echo "| --- | --- | --- | --- |"
+  echo "| Light | ![Scanning for nearby cars (light)]($SCAN_URL) | ![Car detail with the battery reading (light)]($CAR_URL) | ![Settings (light)]($SETTINGS_URL) |"
+  echo "| Dark | ![Scanning for nearby cars (dark)]($SCAN_DARK_URL) | ![Car detail with the battery reading (dark)]($CAR_DARK_URL) | ![Settings (dark)]($SETTINGS_DARK_URL) |"
 } > "$NOTES"
 
 if [ ! -s "$NOTES" ]; then
