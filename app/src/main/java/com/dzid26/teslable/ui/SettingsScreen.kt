@@ -299,8 +299,8 @@ private fun EnableBackupDialog(
         text = {
             Text(
                 "This applies to every car you have paired. Currently each vehicle key is " +
-                    "encrypted with this device's hardware-backed Keystore (AES) and never leaves it. " +
-                    "Turning this on stores the keys so Android can back them up; Google backups are " +
+                    "encrypted with this device's hardware-backed Keystore (AES), so only this phone can use it. " +
+                    "Turning this on stores the keys so Android backup can restore them on a new phone; Google backups are " +
                     "encrypted with your Google account and device lock, so exposure requires someone " +
                     "who can restore your backup and unlock your phone. Near the car, that person could " +
                     "read vehicle data and control charging — they cannot unlock or drive, and new keys " +
