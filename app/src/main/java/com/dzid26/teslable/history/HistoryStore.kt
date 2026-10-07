@@ -29,7 +29,7 @@ import java.nio.file.StandardCopyOption
  * raw response (ADR-0006), so new car fields never drop old rows. Pre-store
  * CSV history is not migrated (pre-1.0 reset).
  */
-class BatteryHistoryStore(
+class HistoryStore(
     context: Context,
 ) {
     private val historyDir = File(context.filesDir, HISTORY_DIR_NAME)

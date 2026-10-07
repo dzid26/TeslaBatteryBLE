@@ -179,7 +179,7 @@ Out of scope (unchanged unless stated):
 - `BleUiState`: `devices`, `connections`, `selectedAddress` — becomes a vehicle
   map plus a selected vehicle id.
 - `PairingKeyStore`: one key (keep), but enrollment/slot must be per vehicle.
-- `BatteryHistoryStore`: single CSV without a vehicle column.
+- `HistoryStore`: one raw-record log per vehicle (already keyed by advertised name).
 - `BleTrackingService`: single notification/model.
 - `ScannerScreen`: global VIN field, single car list, single history.
 - Preferences: the `vin` key is global and must move into the vehicle record.

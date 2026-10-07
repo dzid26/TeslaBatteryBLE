@@ -21,7 +21,7 @@ import kotlin.math.roundToInt
  * release build (debug source set plus [DemoMode]).
  */
 internal object DemoHistory {
-    // Mirrors BatteryHistoryStore's log layout; the demo seeds it directly.
+    // Mirrors HistoryStore's log layout; the demo seeds it directly.
     private const val HISTORY_DIR_NAME = "battery-history"
     private const val LOG_SUFFIX = ".pblog"
     private const val CHARGE_LIMIT = 85
