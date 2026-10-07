@@ -1,14 +1,16 @@
 # SPDX-License-Identifier: AGPL-3.0-only
-name: PR screenshots
+name: PR preview
 
-# Capture the demo build on pull requests that touch the app UI or the capture
-# flow and post the screenshot sheet as a comment, so reviews see the visual
-# result. One comment per ready revision (tagged by SHA), so flipping a PR back
-# to ready after rework posts the next round's screenshots instead of
-# overwriting the reviewed one; draft pushes are skipped. The sheet is hosted as
-# a user attachment, so neither the PR nor the releases carry image assets.
-# Note: PRs from forks get a read-only token, so the upload/comment steps fail
-# there by design.
+# Build both APKs on pull requests that touch the app UI or the capture flow,
+# capture the screenshot sheet from the demo build, and post everything in one
+# bot comment so reviews can install the build and see the visual result. The
+# standard APK talks to a real car; the demo APK drives the simulated car (it is
+# the build the screenshots come from). One comment per ready revision (tagged
+# by SHA), so flipping a PR back to ready after rework posts the next round's
+# preview instead of overwriting the reviewed one; draft pushes are skipped. The
+# APKs and the sheet are hosted as user attachments, so neither the PR nor the
+# releases carry preview assets. Note: PRs from forks get a read-only token and
+# no ATTACHMENTS_TOKEN, so the upload/comment steps fail there by design.
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
@@ -17,21 +19,21 @@ on:
       - '.github/scripts/capture-screenshots.sh'
       - '.github/scripts/build-screenshot-sheet.sh'
       - '.github/scripts/upload-screenshot.sh'
-      - '.github/workflows/pr-screenshots.yml'
+      - '.github/workflows/pr-preview.yml'
   workflow_dispatch:
 
 permissions:
-  contents: write      # upload the sheet to the pr-shots release
+  contents: read       # check out the PR head; preview assets live outside releases
   pull-requests: write # post/update the comment
 
 concurrency:
-  group: pr-screenshots-${{ github.event.pull_request.number || github.ref }}
+  group: pr-preview-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
-  screenshots:
-    name: Capture and post screenshots
-    # Skip while a PR is a draft: rework pushes do not need screenshots, and the
+  preview:
+    name: Build APKs and post preview
+    # Skip while a PR is a draft: rework pushes do not need previews, and the
     # ready_for_review event posts the next review round's comment.
     if: github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
@@ -52,8 +54,22 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x gradlew
 
+      # The demo build below overwrites app-debug.apk in place, so stash the
+      # standard build in dist/ first. dist/ also feeds the artifact upload, so
+      # the APKs survive even when the screenshot capture below fails.
+      - name: Build the standard APK
+        run: |
+          set -euo pipefail
+          ./gradlew :app:assembleDebug
+          mkdir -p dist
+          cp app/build/outputs/apk/debug/app-debug.apk "dist/TeslaBatteryBLE-pr-$(git rev-parse --short HEAD).apk"
+
       - name: Build the demo APK
-        run: ./gradlew :app:assembleDebug -PdemoCar=true
+        run: |
+          set -euo pipefail
+          ./gradlew :app:assembleDebug -PdemoCar=true
+          mkdir -p dist
+          cp app/build/outputs/apk/debug/app-debug.apk "dist/TeslaBatteryBLE-pr-$(git rev-parse --short HEAD)-demo.apk"
 
       - name: Enable KVM
         run: |
@@ -119,8 +135,16 @@ jobs:
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: pr-screenshots-capture
+          name: pr-preview-capture
           path: screenshots
+          if-no-files-found: warn
+
+      - name: Upload the APKs
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: pr-preview-apks
+          path: dist/*.apk
           if-no-files-found: warn
 
       - name: Resolve the pull request number
@@ -135,31 +159,42 @@ jobs:
           fi
           echo "number=$number" >> "$GITHUB_OUTPUT"
 
-      # Host the sheet as a user attachment (release-asset fallback inside the
-      # helper), so no image asset lives on the PR or the releases.
-      - name: Upload the screenshot sheet
-        id: sheet
+      # Host the APKs and the sheet as user attachments, so no preview asset
+      # lives on the PR or the releases.
+      - name: Upload the APKs and the sheet
+        id: uploads
         env:
           GH_TOKEN: ${{ github.token }}
           ATTACHMENTS_TOKEN: ${{ secrets.ATTACHMENTS_TOKEN }}
         run: |
           set -euo pipefail
           short="$(git rev-parse --short HEAD)"
-          url="$(bash .github/scripts/upload-screenshot.sh screenshots/screenshot-sheet.png "screenshot-sheet-$short.png")"
+          sheet_url="$(bash .github/scripts/upload-screenshot.sh screenshots/screenshot-sheet.png "screenshot-sheet-$short.png")"
+          std_url="$(bash .github/scripts/upload-screenshot.sh "dist/TeslaBatteryBLE-pr-$short.apk" "TeslaBatteryBLE-pr-$short.apk" "application/vnd.android.package-archive")"
+          demo_url="$(bash .github/scripts/upload-screenshot.sh "dist/TeslaBatteryBLE-pr-$short-demo.apk" "TeslaBatteryBLE-pr-$short-demo.apk" "application/vnd.android.package-archive")"
           echo "short=$short" >> "$GITHUB_OUTPUT"
-          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "sheet_url=$sheet_url" >> "$GITHUB_OUTPUT"
+          echo "std_url=$std_url" >> "$GITHUB_OUTPUT"
+          echo "demo_url=$demo_url" >> "$GITHUB_OUTPUT"
 
       - name: Comment on the pull request
         if: steps.pr.outputs.number != ''
         uses: thollander/actions-comment-pull-request@24bffb9b452ba05a4f3f77933840a6a841d1b32b # v3.0.1
         with:
           message: |
-            <!-- pr-screenshots -->
-            ## Screenshots
+            <!-- pr-preview -->
+            ## Preview (${{ steps.uploads.outputs.short }})
 
-            ![App screenshots: light and dark](${{ steps.sheet.outputs.url }})
+            ### APKs
 
-            Captured from the demo build at ${{ steps.sheet.outputs.short }}.
-          comment-tag: pr-screenshots-${{ steps.sheet.outputs.short }}
+            - [Standard build](${{ steps.uploads.outputs.std_url }}) — talks to a real car
+            - [Demo build](${{ steps.uploads.outputs.demo_url }}) — simulated car, matches the screenshots below
+
+            ### Screenshots
+
+            ![App screenshots: light and dark](${{ steps.uploads.outputs.sheet_url }})
+
+            Captured from the demo build at ${{ steps.uploads.outputs.short }}.
+          comment-tag: pr-preview-${{ steps.uploads.outputs.short }}
           pr-number: ${{ steps.pr.outputs.number }}
           github-token: ${{ github.token }}

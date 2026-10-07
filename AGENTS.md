@@ -16,7 +16,7 @@ Master plan: `docs/master-plan.md` — read it first and update its checkboxes w
 - `.\gradlew :core:test` — protocol tests. Must pass before any commit touching `core`.
 - `.\gradlew :app:assembleDebug` — debug APK.
 - `.\gradlew :app:lintDebug` — Android lint (once wired into CI).
-- CI (`.github/workflows/android.yml`): core tests, debug build, Go fixture diff, rolling preview release. `demo-smoke.yml` is the daily/manual capture canary; `pr-screenshots.yml` posts a screenshot-sheet comment on UI PRs; `website-preview.yml` renders `website/**` PRs.
+- CI (`.github/workflows/android.yml`): core tests, debug build, Go fixture diff, rolling preview release. `demo-smoke.yml` is the daily/manual capture canary; `pr-preview.yml` posts standard + demo APKs and the screenshot sheet on UI PRs; `website-preview.yml` renders `website/**` PRs.
 
 ## Conventions
 
