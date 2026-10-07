@@ -30,6 +30,14 @@ wire {
     }
 }
 
+// GoVectorTest reads the vectors that the go-vectors CI job regenerates from
+// vehicle-command and diffs, so the Kotlin test can't drift from them.
+tasks.processTestResources {
+    from(rootProject.file("tools/go-fixtures/expected.txt")) {
+        into("go-fixtures")
+    }
+}
+
 // Wire-generated protos follow their own conventions. The task sources are
 // narrowed by absolute path: the plugin matches string patterns against
 // paths relative to each source root, where "build/generated" never

@@ -260,8 +260,14 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - name: Clone vehicle-command
-        run: git clone --depth 1 https://github.com/teslamotors/vehicle-command.git /tmp/vehicle-command
+      # The oracle is the vehicle-command commit the protos are pinned to, not
+      # upstream HEAD: moving it is a deliberate TESLA_COMMIT bump.
+      - name: Check out vehicle-command at TESLA_COMMIT
+        run: |
+          git init -q /tmp/vehicle-command
+          git -C /tmp/vehicle-command fetch -q --depth 1 \
+            https://github.com/teslamotors/vehicle-command.git "$(cat core/src/main/proto/TESLA_COMMIT)"
+          git -C /tmp/vehicle-command checkout -q FETCH_HEAD
 
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
@@ -275,7 +281,7 @@ jobs:
           cd /tmp/vehicle-command
           go run ./fixtures > /tmp/fixtures.txt
 
-      - name: Compare deterministic fixtures
-        run: |
-          grep -E '^(CLIENT_PRIVATE_PKCS8|CLIENT_PUBLIC|VEHICLE_PUBLIC|SESSION_INFO|CHALLENGE|SESSION_INFO_TAG|RESPONSE_REQUEST_ID|RESPONSE_PLAINTEXT)=' /tmp/fixtures.txt > /tmp/got.txt
-          diff tools/go-fixtures/expected.txt /tmp/got.txt
+      # Keys, nonces and the session clock are fixed, so every line is
+      # deterministic and the whole output is compared.
+      - name: Compare fixtures
+        run: diff tools/go-fixtures/expected.txt /tmp/fixtures.txt

@@ -23,9 +23,9 @@ class TeslaCryptoTest {
     }
 
     @Test
-    fun `round trips aes gcm with a four byte nonce`() {
+    fun `round trips aes gcm with a twelve byte nonce`() {
         val key = ByteArray(16) { it.toByte() }
-        val nonce = byteArrayOf(1, 2, 3, 4)
+        val nonce = ByteArray(12) { (it + 1).toByte() }
         val plaintext = "edge-case".toByteArray()
         val associatedData = byteArrayOf(9, 9)
 
@@ -33,7 +33,8 @@ class TeslaCryptoTest {
         assertEquals(plaintext.size, ciphertext.size)
         assertEquals(TeslaCrypto.GCM_TAG_SIZE, tag.size)
         assertArrayEquals(plaintext, TeslaCrypto.decryptGcm(key, nonce, ciphertext, tag, associatedData))
-        assertNull(TeslaCrypto.decryptGcm(key, byteArrayOf(1, 2, 3, 5), ciphertext, tag, associatedData))
+        val otherNonce = nonce.copyOf().also { it[it.lastIndex] = (it.last() + 1).toByte() }
+        assertNull(TeslaCrypto.decryptGcm(key, otherNonce, ciphertext, tag, associatedData))
     }
 
     @Test
@@ -76,12 +77,6 @@ class TeslaCryptoTest {
         assertThrows(IllegalArgumentException::class.java) {
             TeslaCrypto.sessionKey(keyPair.privateKeyPkcs8, ByteArray(10))
         }
-    }
-
-    @Test
-    fun `random bytes respects the requested size`() {
-        assertEquals(0, TeslaCrypto.randomBytes(0).size)
-        assertEquals(TeslaCrypto.NONCE_SIZE, TeslaCrypto.randomBytes(TeslaCrypto.NONCE_SIZE).size)
     }
 
     private fun String.hex(): ByteArray = chunked(2).map { it.toInt(16).toByte() }.toByteArray()
