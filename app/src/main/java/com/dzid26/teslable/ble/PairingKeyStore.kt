@@ -4,11 +4,16 @@ package com.dzid26.teslable.ble
 import android.app.backup.BackupManager
 import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyPermanentlyInvalidatedException
 import android.security.keystore.KeyProperties
 import android.util.Base64
+import android.util.Log
 import com.dzid26.teslable.core.protocol.TeslaKeyPair
 import com.dzid26.teslable.core.protocol.TeslaKeys
 import java.security.KeyStore
+import java.security.MessageDigest
+import java.security.UnrecoverableKeyException
+import javax.crypto.AEADBadTagException
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
@@ -29,6 +34,13 @@ import javax.crypto.spec.GCMParameterSpec
  *
  * Keys are written in the mode selected at write time; the Settings toggle
  * re-saves every stored key eagerly, and loading never converts between modes.
+ *
+ * Only [load] reads the private key. [hasKey], [publicKeyRaw] and [keyId] read
+ * the stored public key alone, so checking for a key or showing its ID never
+ * runs a Keystore decrypt. A key is deleted only when a decrypt proves this
+ * install can never read it (the Keystore key that wrapped it is missing,
+ * different or invalidated, as after a restore from another phone); any other
+ * failure leaves it stored for the next attempt.
  */
 class PairingKeyStore(
     context: Context,
@@ -42,59 +54,89 @@ class PairingKeyStore(
     /**
      * Changes the backup mode and re-saves every stored key in the new format.
      * If no key exists yet, only the preference is updated so the next
-     * generated key is written in the chosen format.
+     * generated key is written in the chosen format. A key that cannot be read
+     * right now keeps its current format. Runs Keystore operations for every
+     * key, so call it off the main thread.
      */
     fun setBackupEnabled(enabled: Boolean) {
-        storedVehicleIds().forEach { vehicleId ->
-            loadInternal(vehicleId)?.let { save(vehicleId, it, enabled) }
+        synchronized(LOCK) {
+            storedVehicleIds().forEach { vehicleId ->
+                loadInternal(vehicleId)?.let { save(vehicleId, it, enabled) }
+            }
+            prefs.edit().putBoolean(KEY_BACKUP_ENABLED, enabled).apply()
         }
-        prefs.edit().putBoolean(KEY_BACKUP_ENABLED, enabled).apply()
         // Replacing or excluding keys changes what the next backup should
         // contain; nudge the system instead of waiting for the daily pass.
         BackupManager(appContext).dataChanged()
     }
 
-    /** The key pair for one car, or null when the car has none. */
-    fun load(vehicleId: String): TeslaKeyPair? = loadInternal(vehicleId)
+    /** True when one car has a stored key. Reads only the public key. */
+    fun hasKey(vehicleId: String): Boolean = publicKeyRaw(vehicleId) != null
 
-    /** Generates and stores a fresh key pair for one car, replacing any previous one. */
-    fun generate(vehicleId: String): TeslaKeyPair {
-        val keyPair = TeslaKeys.generate()
-        save(vehicleId, keyPair)
-        return keyPair
+    /** One car's raw (uncompressed P-256) public key, or null when it has no key. */
+    fun publicKeyRaw(vehicleId: String): ByteArray? {
+        val encoded = prefs.getString(key(vehicleId, SUFFIX_PUBLIC), null) ?: return null
+        return runCatching { Base64.decode(encoded, Base64.NO_WRAP) }.getOrNull()
     }
 
+    /** One car's key ID, SHA-1(public key)[:4] like [TeslaKeyPair.keyId], or null when it has no key. */
+    fun keyId(vehicleId: String): ByteArray? = publicKeyRaw(vehicleId)?.let { MessageDigest.getInstance("SHA-1").digest(it).copyOf(4) }
+
+    /**
+     * The key pair for one car, or null when the car has none or its private
+     * key cannot be read right now. Decrypts the private key in device-only
+     * mode; use [hasKey], [publicKeyRaw] or [keyId] when the public half is enough.
+     */
+    fun load(vehicleId: String): TeslaKeyPair? = synchronized(LOCK) { loadInternal(vehicleId) }
+
+    /**
+     * Generates and stores a fresh key pair for one car, replacing any previous
+     * one. Returns null when the key could not be written to disk: the car must
+     * never enroll a key that a process death could take from the app.
+     */
+    fun generate(vehicleId: String): TeslaKeyPair? =
+        synchronized(LOCK) {
+            val keyPair = TeslaKeys.generate()
+            val saved =
+                runCatching { save(vehicleId, keyPair) }
+                    .onFailure { Log.w(LOG_TAG, "Could not store a new pairing key", it) }
+                    .getOrDefault(false)
+            keyPair.takeIf { saved }
+        }
+
     private fun loadInternal(vehicleId: String): TeslaKeyPair? {
-        val publicKey = prefs.getString(key(vehicleId, SUFFIX_PUBLIC), null) ?: return null
+        val publicKey = publicKeyRaw(vehicleId) ?: return null
         val stored = prefs.getString(key(vehicleId, SUFFIX_PRIVATE), null) ?: return null
         val iv = prefs.getString(key(vehicleId, SUFFIX_IV), null)
 
-        if (iv != null) {
-            // Device-only material. A Keystore-wrapped key restored from another
-            // device cannot be decrypted; drop it so pairing can start fresh.
-            val decrypted = decryptWithKeystore(stored, publicKey, iv)
-            if (decrypted == null) {
-                remove(vehicleId)
-            }
-            return decrypted
-        }
-
-        val plaintext =
+        // Portable material is plain PKCS#8; device-only material is wrapped
+        // by the Keystore AES key.
+        val privateKey =
             runCatching {
-                TeslaKeyPair(
-                    privateKeyPkcs8 = Base64.decode(stored, Base64.NO_WRAP),
-                    publicKeyRaw = Base64.decode(publicKey, Base64.NO_WRAP),
-                )
-            }.getOrNull() ?: return null
-
-        return plaintext
+                if (iv == null) Base64.decode(stored, Base64.NO_WRAP) else decryptWithKeystore(stored, iv)
+            }.getOrElse { error ->
+                if (error.isDefiniteKeyLoss()) {
+                    // A key wrapped on another install (for example restored
+                    // from another phone) can never be read here; drop it so
+                    // pairing can start fresh.
+                    Log.w(LOG_TAG, "Dropping a pairing key this install cannot decrypt", error)
+                    remove(vehicleId)
+                } else {
+                    // Possibly transient (Keystore busy, Binder hiccup): deleting
+                    // the key would cost a re-pairing and orphan its slot.
+                    Log.w(LOG_TAG, "Pairing key unavailable; keeping it for the next attempt", error)
+                }
+                return null
+            }
+        return TeslaKeyPair(privateKeyPkcs8 = privateKey, publicKeyRaw = publicKey)
     }
 
+    /** Writes one car's key in the given mode; true once it is on disk. */
     private fun save(
         vehicleId: String,
         keyPair: TeslaKeyPair,
         backupEnabled: Boolean = isBackupEnabled(),
-    ) {
+    ): Boolean {
         val editor =
             prefs
                 .edit()
@@ -109,12 +151,15 @@ class PairingKeyStore(
                 .putString(key(vehicleId, SUFFIX_PRIVATE), Base64.encodeToString(ciphertext, Base64.NO_WRAP))
                 .putString(key(vehicleId, SUFFIX_IV), Base64.encodeToString(iv, Base64.NO_WRAP))
         }
-        editor.apply()
+        // commit(), not apply(): a new key must be on disk before the car
+        // enrolls it, or a process death would orphan the car's key slot.
+        val written = editor.commit()
         if (backupEnabled) {
             // The key is part of what Android backs up now; schedule a pass
             // rather than waiting for the next idle window.
             BackupManager(appContext).dataChanged()
         }
+        return written
     }
 
     private fun remove(vehicleId: String) {
@@ -151,29 +196,36 @@ class PairingKeyStore(
         return iv to ciphertext
     }
 
-    /** Decrypts material written in device-only (Keystore-wrapped) format. */
+    /**
+     * Decrypts the private key from device-only (Keystore-wrapped) material.
+     * Never creates the Keystore key: a missing one means the material was
+     * wrapped on another install, reported as [UnrecoverableKeyException].
+     */
     private fun decryptWithKeystore(
         encrypted: String,
-        publicKey: String,
         iv: String,
-    ): TeslaKeyPair? =
-        runCatching {
-            val cipher = Cipher.getInstance(TRANSFORMATION)
-            cipher.init(
-                Cipher.DECRYPT_MODE,
-                secretKey(),
-                GCMParameterSpec(TAG_BITS, Base64.decode(iv, Base64.NO_WRAP)),
-            )
-            TeslaKeyPair(
-                privateKeyPkcs8 = cipher.doFinal(Base64.decode(encrypted, Base64.NO_WRAP)),
-                publicKeyRaw = Base64.decode(publicKey, Base64.NO_WRAP),
-            )
-        }.getOrNull()
+    ): ByteArray {
+        val secretKey = existingSecretKey() ?: throw UnrecoverableKeyException("No Keystore key on this install")
+        val cipher = Cipher.getInstance(TRANSFORMATION)
+        cipher.init(Cipher.DECRYPT_MODE, secretKey, GCMParameterSpec(TAG_BITS, Base64.decode(iv, Base64.NO_WRAP)))
+        return cipher.doFinal(Base64.decode(encrypted, Base64.NO_WRAP))
+    }
+
+    /**
+     * True for failures that prove this install can never decrypt the stored
+     * key: the Keystore key that wrapped it is a different one, unrecoverable,
+     * or permanently invalidated. Anything else may be transient.
+     */
+    private fun Throwable.isDefiniteKeyLoss(): Boolean =
+        this is AEADBadTagException || this is UnrecoverableKeyException || this is KeyPermanentlyInvalidatedException
+
+    /** The Keystore AES key, or null when this install has none. */
+    private fun existingSecretKey(): SecretKey? =
+        KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }.getKey(ALIAS, null) as? SecretKey
 
     /** Returns the Keystore AES key, generating it if necessary. */
     private fun secretKey(): SecretKey {
-        val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
-        val existing = (keyStore.getEntry(ALIAS, null) as? KeyStore.SecretKeyEntry)?.secretKey
+        val existing = existingSecretKey()
         if (existing != null) return existing
 
         return KeyGenerator
@@ -193,6 +245,7 @@ class PairingKeyStore(
     }
 
     private companion object {
+        const val LOG_TAG = "PairingKeyStore"
         const val PREFS = "pairing_key"
         const val KEY_BACKUP_ENABLED = "key_backup_enabled"
         const val PREFIX = "key."
@@ -204,5 +257,12 @@ class PairingKeyStore(
         const val TRANSFORMATION = "AES/GCM/NoPadding"
         const val TAG_BITS = 128
         const val KEY_SIZE_BITS = 256
+
+        /**
+         * Serializes reads, writes and deletes of private key material across
+         * every instance (the controller and Settings each hold one), so a
+         * mode change or a dropped key never races a freshly generated one.
+         */
+        val LOCK = Any()
     }
 }
