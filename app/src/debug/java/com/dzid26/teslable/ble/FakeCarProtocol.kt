@@ -35,6 +35,7 @@ import com.tesla.generated.vcsec.WhitelistEntryInfo
 import com.tesla.generated.vcsec.WhitelistInfo
 import okio.ByteString.Companion.toByteString
 import java.security.MessageDigest
+import java.time.Instant
 import com.tesla.generated.carserver.server.Response as CarServerResponse
 
 /**
@@ -360,6 +361,8 @@ class FakeCarProtocol(
                                 } else {
                                     ChargeState.ChargingState(Disconnected = Void())
                                 },
+                            // Like the real car, stamp every sample: history takes its time from here.
+                            timestamp = Instant.ofEpochMilli(System.currentTimeMillis()),
                         ),
                 ),
         ).encode()

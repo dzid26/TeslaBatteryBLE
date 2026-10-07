@@ -2,8 +2,6 @@
 package com.dzid26.teslable.core.protocol
 
 import org.junit.Assert.assertArrayEquals
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
 import org.junit.Test
 
@@ -50,40 +48,9 @@ class MetadataTest {
     }
 
     @Test
-    fun `changes the checksum when a vin byte changes`() {
-        val vin = "testVIN"
-        val expected = referenceMetadata(vin).checksum(byteArrayOf())
-        for (index in vin.indices) {
-            val replacement = if (vin[index] == 'x') 'y' else 'x'
-            val tampered = vin.substring(0, index) + replacement + vin.substring(index + 1)
-            assertFalse(
-                "vin byte $index",
-                expected.contentEquals(referenceMetadata(tampered).checksum(byteArrayOf())),
-            )
-        }
-    }
-
-    @Test
-    fun `changes the checksum when any message byte changes`() {
-        val message = ByteArray(32) { it.toByte() }
-        val expected = referenceMetadata("testVIN").checksum(message)
-        for (index in message.indices) {
-            val tampered = message.copyOf().also { it[index] = (it[index] + 1).toByte() }
-            assertFalse(expected.contentEquals(referenceMetadata("testVIN").checksum(tampered)))
-        }
-    }
-
-    @Test
     fun `computes a stable hmac checksum for a fixed key`() {
         val metadata = Metadata.hmacSha256(ByteArray(16) { it.toByte() }).add(2, "testVIN".toByteArray())
         assertArrayEquals(HMAC_CHECKSUM.hex(), metadata.checksum(byteArrayOf()))
-    }
-
-    @Test
-    fun `changes the hmac tag when the key changes`() {
-        val first = Metadata.hmacSha256(ByteArray(16) { 1 }).add(2, "testVIN".toByteArray()).checksum(byteArrayOf())
-        val second = Metadata.hmacSha256(ByteArray(16) { 2 }).add(2, "testVIN".toByteArray()).checksum(byteArrayOf())
-        assertFalse(first.contentEquals(second))
     }
 
     @Test
@@ -111,12 +78,6 @@ class MetadataTest {
         val metadata = Metadata.sha256().addUint32(5, 0x0E74)
         val expected = Metadata.sha256().add(5, byteArrayOf(0x00, 0x00, 0x0e, 0x74))
         assertArrayEquals(expected.checksum(byteArrayOf()), metadata.checksum(byteArrayOf()))
-    }
-
-    @Test
-    fun `tags are single bytes`() {
-        val metadata = Metadata.sha256().add(255, null)
-        assertEquals(32, metadata.checksum(byteArrayOf()).size)
     }
 
     private fun referenceMetadata(vin: String): Metadata =

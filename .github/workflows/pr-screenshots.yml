@@ -2,13 +2,14 @@
 name: PR screenshots
 
 # Capture the demo build on pull requests that touch the app UI or the capture
-# flow and post the screenshot sheet as a comment, so reviews see the visual
-# result. One comment per ready revision (tagged by SHA), so flipping a PR back
+# flow, so reviews see the visual result. This workflow builds pull request
+# code, so it runs without secrets and with a read-only token: it uploads the
+# screenshots, the PR number and the short SHA as the `pr-screenshots`
+# artifact, and pr-screenshots-comment.yml posts the sheet from the default
+# branch. One comment per ready revision (tagged by SHA), so flipping a PR back
 # to ready after rework posts the next round's screenshots instead of
-# overwriting the reviewed one; draft pushes are skipped. The sheet is hosted as
-# a user attachment, so neither the PR nor the releases carry image assets.
-# Note: PRs from forks get a read-only token, so the upload/comment steps fail
-# there by design.
+# overwriting the reviewed one; draft pushes are skipped. Manual runs only
+# capture; their screenshots stay in the run's artifacts.
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
@@ -21,8 +22,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write      # upload the sheet to the pr-shots release
-  pull-requests: write # post/update the comment
+  contents: read
 
 concurrency:
   group: pr-screenshots-${{ github.event.pull_request.number || github.ref }}
@@ -30,7 +30,7 @@ concurrency:
 
 jobs:
   screenshots:
-    name: Capture and post screenshots
+    name: Capture screenshots
     # Skip while a PR is a draft: rework pushes do not need screenshots, and the
     # ready_for_review event posts the next review round's comment.
     if: github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false
@@ -60,9 +60,6 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-
-      - name: Install ImageMagick
-        run: sudo apt-get install -y imagemagick
 
       # Same headless environment as the Android CI capture: the windowed
       # default never renders the app on CI runners.
@@ -110,9 +107,6 @@ jobs:
           done
           [ -z "$missing" ]
 
-      - name: Compose the screenshot sheet
-        run: bash .github/scripts/build-screenshot-sheet.sh screenshots screenshots/screenshot-sheet.png
-
       # Keep the capture diagnostics (window XML, logcat tail, screenshots) when
       # a capture fails, so the next flake is debuggable.
       - name: Upload the capture diagnostics
@@ -123,43 +117,26 @@ jobs:
           path: screenshots
           if-no-files-found: warn
 
-      - name: Resolve the pull request number
-        id: pr
+      # Hand-off to pr-screenshots-comment.yml: only the six screenshots, the
+      # PR number and the short SHA of the captured commit.
+      - name: Stage the screenshots for the comment
+        if: github.event_name == 'pull_request'
         env:
-          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
-          number="${{ github.event.pull_request.number }}"
-          if [ -z "$number" ]; then
-            number="$(gh pr list --head "${{ github.ref_name }}" --state open --json number --jq '.[0].number // empty')"
-          fi
-          echo "number=$number" >> "$GITHUB_OUTPUT"
+          mkdir -p pr-screenshots
+          for name in 02-scanning 03-car 05-settings \
+              02-scanning-dark 03-car-dark 05-settings-dark; do
+            cp "screenshots/$name.png" "pr-screenshots/$name.png"
+          done
+          printf '%s\n' "$PR_NUMBER" > pr-screenshots/pr-number
+          git rev-parse --short HEAD > pr-screenshots/short-sha
 
-      # Host the sheet as a user attachment (release-asset fallback inside the
-      # helper), so no image asset lives on the PR or the releases.
-      - name: Upload the screenshot sheet
-        id: sheet
-        env:
-          GH_TOKEN: ${{ github.token }}
-          ATTACHMENTS_TOKEN: ${{ secrets.ATTACHMENTS_TOKEN }}
-        run: |
-          set -euo pipefail
-          short="$(git rev-parse --short HEAD)"
-          url="$(bash .github/scripts/upload-screenshot.sh screenshots/screenshot-sheet.png "screenshot-sheet-$short.png")"
-          echo "short=$short" >> "$GITHUB_OUTPUT"
-          echo "url=$url" >> "$GITHUB_OUTPUT"
-
-      - name: Comment on the pull request
-        if: steps.pr.outputs.number != ''
-        uses: thollander/actions-comment-pull-request@24bffb9b452ba05a4f3f77933840a6a841d1b32b # v3.0.1
+      - name: Upload the screenshots for the comment
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          message: |
-            <!-- pr-screenshots -->
-            ## Screenshots
-
-            ![App screenshots: light and dark](${{ steps.sheet.outputs.url }})
-
-            Captured from the demo build at ${{ steps.sheet.outputs.short }}.
-          comment-tag: pr-screenshots-${{ steps.sheet.outputs.short }}
-          pr-number: ${{ steps.pr.outputs.number }}
-          github-token: ${{ github.token }}
+          name: pr-screenshots
+          path: pr-screenshots
+          if-no-files-found: error

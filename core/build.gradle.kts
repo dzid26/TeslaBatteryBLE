@@ -20,6 +20,8 @@ kotlin {
 dependencies {
     implementation(libs.wire.runtime)
     testImplementation(libs.junit)
+    // New tests use kotlin.test so they can move to commonTest (ADR-0007).
+    testImplementation(kotlin("test"))
 }
 
 wire {
@@ -27,6 +29,14 @@ wire {
         srcDir("src/main/proto")
     }
     kotlin {
+    }
+}
+
+// GoVectorTest reads the vectors that the go-vectors CI job regenerates from
+// vehicle-command and diffs, so the Kotlin test can't drift from them.
+tasks.processTestResources {
+    from(rootProject.file("tools/go-fixtures/expected.txt")) {
+        into("go-fixtures")
     }
 }
 

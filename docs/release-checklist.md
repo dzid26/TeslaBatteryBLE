@@ -27,7 +27,7 @@
 
 ## Current status
 
-- Stable signing: one owner-held keystore signs local builds, preview builds and tagged releases (Gradle reads the gitignored `keystore.properties`; CI reads the `SIGNING_*` repository secrets). Keep the keystore and its password backed up - losing them means no further updates to installed apps.
+- Stable signing: one owner-held keystore signs local builds, preview builds and tagged releases. Gradle reads the gitignored `keystore.properties`; CI writes it from the `SIGNING_*` secrets in the `release` environment (Settings → Environments; limited to `main` and `v*` tags, no required reviewer), and only the tag-release and rolling-preview jobs read them. Pull request builds, like the `build` job on every run, get no secrets and use the default debug key. Keep the keystore and its password backed up - losing them means no further updates to installed apps.
 - The preview channel ships signed debug APKs on the rolling `preview` tag, rebuilt from `main` on every push.
 - Switching signing keys (or installing a build signed elsewhere, e.g. F-Droid) requires uninstall + reinstall, which also deletes the car pairing key (re-pair with the NFC card).
 - Screenshots live in `website/images/` — one set shared by the README and the landing page; release notes embed the same CI capture as individual shots.

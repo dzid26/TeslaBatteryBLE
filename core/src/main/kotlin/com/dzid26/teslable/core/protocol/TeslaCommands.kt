@@ -6,6 +6,7 @@ import com.tesla.generated.carserver.server.GetChargeState
 import com.tesla.generated.carserver.server.GetVehicleData
 import com.tesla.generated.carserver.server.Response
 import com.tesla.generated.carserver.server.VehicleAction
+import com.tesla.generated.carserver.vehicle.ChargeState
 import com.tesla.generated.vcsec.RKEAction_E
 import com.tesla.generated.vcsec.UnsignedMessage
 
@@ -32,6 +33,17 @@ object TeslaCommands {
         val chargeRateMph: Int? = null,
         /** Charging speed in miles per hour (`charge_rate_mph_float`, float field). */
         val chargeRateMphFloat: Float? = null,
+        /** Charger power in watts (`charger_power`). */
+        val chargerPower: Int? = null,
+        /** Charger voltage in volts (`charger_voltage`). */
+        val chargerVoltage: Int? = null,
+        /** Charging current limit in amps (`charging_amps`). */
+        val chargingAmps: Int? = null,
+        /**
+         * The raw `ChargeState` this was parsed from, logged verbatim by the
+         * history store. Null for hand-built instances (tests).
+         */
+        val raw: ChargeState? = null,
     ) {
         /** Charging slope in miles per hour: the float rate when plausible, else the int rate. */
         val chargingMph: Float?
@@ -56,20 +68,7 @@ object TeslaCommands {
         return Charge(
             batteryLevel = charge.battery_level,
             chargeLimit = charge.charge_limit_soc,
-            chargingState =
-                charge.charging_state?.let { state ->
-                    when {
-                        state.Charging != null -> "Charging"
-                        state.Complete != null -> "Complete"
-                        state.Stopped != null -> "Stopped"
-                        state.Disconnected != null -> "Disconnected"
-                        state.NoPower != null -> "NoPower"
-                        state.Starting != null -> "Starting"
-                        state.Calibrating != null -> "Calibrating"
-                        state.Unknown != null -> "Unknown"
-                        else -> null
-                    }
-                },
+            chargingState = chargingStateName(charge.charging_state),
             batteryRange = charge.battery_range,
             estBatteryRange = charge.est_battery_range,
             idealBatteryRange = charge.ideal_battery_range,
@@ -79,8 +78,27 @@ object TeslaCommands {
             chargeMilesAddedIdeal = charge.charge_miles_added_ideal,
             chargeRateMph = charge.charge_rate_mph,
             chargeRateMphFloat = charge.charge_rate_mph_float,
+            chargerPower = charge.charger_power,
+            chargerVoltage = charge.charger_voltage,
+            chargingAmps = charge.charging_amps,
+            raw = charge,
         )
     }
+
+    /** The car's charging-state name (`Charging`, `Complete`, ...), or null when unset. */
+    internal fun chargingStateName(state: ChargeState.ChargingState?): String? =
+        when {
+            state == null -> null
+            state.Charging != null -> "Charging"
+            state.Complete != null -> "Complete"
+            state.Stopped != null -> "Stopped"
+            state.Disconnected != null -> "Disconnected"
+            state.NoPower != null -> "NoPower"
+            state.Starting != null -> "Starting"
+            state.Calibrating != null -> "Calibrating"
+            state.Unknown != null -> "Unknown"
+            else -> null
+        }
 
     fun parseActionStatus(payload: ByteArray): String? =
         Response.ADAPTER

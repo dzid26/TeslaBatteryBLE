@@ -30,13 +30,76 @@ concurrency:
   # are superseded; queued previews collapse in the preview job below.
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# Secrets only reach jobs that run trusted code. `build` runs for pull requests
+# and pushes without secrets and signs with the default debug key. `release`
+# (v* tags) and `preview` (main) take the signing key and ATTACHMENTS_TOKEN
+# from the `release` environment and build the signed APK themselves.
 jobs:
   build:
     permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6
+
+      - name: Make gradlew executable
+        run: chmod +x gradlew
+
+      # Optional shared key for CI debug builds, so each PR build updates the
+      # previous one in place. It is a throwaway debug key, so it lives in a
+      # repository variable, not a secret; without it every run signs with a
+      # fresh debug key.
+      - name: Set up the shared CI debug key
+        if: vars.CI_DEBUG_KEYSTORE_BASE64 != ''
+        env:
+          CI_DEBUG_KEYSTORE_BASE64: ${{ vars.CI_DEBUG_KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+          dir="${ANDROID_USER_HOME:-$HOME/.android}"
+          mkdir -p "$dir"
+          printf '%s' "$CI_DEBUG_KEYSTORE_BASE64" | base64 -d > "$dir/debug.keystore"
+
+      - name: Unit tests (:core)
+        run: ./gradlew :core:test
+
+      - name: App unit tests
+        run: ./gradlew :app:testDebugUnitTest
+
+      - name: Android lint
+        run: ./gradlew :app:lintDebug
+
+      - name: Static analysis (ktlint, detekt)
+        run: ./gradlew ktlintCheck detekt
+
+      # The artifact gets its own application ID (.pr) and launcher label, so
+      # it installs next to the release app. The preview and release jobs and
+      # the screenshot captures build without the property.
+      - name: Build debug APK
+        run: ./gradlew :app:assembleDebug -PciDebugBuild=true
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: teslable-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+
+  release:
+    name: Tag release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    environment: release
+    permissions:
       contents: write
     runs-on: ubuntu-latest
-    env:
-      SIGNING_KEYSTORE_BASE64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -53,12 +116,21 @@ jobs:
         run: chmod +x gradlew
 
       - name: Set up signing
-        if: env.SIGNING_KEYSTORE_BASE64 != ''
         env:
+          SIGNING_KEYSTORE_BASE64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
           SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
           SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
           SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
         run: |
+          set -euo pipefail
+          # Never publish a debug-key build: fail when the release environment
+          # does not provide the signing secrets.
+          for name in SIGNING_KEYSTORE_BASE64 SIGNING_STORE_PASSWORD SIGNING_KEY_ALIAS SIGNING_KEY_PASSWORD; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::$name is not set in the release environment"
+              exit 1
+            fi
+          done
           echo "$SIGNING_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
           {
             echo "storeFile=$RUNNER_TEMP/release.jks"
@@ -67,40 +139,19 @@ jobs:
             echo "keyPassword=$SIGNING_KEY_PASSWORD"
           } > keystore.properties
 
-      - name: Unit tests (:core)
-        run: ./gradlew :core:test
-
-      - name: App unit tests
-        run: ./gradlew :app:testDebugUnitTest
-
-      - name: Android lint
-        run: ./gradlew :app:lintDebug
-
-      - name: Static analysis (ktlint, detekt)
-        run: ./gradlew ktlintCheck detekt
-
-      - name: Build debug APK
+      - name: Build the signed debug APK
         run: ./gradlew :app:assembleDebug
-
-      - name: Upload debug APK
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: teslable-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
 
       # Tag releases capture their own screenshots from the simulated car.
       - name: Stage the release APK
-        if: startsWith(github.ref, 'refs/tags/')
         run: |
           mkdir -p dist
           cp app/build/outputs/apk/debug/app-debug.apk "dist/TeslaBatteryBLE-${GITHUB_REF_NAME}.apk"
 
       - name: Build the demo APK for screenshots
-        if: startsWith(github.ref, 'refs/tags/')
         run: ./gradlew :app:assembleDebug -PdemoCar=true
 
       - name: Enable KVM
-        if: startsWith(github.ref, 'refs/tags/')
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
@@ -108,7 +159,6 @@ jobs:
 
       - name: Capture screenshots
         id: capture
-        if: startsWith(github.ref, 'refs/tags/')
         continue-on-error: true
         uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
         with:
@@ -125,7 +175,7 @@ jobs:
       # still fails the job when no complete set is produced, so a release is
       # never published without its screenshots.
       - name: Retry the capture once
-        if: startsWith(github.ref, 'refs/tags/') && steps.capture.outcome == 'failure'
+        if: steps.capture.outcome == 'failure'
         continue-on-error: true
         uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
         with:
@@ -138,7 +188,6 @@ jobs:
           script: rm -rf screenshots && bash .github/scripts/capture-screenshots.sh app/build/outputs/apk/debug/app-debug.apk screenshots
 
       - name: Release on tag
-        if: startsWith(github.ref, 'refs/tags/')
         env:
           GH_TOKEN: ${{ github.token }}
           ATTACHMENTS_TOKEN: ${{ secrets.ATTACHMENTS_TOKEN }}
@@ -149,7 +198,6 @@ jobs:
       # a PNG actually changed; website/** is ignored by Android CI, so the
       # commit does not rebuild the app or the rolling preview.
       - name: Refresh the committed screenshots
-        if: startsWith(github.ref, 'refs/tags/')
         run: |
           set -euo pipefail
           git fetch origin main
@@ -175,6 +223,7 @@ jobs:
   preview:
     name: Rolling preview release
     needs: build
+    environment: release
     permissions:
       contents: write
     if: |
@@ -191,13 +240,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Download debug APK
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          name: teslable-debug-apk
-          path: dist
-
-      # The preview captures its own screenshots from the simulated car.
       - name: Set up JDK 21
         uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6
         with:
@@ -210,6 +252,39 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x gradlew
 
+      - name: Set up signing
+        env:
+          SIGNING_KEYSTORE_BASE64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
+          SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
+          SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          # Never publish a debug-key build: fail when the release environment
+          # does not provide the signing secrets.
+          for name in SIGNING_KEYSTORE_BASE64 SIGNING_STORE_PASSWORD SIGNING_KEY_ALIAS SIGNING_KEY_PASSWORD; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::$name is not set in the release environment"
+              exit 1
+            fi
+          done
+          echo "$SIGNING_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          {
+            echo "storeFile=$RUNNER_TEMP/release.jks"
+            echo "storePassword=$SIGNING_STORE_PASSWORD"
+            echo "keyAlias=$SIGNING_KEY_ALIAS"
+            echo "keyPassword=$SIGNING_KEY_PASSWORD"
+          } > keystore.properties
+
+      - name: Build the signed debug APK
+        run: ./gradlew :app:assembleDebug
+
+      - name: Stage the preview APK
+        run: |
+          mkdir -p dist
+          cp app/build/outputs/apk/debug/app-debug.apk dist/app-debug.apk
+
+      # The preview captures its own screenshots from the simulated car.
       - name: Build the demo APK for screenshots
         run: ./gradlew :app:assembleDebug -PdemoCar=true
 
@@ -260,8 +335,14 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - name: Clone vehicle-command
-        run: git clone --depth 1 https://github.com/teslamotors/vehicle-command.git /tmp/vehicle-command
+      # The oracle is the vehicle-command commit the protos are pinned to, not
+      # upstream HEAD: moving it is a deliberate TESLA_COMMIT bump.
+      - name: Check out vehicle-command at TESLA_COMMIT
+        run: |
+          git init -q /tmp/vehicle-command
+          git -C /tmp/vehicle-command fetch -q --depth 1 \
+            https://github.com/teslamotors/vehicle-command.git "$(cat core/src/main/proto/TESLA_COMMIT)"
+          git -C /tmp/vehicle-command checkout -q FETCH_HEAD
 
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
@@ -275,7 +356,7 @@ jobs:
           cd /tmp/vehicle-command
           go run ./fixtures > /tmp/fixtures.txt
 
-      - name: Compare deterministic fixtures
-        run: |
-          grep -E '^(CLIENT_PRIVATE_PKCS8|CLIENT_PUBLIC|VEHICLE_PUBLIC|SESSION_INFO|CHALLENGE|SESSION_INFO_TAG|RESPONSE_REQUEST_ID|RESPONSE_PLAINTEXT)=' /tmp/fixtures.txt > /tmp/got.txt
-          diff tools/go-fixtures/expected.txt /tmp/got.txt
+      # Keys, nonces and the session clock are fixed, so every line is
+      # deterministic and the whole output is compared.
+      - name: Compare fixtures
+        run: diff tools/go-fixtures/expected.txt /tmp/fixtures.txt

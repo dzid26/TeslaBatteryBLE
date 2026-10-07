@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 package com.dzid26.teslable.ui
 
+import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
@@ -31,6 +32,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -39,6 +41,9 @@ import androidx.compose.ui.unit.dp
 import com.dzid26.teslable.BuildConfig
 import com.dzid26.teslable.ble.PairingKeyStore
 import com.dzid26.teslable.ble.Vehicle
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -52,13 +57,17 @@ fun SettingsScreen(
     BackHandler { onBack() }
 
     var backupEnabled by remember { mutableStateOf(keyStore.isBackupEnabled()) }
+    // Android 11 and below always leave pairing_key.xml out of backups
+    // (backup_rules.xml), so turning backup on would only drop Keystore encryption.
+    val backupSupported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    val scope = rememberCoroutineScope()
     // One key per car; read them when Settings opens (pairing happens elsewhere).
+    // Key IDs come from the stored public keys, so no private key is decrypted.
     val vehicleKeys =
         remember(vehicles) {
             vehicles.mapNotNull { vehicle ->
                 keyStore
-                    .load(vehicle.bleName)
-                    ?.keyId
+                    .keyId(vehicle.bleName)
                     ?.toHex()
                     ?.let { id -> vehicle.title to id }
             }
@@ -66,6 +75,15 @@ fun SettingsScreen(
     var showEnableDialog by remember { mutableStateOf(false) }
     var showDisableDialog by remember { mutableStateOf(false) }
     var showClearCacheDialog by remember { mutableStateOf(false) }
+
+    // Re-saving every key is Keystore work, so it runs off the main thread;
+    // the switch then shows the mode that was actually stored.
+    fun changeBackup(enabled: Boolean) {
+        scope.launch {
+            withContext(Dispatchers.IO) { runCatching { keyStore.setBackupEnabled(enabled) } }
+            backupEnabled = keyStore.isBackupEnabled()
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -92,9 +110,10 @@ fun SettingsScreen(
         ) {
             VehicleKeysCard(
                 backupEnabled = backupEnabled,
+                backupSupported = backupSupported,
                 onToggleBackup = { checked ->
                     if (checked) {
-                        showEnableDialog = true
+                        showEnableDialog = backupSupported
                     } else {
                         showDisableDialog = true
                     }
@@ -114,8 +133,7 @@ fun SettingsScreen(
         EnableBackupDialog(
             onConfirm = {
                 showEnableDialog = false
-                keyStore.setBackupEnabled(true)
-                backupEnabled = true
+                changeBackup(true)
             },
             onDismiss = { showEnableDialog = false },
         )
@@ -125,8 +143,7 @@ fun SettingsScreen(
         DisableBackupDialog(
             onConfirm = {
                 showDisableDialog = false
-                keyStore.setBackupEnabled(false)
-                backupEnabled = false
+                changeBackup(false)
             },
             onDismiss = { showDisableDialog = false },
         )
@@ -146,6 +163,7 @@ fun SettingsScreen(
 @Composable
 private fun VehicleKeysCard(
     backupEnabled: Boolean,
+    backupSupported: Boolean,
     onToggleBackup: (Boolean) -> Unit,
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
@@ -166,26 +184,38 @@ private fun VehicleKeysCard(
                 )
                 Spacer(Modifier.width(12.dp))
                 Switch(
-                    checked = backupEnabled,
+                    checked = backupEnabled && backupSupported,
                     onCheckedChange = onToggleBackup,
+                    enabled = backupSupported,
+                )
+            }
+            if (!backupSupported) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = "Key backup needs Android 12 or newer.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             Spacer(Modifier.height(8.dp))
             Text(
                 text =
-                    if (backupEnabled) {
+                    if (backupEnabled && backupSupported) {
                         "Currently: vehicle keys are stored so Android can back them up. " +
                             "Google backups are encrypted with your Google account and device lock, " +
                             "so a new phone can restore pairing from them."
+                    } else if (backupEnabled) {
+                        "Currently: vehicle keys are stored without Keystore encryption, and " +
+                            "Android 11 and below leave them out of backups."
                     } else {
                         "Currently: vehicle keys are encrypted with this device's hardware-backed " +
-                            "Keystore (AES) and stay out of Android backups. On a new phone you re-pair " +
-                            "with an NFC card tap."
+                            "Keystore (AES). An Android backup can't restore them on another phone, so " +
+                            "a new phone needs re-pairing with an NFC card tap."
                     },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            if (backupEnabled) {
+            if (backupEnabled && backupSupported) {
                 Spacer(Modifier.height(8.dp))
                 Text(
                     text =
@@ -287,8 +317,8 @@ private fun EnableBackupDialog(
         text = {
             Text(
                 "This applies to every car you have paired. Currently each vehicle key is " +
-                    "encrypted with this device's hardware-backed Keystore (AES) and never leaves it. " +
-                    "Turning this on stores the keys so Android can back them up; Google backups are " +
+                    "encrypted with this device's hardware-backed Keystore (AES), so only this phone can use it. " +
+                    "Turning this on stores the keys so Android backup can restore them on a new phone; Google backups are " +
                     "encrypted with your Google account and device lock, so exposure requires someone " +
                     "who can restore your backup and unlock your phone. Near the car, that person could " +
                     "read vehicle data and control charging — they cannot unlock or drive, and new keys " +
@@ -315,8 +345,8 @@ private fun DisableBackupDialog(
         title = { Text("Stop backing up vehicle keys?") },
         text = {
             Text(
-                "New backups will exclude the keys, but copies already stored in Android backup " +
-                    "may remain until they are replaced.",
+                "New backups can't restore the keys on another phone, but usable copies already " +
+                    "in Android backup may remain until they are replaced.",
             )
         },
         confirmButton = {

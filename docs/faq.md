@@ -48,16 +48,20 @@ reads wait until the car is already awake or you trigger a wake.
 
 In app-private storage on your phone, which other apps cannot read. Vehicle
 keys (P-256) are generated on-device. By default the private keys are encrypted
-with this device's hardware-backed Android Keystore (AES) and kept out of
-backups, so a new phone requires re-pairing with an NFC card tap. One setting
-applies to all paired cars: opting in to "Include vehicle keys in Android backup"
-lets Android restore them on a new phone; Android backups are encrypted with your
-Google account and device lock, and Android 12+ additionally requires that
-encrypted backup is available (Android 11 and below always keep keys out of
-backup). The default `CHARGING_MANAGER` role limits impact to read + charge
-control — keys cannot unlock or drive the car, and adding new keys always needs
-an NFC card tap plus vehicle confirmation. You can remove the app's key from a
-car's key list at any time. Uninstalling the app deletes local key material.
+with an AES key that stays in this device's hardware-backed Android Keystore.
+Android 11 and below keep the encrypted keys out of backups; on Android 12+ a
+backup may include them, but they cannot be decrypted on another phone. Either
+way, a new phone requires re-pairing with an NFC card tap. One setting applies
+to all paired cars: opting in to "Include vehicle keys in Android backup" lets
+Android restore them on a new phone, from a cloud backup or a device-to-device
+transfer. Cloud backups are encrypted with your Google account and device lock,
+and Android 12+ additionally requires that encrypted backup is available for
+them; a device-to-device transfer has no such requirement. Android 11 and below
+always keep keys out of backup. The default `CHARGING_MANAGER` role limits
+impact to read + charge control — keys cannot unlock or drive the car, and
+adding new keys always needs an NFC card tap plus vehicle confirmation. You can
+remove the app's key from a car's key list at any time. Uninstalling the app
+deletes local key material.
 Details:
 [session and pairing](protocol/session-and-pairing.md),
 [ADR-0005](adr/0005-plaintext-key-storage.md).

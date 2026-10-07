@@ -16,7 +16,7 @@ SHOTS="02-scanning.png 03-car.png 05-settings.png 02-scanning-dark.png 03-car-da
 
 if [ "$TAG" != "${TAG%-*}" ]; then PRE_FLAG="--prerelease"; else PRE_FLAG=""; fi
 
-[ -f "$APK" ] || { echo "missing $APK (the build job stages it for tags)" >&2; exit 1; }
+[ -f "$APK" ] || { echo "missing $APK (the release job stages it)" >&2; exit 1; }
 
 for name in $SHOTS; do
   [ -f "$SHOTS_DIR/$name" ] || { echo "missing $SHOTS_DIR/$name (the capture step must succeed)" >&2; exit 1; }

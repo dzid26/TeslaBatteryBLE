@@ -58,6 +58,17 @@ if [ "$ready" != true ]; then
   exit 1
 fi
 
+# On CI, hide system error dialogs. Right after boot Pixel Launcher can ANR on a
+# slow emulator, and its "isn't responding" dialog then takes input focus and
+# blinds uiautomator for the rest of the attempt. With dialogs hidden, the system
+# kills the stuck process instead of asking (AOSP Settings.Global
+# HIDE_ERROR_DIALOGS, API 34 and later). A dialog that is already up is dismissed
+# by ui_dump. The setting persists on the AVD, so local runs leave it alone.
+if [ -n "${CI:-}" ]; then
+  adb shell settings put global hide_error_dialogs 1 || true
+  echo "  hide_error_dialogs=$(adb shell settings get global hide_error_dialogs | tr -d '\r')"
+fi
+
 # Keep the screen on and make sure it is awake. `screencap` returns a black
 # frame while the emulator display is asleep.
 adb shell svc power stayon true || true
@@ -102,10 +113,13 @@ adb shell cmd location set-location-enabled true || true
 # ------------------------------------------------------------------ UI helpers
 
 # Dump the current window hierarchy. uiautomator can race a busy screen, so
-# every caller treats a failed dump as "not found yet" and retries.
+# every caller treats a failed dump as "not found yet" and retries. A dump that
+# showed an ANR dialog counts as failed too: the dialog was just dismissed, so
+# the next dump shows the app.
 ui_dump() {
   adb shell uiautomator dump /sdcard/window.xml > /dev/null 2>&1 &&
-    adb pull /sdcard/window.xml "$(adb_path "$DUMP")" > /dev/null 2>&1
+    adb pull /sdcard/window.xml "$(adb_path "$DUMP")" > /dev/null 2>&1 &&
+    ! dismiss_anr_dialog
 }
 
 # Wait until the raw hierarchy contains a literal string (usually `text="...`).
@@ -156,6 +170,26 @@ center_y() {
 
 top_of() {
   sed -E 's/.*\[(-?[0-9]+),(-?[0-9]+)\]\[(-?[0-9]+),(-?[0-9]+)\].*/\2/' <<< "$1"
+}
+
+# A system "<app> isn't responding" dialog takes input focus, so uiautomator then
+# dumps only the dialog and every wait times out behind it. Press Wait, using the
+# button's bounds from the last dump, and log which app it was. Returns 0 when the
+# last dump showed such a dialog. After a few presses it gives up, so a dialog
+# that Wait cannot dismiss ends in the usual wait failures instead of a flood of
+# log lines.
+ANR_DISMISSED=0
+dismiss_anr_dialog() {
+  local title node bounds
+  title="$(grep -oE 'text="[^"]*isn.t responding"' "$DUMP" | head -n 1 || true)"
+  [ -n "$title" ] || return 1
+  [ "$ANR_DISMISSED" -lt 5 ] || return 1
+  node="$(node_for_text 'Wait"' || true)"
+  bounds="$(bounds_of "$node" || true)"
+  [ -n "$bounds" ] || return 1
+  ANR_DISMISSED=$((ANR_DISMISSED + 1))
+  echo "  ... dismissing ${title#text=} dialog" >&2
+  adb shell input tap "$(center_x "$bounds")" "$(center_y "$bounds")" || true
 }
 
 # Wait until a node with text/content-desc starting with $2 exists. On success
