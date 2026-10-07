@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -51,6 +52,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.dzid26.teslable.ble.BleUiState
 import com.dzid26.teslable.ble.ConnectionPhase
@@ -311,65 +313,70 @@ private fun ConnectionsScreen(
                 }
             },
         ) {
-            Column(
+            BoxWithConstraints(
                 modifier =
                     Modifier
                         .fillMaxSize()
                         .padding(horizontal = 16.dp),
             ) {
-                if (!permissionsGranted) {
-                    PermissionCard(
-                        title = "Allow Bluetooth access",
-                        body =
-                            "TeslaBatteryBLE finds and talks to your Tesla over Bluetooth. " +
-                                "Android also requires location permission for BLE scans; the app " +
-                                "never reads your location and nothing leaves the phone.",
-                        button = "Grant permissions",
-                        onClick = onRequestPermissions,
-                    )
-                    Spacer(Modifier.height(8.dp))
-                }
-                if (!locationServicesEnabled) {
-                    Text(
-                        text = "Location services are off. BLE scans return no results until it is enabled.",
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                    Spacer(Modifier.height(8.dp))
-                }
+                // The log stays a fraction of the screen so the car list keeps
+                // room in landscape; its content scrolls internally.
+                val logMaxHeight = (maxHeight * LOG_HEIGHT_FRACTION).coerceAtLeast(96.dp)
+                Column(modifier = Modifier.fillMaxSize()) {
+                    if (!permissionsGranted) {
+                        PermissionCard(
+                            title = "Allow Bluetooth access",
+                            body =
+                                "TeslaBatteryBLE finds and talks to your Tesla over Bluetooth. " +
+                                    "Android also requires location permission for BLE scans; the app " +
+                                    "never reads your location and nothing leaves the phone.",
+                            button = "Grant permissions",
+                            onClick = onRequestPermissions,
+                        )
+                        Spacer(Modifier.height(8.dp))
+                    }
+                    if (!locationServicesEnabled) {
+                        Text(
+                            text = "Location services are off. BLE scans return no results until it is enabled.",
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Spacer(Modifier.height(8.dp))
+                    }
 
-                val connectedCount = state.connections.values.count { it.phase == ConnectionPhase.READY }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text =
-                            if (rows.isNotEmpty()) {
-                                "${rows.size} car(s), $connectedCount connected"
-                            } else {
-                                "No scan yet"
-                            },
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    val connectedCount = state.connections.values.count { it.phase == ConnectionPhase.READY }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text =
+                                if (rows.isNotEmpty()) {
+                                    "${rows.size} car(s), $connectedCount connected"
+                                } else {
+                                    "No scan yet"
+                                },
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f),
+                        )
+                        if (state.scanning || state.discovering) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp,
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(12.dp))
+
+                    VehicleList(
+                        rows = rows,
+                        scanning = state.scanning,
+                        onOpen = onOpen,
+                        onEditVin = onEditVin,
+                        onWake = onWake,
                         modifier = Modifier.weight(1f),
                     )
-                    if (state.scanning || state.discovering) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(18.dp),
-                            strokeWidth = 2.dp,
-                        )
-                    }
+                    Spacer(Modifier.height(8.dp))
+                    LogCard(state.log, maxContentHeight = logMaxHeight)
                 }
-                Spacer(Modifier.height(12.dp))
-
-                VehicleList(
-                    rows = rows,
-                    scanning = state.scanning,
-                    onOpen = onOpen,
-                    onEditVin = onEditVin,
-                    onWake = onWake,
-                    modifier = Modifier.weight(1f),
-                )
-                Spacer(Modifier.height(8.dp))
-                LogCard(state.log)
             }
         }
     }
@@ -535,7 +542,10 @@ private fun VehicleCard(
 
 /** The app-wide log; every line is tagged with the car it came from. */
 @Composable
-private fun LogCard(log: List<LogEntry>) {
+private fun LogCard(
+    log: List<LogEntry>,
+    maxContentHeight: Dp = 200.dp,
+) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp)) {
             Text("Log", style = MaterialTheme.typography.titleSmall)
@@ -555,7 +565,7 @@ private fun LogCard(log: List<LogEntry>) {
                     modifier =
                         Modifier
                             .fillMaxWidth()
-                            .heightIn(max = 200.dp)
+                            .heightIn(max = maxContentHeight)
                             .verticalScroll(logScroll),
                 ) {
                     log.takeLast(100).forEach { line ->
@@ -647,3 +657,6 @@ private fun statusColor(connection: TeslaConnection?): Color =
         connection?.phase == ConnectionPhase.FAILED -> MaterialTheme.colorScheme.error
         else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
+
+/** The log card's share of the cars-list height; the list keeps the rest. */
+private const val LOG_HEIGHT_FRACTION = 0.3f
