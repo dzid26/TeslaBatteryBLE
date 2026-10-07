@@ -17,6 +17,12 @@ val keystoreProperties =
         if (file.exists()) file.inputStream().use { load(it) }
     }
 
+// CI debug builds (-PciDebugBuild=true, the Android CI `teslable-debug-apk`
+// artifact) get their own application ID and launcher label, so a PR build
+// installs next to the release app instead of clashing with its signature.
+// Preview, release and demo builds never set it and keep the real ID.
+val ciDebugBuild = project.findProperty("ciDebugBuild") == "true"
+
 android {
     namespace = "com.dzid26.teslable"
     compileSdk = 37
@@ -32,6 +38,8 @@ android {
             "DEMO_CAR",
             (project.findProperty("demoCar") as String?) ?: "false",
         )
+        // android:label in the manifest; CI debug builds override it below.
+        manifestPlaceholders["appLabel"] = "@string/app_name"
     }
 
     signingConfigs {
@@ -50,6 +58,11 @@ android {
             // Every build shares the stable signing identity, so preview,
             // release and local builds update each other in place.
             signingConfigs.findByName("release")?.let { signingConfig = it }
+            if (ciDebugBuild) {
+                applicationIdSuffix = ".pr"
+                versionNameSuffix = "-pr"
+                manifestPlaceholders["appLabel"] = "TeslaBatteryBLE PR"
+            }
         }
         release {
             signingConfigs.findByName("release")?.let { signingConfig = it }
