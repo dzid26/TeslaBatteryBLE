@@ -56,6 +56,32 @@ find it (`sdk.dir=...`).
 Hardware-dependent changes: note in the PR what was tested and what was not. Real-car
 validation is batched by the maintainer (see the checklist in the master plan).
 
+## Testing a PR build
+
+Android CI builds a debug APK for every pull request (the `teslable-debug-apk`
+artifact).
+
+1. Download the zip from the PR's screenshot comment, or from the Android CI run
+   on the PR's **Checks** page (GitHub sign-in needed), and install the APK inside.
+2. It installs next to the release app as **TeslaBatteryBLE PR**
+   (`com.dzid26.teslable.pr`), with its own data.
+3. It needs its own pairing: one key-card tap, and it takes its own key slot on
+   the car.
+4. Unless the repository has the shared CI debug key below, every run signs with
+   a fresh debug key, so uninstall the previous PR build first.
+
+One-time setup (maintainer) for the shared key, so PR builds update each other in
+place. Generate a throwaway debug keystore and encode it:
+
+```bash
+keytool -genkeypair -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+base64 -w0 debug.keystore
+```
+
+Save the output as the repository variable `CI_DEBUG_KEYSTORE_BASE64` (Settings →
+Secrets and variables → Actions → Variables). It is a debug key, so a variable is
+fine, but never commit the keystore.
+
 ## Reporting bugs & requesting features
 
 Use the issue forms in [`.github/ISSUE_TEMPLATE/`](.github/ISSUE_TEMPLATE/). For
