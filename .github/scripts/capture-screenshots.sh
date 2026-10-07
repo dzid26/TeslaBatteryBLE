@@ -406,10 +406,11 @@ if tap_text "AA:BB:CC:DD:EE:01" 30; then
       debug_dump "settings-entry"
     fi
     # 02 — pull to rescan so the shot shows the spinner with the known car,
-    # matching the dark pass.
+    # matching the dark pass. Gate on "Cars": the car view and settings both
+    # mention "Demo Tesla" too, so that alone cannot prove the list is showing.
     pull_refresh
     sleep 3
-    if wait_for_text "Demo Tesla" 20; then
+    if wait_for_text "Cars" 10 && wait_for_text "Demo Tesla" 10; then
       capture 02-scanning.png
     else
       echo "  ! cars list did not show the known car" >&2
