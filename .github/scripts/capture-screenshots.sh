@@ -208,6 +208,17 @@ tap_desc() {
   adb shell input tap "$(center_x "$bounds")" "$(center_y "$bounds")"
 }
 
+# Return to the cars list from the car view or settings: one system BACK,
+# then the car view's own back button if that landed on the car view instead.
+# A bare BACK is not deterministic here, and every later step assumes the list.
+back_to_list() {
+  adb shell input keyevent KEYCODE_BACK
+  sleep 1
+  if ui_dump && grep -qF 'content-desc="All cars"' "$DUMP"; then
+    tap_desc "All cars" 10 || true
+  fi
+}
+
 # Tap a control and wait for the screen it leads to. Compose exposes disabled
 # buttons as enabled in the accessibility tree, so a tap that lands too early
 # is simply retried instead of trusted.
@@ -391,7 +402,7 @@ if tap_text "AA:BB:CC:DD:EE:01" 30; then
       debug_dump "charge-reading"
     fi
     # 05 — Settings with the vehicle-key card, back out of the car view first.
-    adb shell input keyevent KEYCODE_BACK
+    back_to_list
     if wait_for_text "Cars" 20 && tap_desc "Settings" 20; then
       if wait_for_text "Vehicle key" 20; then
         sleep 1
@@ -464,7 +475,7 @@ if adb shell cmd uimode night yes > /dev/null 2>&1; then
         capture 03-car-dark.png
 
         # 05 — Settings.
-        adb shell input keyevent KEYCODE_BACK
+        back_to_list
         if wait_for_text "Cars" 20 && tap_desc "Settings" 20; then
           if wait_for_text "Vehicle key" 20; then
             sleep 1
