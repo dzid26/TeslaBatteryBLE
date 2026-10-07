@@ -31,6 +31,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -39,6 +40,9 @@ import androidx.compose.ui.unit.dp
 import com.dzid26.teslable.BuildConfig
 import com.dzid26.teslable.ble.PairingKeyStore
 import com.dzid26.teslable.ble.Vehicle
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -52,13 +56,14 @@ fun SettingsScreen(
     BackHandler { onBack() }
 
     var backupEnabled by remember { mutableStateOf(keyStore.isBackupEnabled()) }
+    val scope = rememberCoroutineScope()
     // One key per car; read them when Settings opens (pairing happens elsewhere).
+    // Key IDs come from the stored public keys, so no private key is decrypted.
     val vehicleKeys =
         remember(vehicles) {
             vehicles.mapNotNull { vehicle ->
                 keyStore
-                    .load(vehicle.bleName)
-                    ?.keyId
+                    .keyId(vehicle.bleName)
                     ?.toHex()
                     ?.let { id -> vehicle.title to id }
             }
@@ -66,6 +71,15 @@ fun SettingsScreen(
     var showEnableDialog by remember { mutableStateOf(false) }
     var showDisableDialog by remember { mutableStateOf(false) }
     var showClearCacheDialog by remember { mutableStateOf(false) }
+
+    // Re-saving every key is Keystore work, so it runs off the main thread;
+    // the switch then shows the mode that was actually stored.
+    fun changeBackup(enabled: Boolean) {
+        scope.launch {
+            withContext(Dispatchers.IO) { runCatching { keyStore.setBackupEnabled(enabled) } }
+            backupEnabled = keyStore.isBackupEnabled()
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -114,8 +128,7 @@ fun SettingsScreen(
         EnableBackupDialog(
             onConfirm = {
                 showEnableDialog = false
-                keyStore.setBackupEnabled(true)
-                backupEnabled = true
+                changeBackup(true)
             },
             onDismiss = { showEnableDialog = false },
         )
@@ -125,8 +138,7 @@ fun SettingsScreen(
         DisableBackupDialog(
             onConfirm = {
                 showDisableDialog = false
-                keyStore.setBackupEnabled(false)
-                backupEnabled = false
+                changeBackup(false)
             },
             onDismiss = { showDisableDialog = false },
         )
