@@ -72,7 +72,8 @@ class HistoryStore(
         val count = (recordCounts[vehicleId] ?: 0) + 1
         if (count > MAX_RECORDS_PER_FILE) {
             val kept =
-                (ProtoLog.decode(file.readBytes(), ChargeState.ADAPTER) + record).takeLast(MAX_RECORDS_PER_FILE)
+                (ProtoLog.decode(file.readBytes(), ChargeState.ADAPTER) + record)
+                    .takeLast(MAX_RECORDS_PER_FILE - TRIM_SLACK)
             writeAtomically(file, ProtoLog.encode(kept))
             recordCounts[vehicleId] = kept.size
         } else {
@@ -128,5 +129,11 @@ class HistoryStore(
         const val LEGACY_VEHICLE_STEM = "legacy"
         const val MAX_SAMPLES = 20_000
         const val MAX_RECORDS_PER_FILE = 20_000
+
+        /**
+         * Records dropped below the cap on each trim, so a full file costs
+         * one rewrite per thousand appends instead of one per append.
+         */
+        const val TRIM_SLACK = 1_000
     }
 }

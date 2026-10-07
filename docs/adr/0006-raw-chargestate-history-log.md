@@ -35,8 +35,9 @@ buys nothing.
   ignored (pre-1.0 reset), and the CSV is no longer written. An explicit
   import/export feature can return later.
 - Each vehicle file keeps its newest 20k records (rewritten via temp file +
-  atomic move); the in-memory cache holds the newest 20k samples overall.
-  Every SOC read is logged; nothing is deduplicated.
+  atomic move, trimming a thousand below the cap so a full file costs one
+  rewrite per thousand appends); the in-memory cache holds the newest 20k
+  samples overall. Every SOC read is logged; nothing is deduplicated.
 - `HistoryStore`'s public API is unchanged: constructor, `samples`
   StateFlow, `record(vehicleId, charge, nowMillis)`.
 - Backup rules exclude the log directory.

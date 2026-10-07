@@ -4,35 +4,38 @@ package com.dzid26.teslable.core.history
 
 import com.squareup.wire.Message
 import com.squareup.wire.ProtoAdapter
-import java.io.ByteArrayOutputStream
+import com.squareup.wire.ProtoWriter
+import okio.Buffer
 
 /**
  * Length-delimited codec for append-only logs of Tesla messages (ADR-0006).
  *
- * Each record is a varint byte length followed by one raw Wire message. There
- * is no envelope: the record is exactly what the car reported. Readers ignore
- * unknown fields, so new car fields never drop old rows. A truncated trailing
- * record (an interrupted append) is ignored on load; records after it are not
- * read. The same codec frames every message type; charge and (later) drive
- * records differ only in the adapter passed to [decode].
+ * Each record is a varint byte length (written by Wire's [ProtoWriter],
+ * which is the same encoding protobuf itself uses for tags and lengths)
+ * followed by one raw Wire message. There is no envelope: the record is
+ * exactly what the car reported. Readers ignore unknown fields, so new car
+ * fields never drop old rows. A truncated trailing record (an interrupted
+ * append) is ignored on load; records after it are not read. The same codec
+ * frames every message type; charge and (later) drive records differ only in
+ * the adapter passed to [decode].
  */
 object ProtoLog {
     /** Encodes all [messages] into one buffer, for a full rewrite. */
     fun encode(messages: List<Message<*, *>>): ByteArray {
-        val out = ByteArrayOutputStream()
+        val out = Buffer()
         for (message in messages) {
             out.write(encodeFrame(message))
         }
-        return out.toByteArray()
+        return out.readByteArray()
     }
 
     /** Encodes one message as a length-delimited frame, for an append. */
     fun encodeFrame(message: Message<*, *>): ByteArray {
         val payload = message.encode()
-        val out = ByteArrayOutputStream()
-        writeVarint(payload.size, out)
-        out.write(payload)
-        return out.toByteArray()
+        val frame = Buffer()
+        ProtoWriter(frame).writeVarint32(payload.size)
+        frame.write(payload)
+        return frame.readByteArray()
     }
 
     /** Reads every complete record with [adapter]; stops at a truncated or unreadable tail. */
@@ -40,6 +43,11 @@ object ProtoLog {
         bytes: ByteArray,
         adapter: ProtoAdapter<M>,
     ): List<M> {
+        // Positions are tracked here, not on the buffer: Wire's ProtoReader
+        // buffers ahead, so sharing one reader with direct buffer reads drops
+        // records, and its readBytes() does not read standalone frames. The
+        // length prefix is parsed below; the payload itself still decodes
+        // through the message adapter.
         val messages = mutableListOf<M>()
         var offset = 0
         while (offset < bytes.size) {
@@ -53,18 +61,6 @@ object ProtoLog {
             offset = next + length
         }
         return messages
-    }
-
-    private fun writeVarint(
-        value: Int,
-        out: ByteArrayOutputStream,
-    ) {
-        var remaining = value
-        while (remaining >= VARINT_CONTINUATION) {
-            out.write((remaining and VARINT_PAYLOAD) or VARINT_CONTINUATION)
-            remaining = remaining ushr VARINT_SHIFT
-        }
-        out.write(remaining)
     }
 
     /** Returns the value and the offset after it, or null when truncated. */

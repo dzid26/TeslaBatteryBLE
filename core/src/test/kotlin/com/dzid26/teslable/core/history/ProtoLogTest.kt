@@ -2,9 +2,11 @@
 
 package com.dzid26.teslable.core.history
 
+import com.squareup.wire.ProtoWriter
 import com.tesla.generated.carserver.common.Void
 import com.tesla.generated.carserver.vehicle.ChargeState
 import com.tesla.generated.carserver.vehicle.DriveState
+import okio.Buffer
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -95,14 +97,67 @@ class ProtoLogTest {
         assertEquals(listOf(drive), ProtoLog.decode(ProtoLog.encode(listOf(drive)), DriveState.ADAPTER))
     }
 
-    private fun frame(payload: ByteArray): ByteArray {
-        var length = payload.size
-        val prefix = mutableListOf<Byte>()
-        while (length >= 0x80) {
-            prefix += ((length and 0x7F) or 0x80).toByte()
-            length = length ushr 7
+    @Test
+    fun framesRecordsBeyondOneByteLengths() {
+        val drive =
+            DriveState(
+                speed = 60,
+                active_route_destination = "x".repeat(200),
+                timestamp = Instant.ofEpochSecond(2),
+            )
+        val bytes = ProtoLog.encode(listOf(drive))
+        val payloadSize = drive.encode().size
+        assertTrue(payloadSize > 0x7F)
+        assertEquals(payloadSize + 2, bytes.size)
+        // Two-byte varint: continuation bit set on the first byte only, and
+        // the two 7-bit groups reassemble to the payload size.
+        assertTrue(bytes[0] < 0)
+        assertTrue(bytes[1] >= 0)
+        assertEquals(payloadSize, (bytes[0].toInt() and 0x7F) or ((bytes[1].toInt() and 0x7F) shl 7))
+        assertEquals(listOf(drive), ProtoLog.decode(bytes, DriveState.ADAPTER))
+    }
+
+    @Test
+    fun appendedFramesConcatenate() {
+        // The store appends frames without re-encoding the log; separately
+        // encoded frames must decode as one stream.
+        val bytes = ProtoLog.encodeFrame(record(0)) + ProtoLog.encodeFrame(record(60))
+        assertEquals(listOf(record(0), record(60)), ProtoLog.decode(bytes, ChargeState.ADAPTER))
+    }
+
+    @Test
+    fun frameLayoutMatchesTheLibraryPrefix() {
+        val payload = record(0).encode()
+        val expected = Buffer()
+        ProtoWriter(expected).writeVarint32(payload.size)
+        expected.write(payload)
+        assertEquals(expected.readByteArray().toList(), ProtoLog.encodeFrame(record(0)).toList())
+    }
+
+    @Test
+    fun ignoresAGarbledPayload() {
+        // A plausible length followed by bytes no message decodes from.
+        val garbled = frame(byteArrayOf(0xFF.toByte(), 0xFF.toByte(), 0xFF.toByte(), 0xFF.toByte()))
+        assertEquals(emptyList<ChargeState>(), ProtoLog.decode(garbled, ChargeState.ADAPTER))
+    }
+
+    @Test
+    fun ignoresImpossibleLengths() {
+        // Lengths far beyond the buffer, at Int32 max (whose end offset
+        // overflows), and negative after overflow: none may throw, none
+        // yields records.
+        val beyondBuffer = byteArrayOf(0xFF.toByte(), 0xFF.toByte(), 0xFF.toByte(), 0x7F) + byteArrayOf(0x01)
+        val intMax = byteArrayOf(0xFF.toByte(), 0xFF.toByte(), 0xFF.toByte(), 0xFF.toByte(), 0x07) + byteArrayOf(0x01)
+        val negative = byteArrayOf(0xFF.toByte(), 0xFF.toByte(), 0xFF.toByte(), 0xFF.toByte(), 0x0F) + byteArrayOf(0x01)
+        for (bytes in listOf(beyondBuffer, intMax, negative)) {
+            assertEquals(emptyList<ChargeState>(), ProtoLog.decode(bytes, ChargeState.ADAPTER))
         }
-        prefix += length.toByte()
-        return prefix.toByteArray() + payload
+    }
+
+    private fun frame(payload: ByteArray): ByteArray {
+        val frame = Buffer()
+        ProtoWriter(frame).writeVarint32(payload.size)
+        frame.write(payload)
+        return frame.readByteArray()
     }
 }
