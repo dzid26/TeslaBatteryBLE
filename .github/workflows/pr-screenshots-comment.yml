@@ -51,55 +51,19 @@ jobs:
           github-token: ${{ github.token }}
 
       # Accept only a numeric PR number for the pull request the capture ran
-      # for, the short SHA of the captured commit, and the six expected PNGs.
+      # for, the short SHA of the captured commit, and the six expected PNGs,
+      # which are copied to pr-sheet/.
       - name: Validate the artifact
         id: meta
         env:
           GH_TOKEN: ${{ github.token }}
-          ARTIFACT_DIR: ${{ runner.temp }}/pr-screenshots
-          SHOTS_DIR: ${{ runner.temp }}/pr-sheet
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
           HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
           HEAD_REPO: ${{ github.event.workflow_run.head_repository.full_name }}
         run: |
-          set -euo pipefail
-          for meta in pr-number short-sha; do
-            if [ ! -f "$ARTIFACT_DIR/$meta" ] || [ -L "$ARTIFACT_DIR/$meta" ]; then
-              echo "::error::the artifact has no $meta file"
-              exit 1
-            fi
-          done
-          pr="$(head -c 32 "$ARTIFACT_DIR/pr-number")"
-          short="$(head -c 64 "$ARTIFACT_DIR/short-sha")"
-          if [[ ! "$pr" =~ ^[1-9][0-9]{0,9}$ ]]; then
-            echo "::error::the PR number in the artifact is not numeric"
-            exit 1
-          fi
-          if [[ ! "$short" =~ ^[0-9a-f]{7,40}$ ]] || [[ "$HEAD_SHA" != "$short"* ]]; then
-            echo "::error::the short SHA in the artifact does not match the captured commit"
-            exit 1
-          fi
-          pr_head="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$pr" --jq '(.head.repo.full_name // "") + ":" + .head.ref')"
-          if [ -z "$HEAD_REPO" ] || [ "$pr_head" != "$HEAD_REPO:$HEAD_BRANCH" ]; then
-            echo "::error::PR #$pr is not the pull request the capture ran for"
-            exit 1
-          fi
-          mkdir -p "$SHOTS_DIR"
-          for name in 02-scanning 03-car 05-settings \
-              02-scanning-dark 03-car-dark 05-settings-dark; do
-            file="$ARTIFACT_DIR/$name.png"
-            if [ ! -f "$file" ] || [ -L "$file" ]; then
-              echo "::error::the artifact has no $name.png"
-              exit 1
-            fi
-            if [ "$(head -c 8 "$file" | od -An -tx1 | tr -d ' \n')" != 89504e470d0a1a0a ]; then
-              echo "::error::$name.png is not a PNG"
-              exit 1
-            fi
-            cp "$file" "$SHOTS_DIR/$name.png"
-          done
-          echo "pr=$pr" >> "$GITHUB_OUTPUT"
-          echo "short=$short" >> "$GITHUB_OUTPUT"
+          bash .github/scripts/validate-pr-artifact.sh "$RUNNER_TEMP/pr-screenshots" "$RUNNER_TEMP/pr-sheet" \
+            02-scanning.png 03-car.png 05-settings.png \
+            02-scanning-dark.png 03-car-dark.png 05-settings-dark.png
 
       - name: Install ImageMagick
         run: sudo apt-get install -y imagemagick
