@@ -281,7 +281,7 @@ jobs:
           cd /tmp/vehicle-command
           go run ./fixtures > /tmp/fixtures.txt
 
-      - name: Compare deterministic fixtures
-        run: |
-          grep -E '^(CLIENT_PRIVATE_PKCS8|CLIENT_PUBLIC|VEHICLE_PUBLIC|SESSION_INFO|CHALLENGE|SESSION_INFO_TAG|RESPONSE_REQUEST_ID|RESPONSE_PLAINTEXT)=' /tmp/fixtures.txt > /tmp/got.txt
-          diff tools/go-fixtures/expected.txt /tmp/got.txt
+      # Keys, nonces and the session clock are fixed, so every line is
+      # deterministic and the whole output is compared.
+      - name: Compare fixtures
+        run: diff tools/go-fixtures/expected.txt /tmp/fixtures.txt
