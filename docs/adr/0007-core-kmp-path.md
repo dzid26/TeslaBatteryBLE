@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-# ADR-0006: Keep `core` on a KMP migration path
+# ADR-0007: Keep `core` on a KMP migration path
 
 Status: Accepted
 Date: 2026-10-07
