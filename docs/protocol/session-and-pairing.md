@@ -13,9 +13,13 @@
   re-saves every stored key in the new format; loading never converts between
   modes. A device-only key that cannot be decrypted (for example one restored
   onto another phone) is discarded on load, and that car has to be paired again.
-- Keys never leave the device and are never logged. The default enrolled role is
-  `CHARGING_MANAGER` (read + charge control, no unlock/drive). TEE/StrongBox-backed
-  storage is a future hardening step if higher-privilege roles are added.
+- Keys are never logged. A usable key leaves the phone only through Android backup,
+  and only in portable mode on Android 12+ (Android 11 and below always exclude the
+  key file). A device-only key that is backed up is encrypted with a Keystore key
+  that stays on the phone, so it is useless elsewhere.
+- The default enrolled role is `CHARGING_MANAGER` (read + charge control, no
+  unlock/drive). TEE/StrongBox-backed storage is a future hardening step if
+  higher-privilege roles are added.
 
 ## Session handshake (per domain)
 
