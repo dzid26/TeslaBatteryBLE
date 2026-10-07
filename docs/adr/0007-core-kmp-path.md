@@ -22,16 +22,21 @@ Date: 2026-10-07
 
 ## Decision
 
-- Do not migrate to KMP now. Keep `core` on the migration path with
+- Do not migrate the build to KMP now. Keep `core` on the migration path with
   guardrails so no new change makes the move harder.
-- When migration happens: apply the `multiplatform` plugin with a `jvm()`
-  target first, keep the same protos, move tests to `kotlin.test` in
+- Swap the crypto layer to `dev.whyoleg.cryptography`
+  (cryptography-kotlin) now, while there are no users to migrate. It is the
+  only single KMP library covering the full seam (SHA-1/SHA-256, HMAC,
+  AES-GCM, ECDH P-256, EC keygen, SecureRandom) behind one common API, with
+  platform backends (OpenSSL/native, JCA on JVM, WebCrypto on JS). The
+  build stays `kotlin.jvm` until the plugin switch; this removes the JCA
+  blocker first.
+- When the build migration happens: apply the `multiplatform` plugin with a
+  `jvm()` target first, keep the same protos, move tests to `kotlin.test` in
   `commonTest` (JVM-only vectors stay in `jvmTest`).
-- Crypto path, in order: (1) `dev.whyoleg.cryptography`
-  (cryptography-kotlin) — the only single KMP library covering the full
-  seam (SHA-1/SHA-256, HMAC, AES-GCM, ECDH P-256, EC keygen, SecureRandom);
-  (2) fallback is an `expect`/`actual` seam keeping JCA on JVM, one actual
-  per target per primitive. BouncyCastle alone is rejected (JVM-only).
+- Fallback if cryptography-kotlin is unmaintained at build-migration time:
+  an `expect`/`actual` seam keeping JCA on JVM, one actual per target per
+  primitive. BouncyCastle alone is rejected (JVM-only).
 
 ## Guardrails (binding until migration)
 
@@ -51,10 +56,13 @@ Date: 2026-10-07
 
 ## Consequences
 
+- The crypto swap is done pre-users: no data migration, no in-app migration
+  code. Existing PKCS8 keys must import through the new library; if they do
+  not, the owner re-pairs (acceptable at this stage).
 - Contributors get a failing-lint-free rule set today: keep `java.*` out of
   new logic, extend the seam when a capability is missing.
-- Migration cost stays bounded: one seam to re-target, protos and fixtures
-  unchanged, Go-vector cross-checks preserved via `jvmTest`.
-- Revisit the crypto-library choice at migration time; if
+- Build-plugin migration cost stays bounded: one seam to re-target, protos
+  and fixtures unchanged, Go-vector cross-checks preserved via `jvmTest`.
+- Revisit the crypto-library choice at build-migration time; if
   cryptography-kotlin is unmaintained then, take the `expect`/`actual`
   fallback.
