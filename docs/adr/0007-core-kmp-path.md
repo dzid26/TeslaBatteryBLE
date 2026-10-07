@@ -1,4 +1,3 @@
-// SPDX-License-Identifier: AGPL-3.0-only
 # ADR-0007: Keep `core` on a KMP migration path
 
 Status: Accepted
@@ -56,9 +55,10 @@ Date: 2026-10-07
 
 ## Consequences
 
-- The crypto swap is done pre-users: no data migration, no in-app migration
-  code. Existing PKCS8 keys must import through the new library; if they do
-  not, the owner re-pairs (acceptable at this stage).
+- The crypto swap lands in a follow-up PR under the pre-1.0 policy: no data
+  migration, no in-app migration code. Existing PKCS8 keys must import
+  through the new library; if they do not, the owner re-pairs (acceptable at
+  this stage).
 - Contributors get a failing-lint-free rule set today: keep `java.*` out of
   new logic, extend the seam when a capability is missing.
 - Build-plugin migration cost stays bounded: one seam to re-target, protos
@@ -66,3 +66,7 @@ Date: 2026-10-07
 - Revisit the crypto-library choice at build-migration time; if
   cryptography-kotlin is unmaintained then, take the `expect`/`actual`
   fallback.
+- Open question (#119): the seam should take a key handle
+  (`publicKeyRaw` + `agree(peer)`) rather than PKCS8 bytes, so
+  non-exportable keys (Android Keystore `PURPOSE_AGREE_KEY`, Secure Enclave)
+  stay possible.
