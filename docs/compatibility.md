@@ -40,7 +40,8 @@ user action.
 
 ## Known constraints
 
-- One car connection at a time.
+- Up to three cars connect at once, one BLE link per car
+  ([ADR-0004](adr/0004-per-vehicle-links.md)).
 - The car stops BLE advertising when its BLE connection slots are full, so a
   missing car in the scan list can mean full slots rather than out of range
   (VCSEC allows roughly 3 simultaneous BLE links).

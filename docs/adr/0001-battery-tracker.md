@@ -53,6 +53,13 @@ SOC. No cloud. Kotlin + Compose with a Kotlin protocol core; no FFI.
 - Android OEM battery management kills background BLE; treat collection as
   best-effort, foreground service when needed.
 
+## Correction (2026-10-07)
+
+The "4-byte nonce" in Protocol facts and Risks is wrong (found in the docs audit,
+#128). The BLE protocol uses standard 12-byte AES-GCM nonces: the Go
+implementation takes the size from `gcm.NonceSize()`, and `TeslaCrypto.NONCE_SIZE`
+is 12. The text above is left as written.
+
 ## References
 
 - https://github.com/teslamotors/vehicle-command

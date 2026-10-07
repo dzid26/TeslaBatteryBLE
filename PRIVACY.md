@@ -9,12 +9,13 @@ anywhere.**
 - Your enrolled vehicle keys — stored in app-private storage, device-only by
   default; included in Android backup only if you opt in (see below)
 - Known cars (VIN, advertised BLE name) so you can reconnect
-- Battery and connection history (SOC samples, charge sessions) in a local database
+- Battery history (SOC samples, charge sessions) in a local file
 - App settings
 
 The app never synchronizes, uploads, or shares anything. Android's system backup
 is separate: if you have it enabled, your device may include app data in cloud
-backup or device-to-device transfer. By default vehicle keys stay encrypted with
+backup or device-to-device transfer, except battery history, which the app
+excludes so it stays on this device. By default vehicle keys stay encrypted with
 this device's hardware-backed Keystore (AES) and are kept out of backups, so a
 new phone requires re-pairing with an NFC card tap. One setting applies to all
 paired cars: if you opt in to "Include vehicle keys in Android backup", the keys
@@ -39,7 +40,9 @@ backup copy, if any, is managed by your device and Google account settings.
 ## Network and third parties
 
 - No analytics, no crash reporting, no ads, no accounts.
-- Logs are local; if you export or share them for support, redact VINs and keys first.
+- The app's log is kept in memory only: it is never written to disk or sent anywhere,
+  and there is no log export. If you share a screenshot of it for support, redact
+  VINs and keys first.
 - Any future feature requiring network access (for example an optional opt-in data
   export) will be off by default, documented here, and clearly separated from the
   core app. The core app will keep working without it.

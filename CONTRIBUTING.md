@@ -7,7 +7,7 @@ bug reports.
 ## Development setup
 
 1. **JDK 21** (Temurin recommended — CI uses it; JDK 17+ should work)
-2. **Android SDK 35** (via Android Studio or `sdkmanager`)
+2. **Android SDK 37** (via Android Studio or `sdkmanager`)
 3. Clone and build:
 
 ```bash

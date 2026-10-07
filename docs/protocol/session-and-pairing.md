@@ -9,8 +9,10 @@
 - Optional portable mode (one global setting, user opt-in in Settings) stores the
   private keys as PKCS#8 base64 in app-private SharedPreferences so Android's
   encrypted backup can restore pairing on a new phone (ADR-0005).
-- Keystore-encrypted material is decrypted and migrated transparently on first
-  load into the currently selected mode.
+- Keys are written in the mode selected at write time. Changing the setting
+  re-saves every stored key in the new format; loading never converts between
+  modes. A device-only key that cannot be decrypted (for example one restored
+  onto another phone) is discarded on load, and that car has to be paired again.
 - Keys never leave the device and are never logged. The default enrolled role is
   `CHARGING_MANAGER` (read + charge control, no unlock/drive). TEE/StrongBox-backed
   storage is a future hardening step if higher-privilege roles are added.
@@ -19,21 +21,30 @@
 
 Each domain (VCSEC, Infotainment) has its own session:
 
-1. **ECDH**: client and vehicle exchange P-256 public keys and derive a shared secret.
-2. **Session info**: authenticated metadata binds the session to the vehicle VIN and
-   the client's identity (HMAC over metadata with the ECDH-derived key).
-3. **Challenge/response**: the vehicle issues a challenge; the client proves possession
-   of the enrolled private key.
+1. **Request**: the client sends its P-256 public key and a random 16-byte request
+   UUID. The UUID is the challenge.
+2. **Session info**: the vehicle answers with the session info (its own public key,
+   epoch, counter, clock time) and an HMAC-SHA256 tag over the VIN, the challenge and
+   the session info, keyed from the ECDH-derived key.
+3. **Verification**: the client runs ECDH with the vehicle's public key, recomputes the
+   tag, and drops the answer if it does not match.
 4. **Traffic**: messages are encrypted and authenticated, with per-epoch counters and
    clock synchronization for session validity.
 
+The handshake does not prove that the client holds its private key; that is shown only
+implicitly, when the vehicle accepts the client's first encrypted command.
+
 | Transport | Symmetric crypto | Replay protection |
 | --- | --- | --- |
-| BLE | AES-GCM (4-byte nonce) | Per-epoch counters + anti-replay window + clock sync |
+| BLE | AES-GCM (12-byte nonce) | Per-epoch counters + anti-replay window + clock sync |
 | Fleet API (reference only) | HMAC-SHA256 | Same counters |
 
-Sessions can be cached (encrypted) to skip handshakes on reconnect; counters must
-persist so replays are rejected across restarts. Implementation:
+Sessions are not persisted: each one lives in memory only, per car and domain, so
+there is no encrypted session cache and no stored counter. After an app restart the
+handshake runs again, and its session info returns the vehicle's current epoch and
+counter. While the app keeps running it reuses a session across BLE reconnects, and
+handshakes again before a wake and after repeated decryption failures (the car may
+have rotated its session). Implementation:
 [`TeslaSession.kt`](../../core/src/main/kotlin/com/dzid26/teslable/core/protocol/TeslaSession.kt),
 [`TeslaCrypto.kt`](../../core/src/main/kotlin/com/dzid26/teslable/core/protocol/TeslaCrypto.kt),
 [`Metadata.kt`](../../core/src/main/kotlin/com/dzid26/teslable/core/protocol/Metadata.kt),
@@ -59,5 +70,5 @@ Implementation:
 - Never log VINs, keys, session keys, or decrypted payloads.
 - Crypto changes require deterministic test vectors (`tools/go-fixtures`) and
   negative tests; the Go implementation is the oracle.
-- Crypto edge cases historically mis-handled by ports: 4-byte AES-GCM nonces,
-  truncated SHA-1 KDF, metadata construction, counter persistence, and clock skew.
+- Crypto edge cases that are easy to get wrong in a port: the 12-byte AES-GCM nonce,
+  the truncated SHA-1 KDF, metadata construction, counters, and clock skew.
