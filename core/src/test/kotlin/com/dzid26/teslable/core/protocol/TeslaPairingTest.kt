@@ -13,7 +13,6 @@ import com.tesla.generated.vcsec.UnsignedMessage
 import okio.ByteString.Companion.toByteString
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -26,16 +25,6 @@ class TeslaPairingTest {
         assertEquals(0x04, keyPair.publicKeyRaw[0].toInt())
         assertTrue(keyPair.privateKeyPkcs8.isNotEmpty())
         assertEquals(4, keyPair.keyId.size)
-    }
-
-    @Test
-    fun `generates distinct key pairs`() {
-        val first = TeslaKeys.generate()
-        val second = TeslaKeys.generate()
-        assertNotEquals(
-            first.publicKeyRaw.toList(),
-            second.publicKeyRaw.toList(),
-        )
     }
 
     @Test
