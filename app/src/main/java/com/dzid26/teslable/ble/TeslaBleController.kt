@@ -104,7 +104,7 @@ class TeslaBleController(
         // A restored backup can carry cached key slots for a key this device
         // does not have (device-only keys never leave the phone). Enrollment is
         // re-verified on connect, so drop the stale cache.
-        val staleSlots = vehicles.values.filter { it.keySlot != null && keyStore.load(it.bleName) == null }
+        val staleSlots = vehicles.values.filter { it.keySlot != null && !keyStore.hasKey(it.bleName) }
         if (staleSlots.isNotEmpty()) {
             staleSlots.forEach { vehicles[it.bleName] = it.copy(keySlot = null) }
             vehicleStore.save(vehicles.values)
@@ -897,8 +897,7 @@ class TeslaBleController(
         }
 
         fun startSession() {
-            val keyPair = keyStore.load(bleName)
-            if (keyPair == null) {
+            if (!keyStore.hasKey(bleName)) {
                 log("${name()}: no pairing key yet")
                 return
             }
@@ -916,7 +915,7 @@ class TeslaBleController(
         }
 
         private fun sendSessionRequests(domains: List<Domain>) {
-            val keyPair = keyStore.load(bleName) ?: return
+            val publicKeyRaw = keyStore.publicKeyRaw(bleName) ?: return
             for (domain in domains) {
                 val uuid = TeslaCrypto.randomBytes(16)
                 val routing =
@@ -929,7 +928,7 @@ class TeslaBleController(
                 val request =
                     TeslaSessionRequests.buildSessionInfoRequest(
                         domain = domain,
-                        publicKeyRaw = keyPair.publicKeyRaw,
+                        publicKeyRaw = publicKeyRaw,
                         routingAddress = routing,
                         uuid = uuid,
                     )
@@ -971,6 +970,19 @@ class TeslaBleController(
                     null
                 }
             if (session == null) {
+                val shownPaired =
+                    vehicles[bleName]?.keySlot != null ||
+                        _state.value.connections[address]?.keySlot != null ||
+                        pairingPhase == PairingPhase.OK
+                if (keyPair == null && shownPaired && !keyStore.hasKey(bleName)) {
+                    // The store dropped a key this phone can never decrypt (for
+                    // example a device-only key restored from another phone):
+                    // forget its enrollment so the car shows unpaired again.
+                    updateVehicle(bleName) { it.copy(keySlot = null) }
+                    updateConnection(address) { it.copy(keySlot = null) }
+                    if (pairingPhase == PairingPhase.OK) setPairing(PairingPhase.IDLE, null)
+                    log("${name()}: the stored key can't be used on this phone; pair again")
+                }
                 log("${name()}: session verification failed (${pending.domain.name})")
                 return true
             }
@@ -1154,8 +1166,8 @@ class TeslaBleController(
                 log("No selected car ready for pairing")
                 return
             }
-            val stored = keyStore.load(bleName)
-            if (stored == null) {
+            val storedKeyId = keyStore.keyId(bleName)
+            if (storedKeyId == null) {
                 // First pairing for this car: generate its key now.
                 pairWithFreshKey()
                 return
@@ -1163,7 +1175,7 @@ class TeslaBleController(
             // The car may already have this key. Adding it again would ask for
             // the card and can fail, so check the whitelist first.
             pendingPairCheck = true
-            pairingKeyId = stored.keyId.toHex()
+            pairingKeyId = storedKeyId.toHex()
             setPairing(PairingPhase.CHECKING)
             log("${name()}: checking whether the key is already enrolled")
             transport?.send(TeslaVcsec.buildWhitelistInfoRequest())
@@ -1179,6 +1191,13 @@ class TeslaBleController(
          */
         private fun pairWithFreshKey() {
             val keyPair = keyStore.generate(bleName)
+            if (keyPair == null) {
+                // Enrolling a key the app may not have kept would orphan the
+                // car's key slot, so pairing stops here.
+                setPairing(PairingPhase.ERROR)
+                log("${name()}: could not save a new key; pairing not started")
+                return
+            }
             // The previous key is gone; its cached slot is stale.
             updateVehicle(bleName) { it.copy(keySlot = null) }
             updateConnection(address) { it.copy(keySlot = null) }
@@ -1213,7 +1232,7 @@ class TeslaBleController(
 
         fun requestKeySlot() {
             if (_state.value.connections[address]?.keySlot != null) return
-            if (keyStore.load(bleName) == null) return
+            if (!keyStore.hasKey(bleName)) return
             transport?.send(TeslaVcsec.buildWhitelistInfoRequest())
         }
 
@@ -1262,17 +1281,17 @@ class TeslaBleController(
         }
 
         private fun handleWhitelistInfo(whitelist: WhitelistInfo) {
-            val stored = keyStore.load(bleName)
-            val keyId = stored?.keyId?.toHex()
+            val storedKeyId = keyStore.keyId(bleName)
+            val keyId = storedKeyId?.toHex()
             val enrolled =
-                stored != null &&
+                storedKeyId != null &&
                     whitelist.whitelistEntries.any {
                         it.publicKeySHA1
                             .toByteArray()
-                            .copyOf(stored.keyId.size)
-                            .contentEquals(stored.keyId)
+                            .copyOf(storedKeyId.size)
+                            .contentEquals(storedKeyId)
                     }
-            if (stored != null && enrolled && keyId != null) {
+            if (storedKeyId != null && enrolled && keyId != null) {
                 handler.removeCallbacks(whitelistPoll)
                 pendingPairCheck = false
                 when (pairingPhase) {
@@ -1292,7 +1311,7 @@ class TeslaBleController(
                 rememberVehicle(address)
                 // A freshly enrolled key can open sessions now.
                 startSession()
-                resolveKeySlots(whitelist, stored)
+                resolveKeySlots(whitelist, storedKeyId)
                 return
             }
             if (pendingPairCheck) {
@@ -1310,14 +1329,14 @@ class TeslaBleController(
 
         private fun resolveKeySlots(
             whitelist: WhitelistInfo,
-            stored: TeslaKeyPair,
+            storedKeyId: ByteArray,
         ) {
             val index =
                 whitelist.whitelistEntries.indexOfFirst {
                     it.publicKeySHA1
                         .toByteArray()
-                        .copyOf(stored.keyId.size)
-                        .contentEquals(stored.keyId)
+                        .copyOf(storedKeyId.size)
+                        .contentEquals(storedKeyId)
                 }
             val slots = occupiedSlots(whitelist.slotMask)
             keySlotQueue =
@@ -1330,19 +1349,21 @@ class TeslaBleController(
         }
 
         private fun handleWhitelistEntry(entry: WhitelistEntryInfo) {
-            val stored = keyStore.load(bleName)
+            val storedPublicKey = keyStore.publicKeyRaw(bleName)
+            val storedKeyId = keyStore.keyId(bleName)
             val matches =
-                stored != null &&
+                storedPublicKey != null &&
+                    storedKeyId != null &&
                     (
                         entry.publicKey
                             ?.PublicKeyRaw
                             ?.toByteArray()
-                            ?.contentEquals(stored.publicKeyRaw) == true ||
+                            ?.contentEquals(storedPublicKey) == true ||
                             entry.keyId
                                 ?.publicKeySHA1
                                 ?.toByteArray()
-                                ?.copyOf(stored.keyId.size)
-                                ?.contentEquals(stored.keyId) == true
+                                ?.copyOf(storedKeyId.size)
+                                ?.contentEquals(storedKeyId) == true
                     )
             if (matches) {
                 keySlotQueue = emptyList()
