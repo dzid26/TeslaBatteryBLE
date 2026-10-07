@@ -131,7 +131,7 @@ Out of scope (unchanged unless stated):
 - The single stored VIN applies to the vehicle whose advertised name matches
   `sha1(vin)[:8]`. If nothing matches, keep the VIN in a pending state so the
   user can assign it.
-- Existing `battery-history.csv` samples are assigned to that same vehicle.
+- Existing history is already per vehicle in `battery-history/<vehicleId>.pblog` logs, so no re-assignment is needed.
 - The key pair is untouched; enrollment is re-verified per vehicle on the next
   connect.
 - No data loss; keep reading old preference keys for at least one release.
@@ -179,7 +179,7 @@ Out of scope (unchanged unless stated):
 - `BleUiState`: `devices`, `connections`, `selectedAddress` — becomes a vehicle
   map plus a selected vehicle id.
 - `PairingKeyStore`: one key (keep), but enrollment/slot must be per vehicle.
-- `BatteryHistoryStore`: single CSV without a vehicle column.
+- `HistoryStore`: one raw-record log per vehicle (already keyed by advertised name).
 - `BleTrackingService`: single notification/model.
 - `ScannerScreen`: global VIN field, single car list, single history.
 - Preferences: the `vin` key is global and must move into the vehicle record.

@@ -5,9 +5,11 @@ package com.dzid26.teslable
 import android.content.Context
 import com.dzid26.teslable.ble.DemoMode
 import com.dzid26.teslable.core.TeslaNames
-import com.dzid26.teslable.core.history.BatteryHistoryCsv
-import com.dzid26.teslable.core.history.BatterySample
+import com.dzid26.teslable.core.history.ProtoLog
+import com.tesla.generated.carserver.common.Void
+import com.tesla.generated.carserver.vehicle.ChargeState
 import java.io.File
+import java.time.Instant
 import kotlin.math.roundToInt
 
 /**
@@ -19,7 +21,9 @@ import kotlin.math.roundToInt
  * release build (debug source set plus [DemoMode]).
  */
 internal object DemoHistory {
-    private const val FILE_NAME = "battery-history.csv"
+    // Mirrors HistoryStore's log layout; the demo seeds it directly.
+    private const val HISTORY_DIR_NAME = "battery-history"
+    private const val LOG_SUFFIX = ".pblog"
     private const val CHARGE_LIMIT = 85
     private const val RATED_MILES_PER_PERCENT = 3.0f
     private const val ESTIMATED_MILES_PER_PERCENT = 2.9f
@@ -28,14 +32,13 @@ internal object DemoHistory {
     private const val MINUTE = 60_000L
 
     fun seed(context: Context) {
-        val file = File(context.filesDir, FILE_NAME)
-        if (file.exists()) return
         val vehicleId =
             runCatching { TeslaNames.bleName(DemoMode.DEMO_VIN) }.getOrNull() ?: return
-        file.writeText(
-            samples(System.currentTimeMillis(), vehicleId)
-                .joinToString(separator = "\n", postfix = "\n") { BatteryHistoryCsv.encode(it) },
-        )
+        val dir = File(context.filesDir, HISTORY_DIR_NAME)
+        val file = File(dir, "$vehicleId$LOG_SUFFIX")
+        if (file.exists()) return
+        dir.mkdirs()
+        file.writeBytes(ProtoLog.encode(samples(System.currentTimeMillis())))
     }
 
     /** One reading in the seeded timeline; [chargeStartPercent] marks a session. */
@@ -46,10 +49,7 @@ internal object DemoHistory {
         val chargeStartPercent: Int? = null,
     )
 
-    private fun samples(
-        now: Long,
-        vehicleId: String,
-    ): List<BatterySample> {
+    private fun samples(now: Long): List<ChargeState> {
         val points =
             buildList {
                 // 48 h ago: parked at 64%, then a morning drive to 55.
@@ -82,7 +82,7 @@ internal object DemoHistory {
             .reversed()
             .distinctBy { it.minutesAgo }
             .reversed()
-            .map { point -> sample(now, vehicleId, point) }
+            .map { point -> sample(now, point) }
     }
 
     /** Samples a straight run from [fromAgo] to [toAgo], inclusive of the start. */
@@ -124,24 +124,30 @@ internal object DemoHistory {
 
     private fun sample(
         now: Long,
-        vehicleId: String,
         point: Point,
-    ): BatterySample {
+    ): ChargeState {
         val rated = point.percent * RATED_MILES_PER_PERCENT
         val added = point.chargeStartPercent?.let { point.percent - it }
-        return BatterySample(
-            timestampMillis = now - point.minutesAgo * MINUTE,
-            batteryLevel = point.percent,
-            chargingState = point.state,
-            chargeLimit = CHARGE_LIMIT,
-            vehicleId = vehicleId,
-            usableBatteryLevel = point.percent,
-            ratedRangeMiles = rated,
-            estRangeMiles = point.percent * ESTIMATED_MILES_PER_PERCENT,
-            idealRangeMiles = point.percent * IDEAL_MILES_PER_PERCENT,
-            chargeEnergyAdded = added?.let { it * KWH_PER_PERCENT } ?: 0f,
-            chargeMilesAddedRated = added?.let { it * RATED_MILES_PER_PERCENT } ?: 0f,
-            chargeMilesAddedIdeal = added?.let { it * IDEAL_MILES_PER_PERCENT } ?: 0f,
+        return ChargeState(
+            charging_state = chargingState(point.state),
+            charge_limit_soc = CHARGE_LIMIT,
+            battery_range = rated,
+            est_battery_range = point.percent * ESTIMATED_MILES_PER_PERCENT,
+            ideal_battery_range = point.percent * IDEAL_MILES_PER_PERCENT,
+            battery_level = point.percent,
+            usable_battery_level = point.percent,
+            charge_energy_added = added?.let { it * KWH_PER_PERCENT } ?: 0f,
+            charge_miles_added_rated = added?.let { it * RATED_MILES_PER_PERCENT } ?: 0f,
+            charge_miles_added_ideal = added?.let { it * IDEAL_MILES_PER_PERCENT } ?: 0f,
+            timestamp = Instant.ofEpochMilli(now - point.minutesAgo * MINUTE),
         )
     }
+
+    private fun chargingState(state: String): ChargeState.ChargingState? =
+        when (state) {
+            "Charging" -> ChargeState.ChargingState(Charging = Void())
+            "Complete" -> ChargeState.ChargingState(Complete = Void())
+            "Disconnected" -> ChargeState.ChargingState(Disconnected = Void())
+            else -> null
+        }
 }

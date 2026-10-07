@@ -14,7 +14,7 @@ import com.dzid26.teslable.core.protocol.TeslaPairing
 import com.dzid26.teslable.core.protocol.TeslaSession
 import com.dzid26.teslable.core.protocol.TeslaSessionRequests
 import com.dzid26.teslable.core.protocol.TeslaVcsec
-import com.dzid26.teslable.history.BatteryHistoryStore
+import com.dzid26.teslable.history.HistoryStore
 import com.tesla.generated.universalmessage.Domain
 import com.tesla.generated.universalmessage.RoutableMessage
 import com.tesla.generated.vcsec.WhitelistEntryInfo
@@ -40,7 +40,7 @@ class TeslaBleController(
     private val keyStore = PairingKeyStore(appContext)
     private val vehicleStore = VehicleStore(appContext)
     private val vehicles = mutableMapOf<String, Vehicle>()
-    private val historyStore: BatteryHistoryStore
+    private val historyStore: HistoryStore
 
     /** Battery readings recorded from every charge response, oldest first. */
     val batteryHistory: StateFlow<List<BatterySample>> get() = historyStore.samples
@@ -109,7 +109,7 @@ class TeslaBleController(
             staleSlots.forEach { vehicles[it.bleName] = it.copy(keySlot = null) }
             vehicleStore.save(vehicles.values)
         }
-        historyStore = BatteryHistoryStore(appContext)
+        historyStore = HistoryStore(appContext)
         if (!prefs.getBoolean(KEY_TRACKING_ENABLED, true)) {
             _state.update { it.copy(trackingEnabled = false) }
         }
