@@ -191,8 +191,8 @@ private fun VehicleKeysCard(
                             "so a new phone can restore pairing from them."
                     } else {
                         "Currently: vehicle keys are encrypted with this device's hardware-backed " +
-                            "Keystore (AES) and stay out of Android backups. On a new phone you re-pair " +
-                            "with an NFC card tap."
+                            "Keystore (AES). An Android backup can't restore them on another phone, so " +
+                            "a new phone needs re-pairing with an NFC card tap."
                     },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -327,8 +327,8 @@ private fun DisableBackupDialog(
         title = { Text("Stop backing up vehicle keys?") },
         text = {
             Text(
-                "New backups will exclude the keys, but copies already stored in Android backup " +
-                    "may remain until they are replaced.",
+                "New backups can't restore the keys on another phone, but usable copies already " +
+                    "in Android backup may remain until they are replaced.",
             )
         },
         confirmButton = {
