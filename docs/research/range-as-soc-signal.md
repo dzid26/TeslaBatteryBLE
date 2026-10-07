@@ -83,9 +83,9 @@ The car never reports its 100% range, and the new-car EPA figure is the SoH deno
 
 ### What is logged
 
-History: one append-only log per vehicle at `files/battery-history/<vehicleId>.pblog` — raw `ChargeState` records, so every field the car reports is kept (level, usable level, rated/est/ideal range, energy added, miles added, charge rates, charger power/voltage/amps, timestamp). Identical level+state readings within 60 s are skipped; each file keeps its newest 20k records, the in-memory cache the newest 20k overall; pre-store CSV history is not migrated (pre-1.0 reset).
+History: one append-only log per vehicle at `files/battery-history/<vehicleId>.pblog` — raw `ChargeState` records, so every field the car reports is kept (level, usable level, rated/est/ideal range, energy added, miles added, charge rates, charger power/voltage/amps, the car's timestamp). Every SOC read is logged, with no deduplication; each file keeps its newest 20k records, the in-memory cache the newest 20k overall; pre-store CSV history is not migrated (pre-1.0 reset).
 
-Export: `adb exec-out run-as com.dzid26.teslable cat files/battery-history/<vehicleId>.pblog > history.pblog` (debuggable build), or the owner shares the files; `BatteryHistoryLog.decode` in `core` reads them back.
+Export: `adb exec-out run-as com.dzid26.teslable cat files/battery-history/<vehicleId>.pblog > history.pblog` (debuggable build), or the owner shares the files; `ProtoLog.decode(bytes, ChargeState.ADAPTER)` in `core` reads them back.
 
 ### A. Parked behavior of rated range (the key test)
 
