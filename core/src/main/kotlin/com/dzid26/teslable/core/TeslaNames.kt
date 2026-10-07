@@ -10,10 +10,7 @@ object TeslaNames {
     fun bleName(vin: String): String {
         require(vin.length == VIN_LENGTH) { "VIN must be $VIN_LENGTH characters" }
         val digest = MessageDigest.getInstance("SHA-1").digest(vin.toByteArray(Charsets.US_ASCII))
-        val hex =
-            digest.take(8).joinToString("") { byte ->
-                (byte.toInt() and 0xFF).toString(16).padStart(2, '0')
-            }
+        val hex = digest.take(8).toByteArray().toHexString()
         return "S${hex}C"
     }
 

@@ -19,9 +19,9 @@
 ## Release
 
 - [ ] Create and push tag `vX.Y.Z` (e.g. `git tag v0.2.0 && git push origin v0.2.0`).
-- [ ] CI builds the APK, attaches it as `TeslaBatteryBLE-<tag>.apk`, captures screenshots from the simulated car on the emulator, composes one `screenshot-sheet.png`, and attaches it.
-- [ ] The capture is required: a failed capture or a missing sheet fails the run, and the release is not published without its screenshots.
-- [ ] CI sets the release title, marks tags containing `-` as prereleases, and writes notes from the commits since the previous tag plus the sheet.
+- [ ] CI builds the APK, attaches it as `TeslaBatteryBLE-<tag>.apk`, captures screenshots from the simulated car on the emulator, and embeds them (light/dark rows) as user attachments.
+- [ ] The capture is required: a failed capture or a missing screenshot fails the run, and the release is not published without its screenshots.
+- [ ] CI sets the release title, marks tags containing `-` as prereleases, and writes notes from the commits since the previous tag plus the screenshots.
 - [ ] Verify the release page: correct tag/version, notes, screenshots, and installable APK artifact.
 - [ ] The rolling preview is removed automatically when the tagged commit matches it; otherwise it remains until the next un-released push.
 
@@ -30,7 +30,7 @@
 - Stable signing: one owner-held keystore signs local builds, preview builds and tagged releases (Gradle reads the gitignored `keystore.properties`; CI reads the `SIGNING_*` repository secrets). Keep the keystore and its password backed up - losing them means no further updates to installed apps.
 - The preview channel ships signed debug APKs on the rolling `preview` tag, rebuilt from `main` on every push.
 - Switching signing keys (or installing a build signed elsewhere, e.g. F-Droid) requires uninstall + reinstall, which also deletes the car pairing key (re-pair with the NFC card).
-- Screenshots live in `website/images/` — one set shared by the README and the landing page; release sheets are captured separately in CI.
+- Screenshots live in `website/images/` — one set shared by the README and the landing page; release notes embed the same CI capture as individual shots.
 
 ## Store distribution (when signed)
 
