@@ -1,44 +1,22 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 package com.dzid26.teslable.health
 
+import com.dzid26.teslable.core.health.ChargeSession
 import com.dzid26.teslable.core.health.EnergyDeltaEstimator
 import com.dzid26.teslable.core.health.HealthFusion
+import com.dzid26.teslable.core.health.MIN_SWING_PERCENT
 import com.dzid26.teslable.core.health.RatedRangeEstimator
+import com.dzid26.teslable.core.health.chargeSessions
 import com.dzid26.teslable.core.history.BatterySample
 import kotlin.math.roundToInt
 
 // Battery-health glue: turns the recorded raw samples into the numbers the car
-// view shows. All estimation lives in `core/health`; this file only selects
-// inputs, counts sessions for the learning gate, and flags thin data.
+// view shows. All estimation and session segmentation live in `core/health`;
+// this file only selects inputs, counts sessions for the learning gate, and
+// flags thin data.
 
 /** Confidence in the estimates, gated on how many charge sessions were seen. */
 enum class HealthConfidence { LEARNING, LOW, MEDIUM, HIGH }
-
-/** One charge session: a run of consecutive charging samples. */
-data class ChargeSession(
-    val startPercent: Float,
-    val endPercent: Float,
-    val energyAddedKwh: Float?,
-    val milesAddedRated: Float?,
-) {
-    val swingPercent: Float get() = endPercent - startPercent
-
-    /** The rated constant this session measured: kWh per rated mile. */
-    val kwhPerMile: Float?
-        get() {
-            val energy = energyAddedKwh ?: return null
-            val miles = milesAddedRated?.takeIf { it > 0f } ?: return null
-            return energy / miles
-        }
-
-    /** The full-range scale the session implies: miles added over its swing. */
-    val fullRangeMiles: Float?
-        get() {
-            val miles = milesAddedRated?.takeIf { it > 0f } ?: return null
-            if (swingPercent < MIN_SWING_PERCENT) return null
-            return miles / (swingPercent / 100f)
-        }
-}
 
 /**
  * The health card's data. [sohPercent] is null until the car's factory range
@@ -63,28 +41,6 @@ data class HealthSummary(
     /** A plain-language caveat when the inputs are thin, else null. */
     val qualityNote: String?,
 )
-
-/**
- * Charge sessions in [samples]: each run of consecutive charging samples. A run
- * still in progress counts, so the learning gate moves while charging.
- */
-fun chargeSessions(samples: List<BatterySample>): List<ChargeSession> {
-    val sessions = mutableListOf<ChargeSession>()
-    var start: BatterySample? = null
-    var last: BatterySample? = null
-    for (sample in samples) {
-        if (sample.isCharging) {
-            if (start == null) start = sample
-            last = sample
-        } else if (start != null && last != null) {
-            sessions += session(start, last)
-            start = null
-            last = null
-        }
-    }
-    if (start != null && last != null) sessions += session(start, last)
-    return sessions
-}
 
 /**
  * Builds the card's data from one car's samples. [epaRatedRangeMiles] and
@@ -161,17 +117,6 @@ fun healthSummary(
     )
 }
 
-private fun session(
-    start: BatterySample,
-    last: BatterySample,
-): ChargeSession =
-    ChargeSession(
-        startPercent = start.batteryLevel.toFloat(),
-        endPercent = last.batteryLevel.toFloat(),
-        energyAddedKwh = last.chargeEnergyAdded?.takeIf { it > 0f },
-        milesAddedRated = last.chargeMilesAddedRated?.takeIf { it > 0f },
-    )
-
 private fun confidenceFor(sessions: Int): HealthConfidence =
     when {
         sessions < LEARNING_SESSIONS -> HealthConfidence.LEARNING
@@ -197,16 +142,15 @@ private fun qualityNote(
     }
 }
 
-/** The benchmark product needs about twenty sessions for a verdict; we do too. */
+/** Sessions before the "Learning" label gives way to low confidence. */
 private const val LEARNING_SESSIONS = 3
 private const val MEDIUM_SESSIONS = 10
+
+/** The benchmark product needs about twenty sessions for a verdict; high confidence waits for as many. */
 private const val HIGH_SESSIONS = 20
 
 /** A charge swing under this widens the energy-delta error. */
 private const val QUALITY_SWING_PERCENT = 20f
-
-/** Below this swing the estimator itself refuses to compute a capacity. */
-private const val MIN_SWING_PERCENT = 5f
 
 /** Rated-range extrapolation gets noisy below this SOC. */
 private const val QUALITY_RANGE_SOC = 30
