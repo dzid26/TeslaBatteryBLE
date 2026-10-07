@@ -36,7 +36,7 @@ buys nothing.
   import/export feature can return later.
 - Each vehicle file keeps its newest 20k records (rewritten via temp file +
   atomic move); the in-memory cache holds the newest 20k samples overall.
-  Identical level+state readings within a minute are skipped.
+  Every SOC read is logged; nothing is deduplicated.
 - `BatteryHistoryStore`'s public API is unchanged: constructor, `samples`
   StateFlow, `record(vehicleId, charge, nowMillis)`.
 - Backup rules exclude the log directory.

@@ -25,10 +25,9 @@ import java.nio.file.StandardCopyOption
 /**
  * Battery history as an append-only log of raw Tesla `ChargeState` records,
  * one file per vehicle in `filesDir/battery-history/`, cached in memory and
- * exposed as a [StateFlow]. One record per SOC read; repeated identical
- * readings within a minute are skipped so polling does not flood the log.
- * Records are the car's raw response (ADR-0006), so new car fields never drop
- * old rows. Pre-store CSV history is not migrated (pre-1.0 reset).
+ * exposed as a [StateFlow]. One record per SOC read. Records are the car's
+ * raw response (ADR-0006), so new car fields never drop old rows. Pre-store
+ * CSV history is not migrated (pre-1.0 reset).
  */
 class BatteryHistoryStore(
     context: Context,
@@ -58,13 +57,8 @@ class BatteryHistoryStore(
         val sample = record.toBatterySample(vehicleId) ?: return
         scope.launch {
             mutex.withLock {
-                val current = _samples.value
-                val last = current.lastOrNull { it.vehicleId == sample.vehicleId }
-                if (isDuplicate(last, sample)) {
-                    return@withLock
-                }
                 appendRecord(vehicleId, record)
-                _samples.value = (current + sample).takeLast(MAX_SAMPLES)
+                _samples.value = (_samples.value + sample).takeLast(MAX_SAMPLES)
             }
         }
     }
@@ -126,15 +120,6 @@ class BatteryHistoryStore(
 
     private fun vehicleIdOf(file: File): String = file.name.removeSuffix(LOG_SUFFIX).let { if (it == LEGACY_VEHICLE_STEM) "" else it }
 
-    private fun isDuplicate(
-        last: BatterySample?,
-        sample: BatterySample,
-    ): Boolean =
-        last != null &&
-            last.percent == sample.percent &&
-            last.chargingState == sample.chargingState &&
-            sample.timestampMillis - last.timestampMillis < DEDUPE_WINDOW_MS
-
     private companion object {
         const val HISTORY_DIR_NAME = "battery-history"
         const val LOG_SUFFIX = ".pblog"
@@ -143,6 +128,5 @@ class BatteryHistoryStore(
         const val LEGACY_VEHICLE_STEM = "legacy"
         const val MAX_SAMPLES = 20_000
         const val MAX_RECORDS_PER_FILE = 20_000
-        const val DEDUPE_WINDOW_MS = 60_000L
     }
 }
