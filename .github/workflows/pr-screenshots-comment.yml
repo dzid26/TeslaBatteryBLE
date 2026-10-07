@@ -98,7 +98,6 @@ jobs:
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           set -euo pipefail
-          caveat="It's signed with this CI run's throwaway debug key, so uninstall the installed app first, which also removes its pairing."
           runs_url="https://github.com/$GITHUB_REPOSITORY/actions/runs"
           line=""
           if [[ ! "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]; then
@@ -113,13 +112,13 @@ jobs:
             if [[ ! "$run_id" =~ ^[0-9]+$ ]]; then
               echo "::warning::unexpected Android CI run id; posting without the APK line"
             elif [ "$status" != completed ]; then
-              line="Debug APK: still building in [Android CI]($runs_url/$run_id); the zip appears there when it finishes (GitHub sign-in needed). $caveat"
+              line="Debug APK: still building in [Android CI]($runs_url/$run_id) (GitHub sign-in needed)"
             elif [ "$conclusion" = success ]; then
               artifact_id="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run_id/artifacts" \
                 --jq '[.artifacts[] | select(.name == "teslable-debug-apk" and (.expired | not))] | sort_by(.created_at) | last | .id // empty')" ||
                 artifact_id=""
               if [[ "$artifact_id" =~ ^[0-9]+$ ]]; then
-                line="Debug APK: [zip from Android CI]($runs_url/$run_id/artifacts/$artifact_id) (GitHub sign-in needed). $caveat"
+                line="Debug APK: [zip from Android CI]($runs_url/$run_id/artifacts/$artifact_id) (GitHub sign-in needed)"
               else
                 echo "Android CI run $run_id has no debug APK artifact; posting without the APK line."
               fi
