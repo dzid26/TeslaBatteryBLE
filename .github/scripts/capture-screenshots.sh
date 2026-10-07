@@ -405,9 +405,11 @@ if tap_text "AA:BB:CC:DD:EE:01" 30; then
       echo "  ! could not open settings" >&2
       debug_dump "settings-entry"
     fi
-    # 02 — the scan list once the car is known, matching the dark pass state.
+    # 02 — pull to rescan so the shot shows the spinner with the known car,
+    # matching the dark pass.
+    pull_refresh
+    sleep 3
     if wait_for_text "Demo Tesla" 20; then
-      sleep 1
       capture 02-scanning.png
     else
       echo "  ! cars list did not show the known car" >&2
