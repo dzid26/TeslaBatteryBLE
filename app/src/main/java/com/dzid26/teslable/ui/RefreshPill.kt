@@ -34,8 +34,8 @@ import androidx.compose.ui.unit.dp
 internal fun BoxScope.RefreshPill(
     state: PullToRefreshState,
     isRefreshing: Boolean,
-    pullLabel: String,
-    refreshingLabel: String,
+    pullLabel: String?,
+    refreshingLabel: String?,
 ) {
     val progress = state.distanceFraction.coerceIn(0f, 1f)
     if (!isRefreshing && progress <= 0f) return
@@ -68,11 +68,14 @@ internal fun BoxScope.RefreshPill(
                     )
                 }
             }
-            Spacer(Modifier.width(8.dp))
-            Text(
-                text = if (isRefreshing) refreshingLabel else pullLabel,
-                style = MaterialTheme.typography.labelLarge,
-            )
+            val label = if (isRefreshing) refreshingLabel else pullLabel
+            if (label != null) {
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelLarge,
+                )
+            }
         }
     }
 }

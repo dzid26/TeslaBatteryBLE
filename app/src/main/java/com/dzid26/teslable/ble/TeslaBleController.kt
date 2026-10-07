@@ -87,6 +87,18 @@ class TeslaBleController(
             }
         }
 
+    /**
+     * Ends a scan once no new car has appeared for [SCAN_QUIET_MS]: the list
+     * has settled, so scanning on would only spin the radio.
+     */
+    private val stopQuietScan =
+        Runnable {
+            if (_state.value.scanning) {
+                log("scan: no new cars for ${SCAN_QUIET_MS / 1000}s; stopping")
+                stopScan()
+            }
+        }
+
     init {
         vehicleStore.load().forEach { vehicles[it.bleName] = it }
         // A restored backup can carry cached key slots for a key this device
@@ -150,10 +162,13 @@ class TeslaBleController(
             )
         }
         startScanner()
+        handler.removeCallbacks(stopQuietScan)
+        handler.postDelayed(stopQuietScan, SCAN_QUIET_MS)
     }
 
     fun stopScan() {
         handler.removeCallbacks(stopDiscovery)
+        handler.removeCallbacks(stopQuietScan)
         stopScanner()
         _state.update { it.copy(scanning = false, discovering = false) }
     }
@@ -326,6 +341,15 @@ class TeslaBleController(
 
     private fun onDevicesFound(devices: List<TeslaAdvert>) {
         val now = System.currentTimeMillis()
+        // A new car resets the quiet timer that ends the scan.
+        val previousNames =
+            _state.value.devices
+                .map { it.name }
+                .toSet()
+        if (_state.value.scanning && devices.any { it.name !in previousNames }) {
+            handler.removeCallbacks(stopQuietScan)
+            handler.postDelayed(stopQuietScan, SCAN_QUIET_MS)
+        }
         val strongestByName =
             devices
                 .groupBy { it.name }
@@ -371,7 +395,7 @@ class TeslaBleController(
     /**
      * Connected cars stay listed; an explicit scan adds every discovered car
      * (strongest per name), while silent discovery surfaces every known car and
-     * at most one unknown one.
+     * at most one unknown one. Unpaired cars only stay while they advertise.
      */
     private fun visibleDevices(
         found: List<TeslaAdvert>,
@@ -380,7 +404,7 @@ class TeslaBleController(
     ): List<TeslaAdvert> {
         val visible = mutableListOf<TeslaAdvert>()
         connections.values
-            .filter { it.phase in ACTIVE_PHASES || it.phase == ConnectionPhase.DISCONNECTED }
+            .filter { it.phase in ACTIVE_PHASES }
             .forEach { connection ->
                 visible += found.firstOrNull { it.address == connection.address }
                     ?: TeslaAdvert(
@@ -1461,6 +1485,9 @@ class TeslaBleController(
         const val RECONNECT_MAX_DELAY_MS = 60_000L
         const val DISCOVERY_AFTER_ATTEMPTS = 3
         const val DISCOVERY_TIMEOUT_MS = 30_000L
+
+        /** A scan stops once no new car has appeared for this long. */
+        const val SCAN_QUIET_MS = 30_000L
         const val WAKE_REFRESH_MS = 5000L
         const val WAKE_REFRESH_MAX_ATTEMPTS = 6
         const val MAX_ACTIVE_LINKS = 3

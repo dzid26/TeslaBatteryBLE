@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -24,6 +26,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -34,7 +37,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
@@ -50,11 +52,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.dzid26.teslable.ble.BleUiState
 import com.dzid26.teslable.ble.ConnectionPhase
 import com.dzid26.teslable.ble.LogEntry
-import com.dzid26.teslable.ble.PairingPhase
 import com.dzid26.teslable.ble.TeslaAdvert
 import com.dzid26.teslable.ble.TeslaConnection
 import com.dzid26.teslable.ble.Vehicle
@@ -156,14 +158,6 @@ fun MainScreen(
                     onRequestPermissions()
                 }
             },
-            onPair = { name, rowAddress, ready ->
-                if (!permissionsGranted) {
-                    onRequestPermissions()
-                } else {
-                    viewingBleName = name
-                    if (ready) onPairKey(rowAddress) else onOpenVehicle(rowAddress)
-                }
-            },
             onEditVin = { name -> vinTarget = name },
             onWake = onWake,
             onOpenSettings = onOpenSettings,
@@ -216,21 +210,23 @@ private fun vehicleRows(
     history: List<BatterySample>,
 ): List<VehicleRow> {
     val known =
-        state.vehicles.map { vehicle ->
-            VehicleRow(
-                bleName = vehicle.bleName,
-                address = vehicle.address,
-                title = vehicle.title,
-                vehicle = vehicle,
-                connection = state.connections[vehicle.address],
-                advert = state.devices.firstOrNull { it.name == vehicle.bleName },
-                lastKnown = history.lastOrNull { it.vehicleId == vehicle.bleName },
-            )
-        }
+        state.vehicles
+            .sortedBy { it.bleName }
+            .map { vehicle ->
+                VehicleRow(
+                    bleName = vehicle.bleName,
+                    address = vehicle.address,
+                    title = vehicle.title,
+                    vehicle = vehicle,
+                    connection = state.connections[vehicle.address],
+                    advert = state.devices.firstOrNull { it.name == vehicle.bleName },
+                    lastKnown = history.lastOrNull { it.vehicleId == vehicle.bleName },
+                )
+            }
     val discovered =
         state.devices
             .filter { device -> state.vehicles.none { it.bleName == device.name } }
-            .sortedByDescending { it.rssi ?: Int.MIN_VALUE }
+            .sortedBy { it.name }
             .map { device ->
                 VehicleRow(
                     bleName = device.name,
@@ -256,7 +252,6 @@ private fun ConnectionsScreen(
     onToggleScan: () -> Unit,
     onToggleTracking: (Boolean) -> Unit,
     onOpen: (String, String) -> Unit,
-    onPair: (String, String, Boolean) -> Unit,
     onEditVin: (String) -> Unit,
     onWake: (String) -> Unit,
     onOpenSettings: () -> Unit,
@@ -304,80 +299,84 @@ private fun ConnectionsScreen(
                     .fillMaxSize()
                     .padding(innerPadding),
             indicator = {
-                RefreshPill(
-                    state = pullState,
-                    isRefreshing = state.scanning,
-                    pullLabel = "Scan for cars",
-                    refreshingLabel = "Scanning…",
-                )
+                // The pill is the manual-pull affordance only: it shows while
+                // the finger is dragging and no scan is running. The status
+                // row below carries the scan spinner, so a running scan never
+                // shows two spinners.
+                if (pullState.distanceFraction > 0f && !state.scanning) {
+                    RefreshPill(
+                        state = pullState,
+                        isRefreshing = state.scanning,
+                        pullLabel = "Scan for cars",
+                        refreshingLabel = null,
+                    )
+                }
             },
         ) {
-            Column(
+            BoxWithConstraints(
                 modifier =
                     Modifier
                         .fillMaxSize()
                         .padding(horizontal = 16.dp),
             ) {
-                if (!permissionsGranted) {
-                    PermissionCard(
-                        title = "Allow Bluetooth access",
-                        body =
-                            "TeslaBatteryBLE finds and talks to your Tesla over Bluetooth. " +
-                                "Android also requires location permission for BLE scans; the app " +
-                                "never reads your location and nothing leaves the phone.",
-                        button = "Grant permissions",
-                        onClick = onRequestPermissions,
-                    )
-                    Spacer(Modifier.height(8.dp))
-                }
-                if (!locationServicesEnabled) {
-                    Text(
-                        text = "Location services are off. BLE scans return no results until it is enabled.",
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                    Spacer(Modifier.height(8.dp))
-                }
-
-                val connectedCount = state.connections.values.count { it.phase == ConnectionPhase.READY }
-                val statusText =
-                    when {
-                        state.scanning ->
-                            "Scanning: ${state.devices.size} Tesla(s), $connectedCount connected"
-
-                        state.discovering ->
-                            "Looking for your cars..."
-
-                        rows.isNotEmpty() ->
-                            "${rows.size} car(s), $connectedCount connected"
-
-                        else -> "No scan yet"
+                // The log stays a fraction of the screen so the car list keeps
+                // room in landscape; its content scrolls internally.
+                val logMaxHeight = (maxHeight * LOG_HEIGHT_FRACTION).coerceAtLeast(96.dp)
+                Column(modifier = Modifier.fillMaxSize()) {
+                    if (!permissionsGranted) {
+                        PermissionCard(
+                            title = "Allow Bluetooth access",
+                            body =
+                                "TeslaBatteryBLE finds and talks to your Tesla over Bluetooth. " +
+                                    "Android also requires location permission for BLE scans; the app " +
+                                    "never reads your location and nothing leaves the phone.",
+                            button = "Grant permissions",
+                            onClick = onRequestPermissions,
+                        )
+                        Spacer(Modifier.height(8.dp))
                     }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = statusText,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    if (!locationServicesEnabled) {
+                        Text(
+                            text = "Location services are off. BLE scans return no results until it is enabled.",
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Spacer(Modifier.height(8.dp))
+                    }
+
+                    val connectedCount = state.connections.values.count { it.phase == ConnectionPhase.READY }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text =
+                                if (rows.isNotEmpty()) {
+                                    "${rows.size} car(s), $connectedCount connected"
+                                } else {
+                                    "No scan yet"
+                                },
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f),
+                        )
+                        if (state.scanning || state.discovering) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp,
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(12.dp))
+
+                    VehicleList(
+                        rows = rows,
+                        scanning = state.scanning,
+                        onOpen = onOpen,
+                        onEditVin = onEditVin,
+                        onWake = onWake,
                         modifier = Modifier.weight(1f),
                     )
-                    if (state.scanning) {
-                        TextButton(onClick = onToggleScan) { Text("Stop") }
-                    }
+                    Spacer(Modifier.height(8.dp))
+                    LogCard(state.log, maxContentHeight = logMaxHeight)
                 }
-                Spacer(Modifier.height(12.dp))
-
-                VehicleList(
-                    rows = rows,
-                    explicitScan = state.explicitScan,
-                    scanning = state.scanning,
-                    onOpen = onOpen,
-                    onPair = onPair,
-                    onEditVin = onEditVin,
-                    onWake = onWake,
-                    modifier = Modifier.weight(1f),
-                )
-                Spacer(Modifier.height(8.dp))
-                LogCard(state.log)
             }
         }
     }
@@ -387,10 +386,8 @@ private fun ConnectionsScreen(
 @Composable
 private fun VehicleList(
     rows: List<VehicleRow>,
-    explicitScan: Boolean,
     scanning: Boolean,
     onOpen: (String, String) -> Unit,
-    onPair: (String, String, Boolean) -> Unit,
     onEditVin: (String) -> Unit,
     onWake: (String) -> Unit,
     modifier: Modifier = Modifier,
@@ -429,15 +426,7 @@ private fun VehicleList(
             items(rows, key = { it.bleName }) { row ->
                 VehicleCard(
                     row = row,
-                    explicitScan = explicitScan,
                     onOpen = { onOpen(row.bleName, row.address) },
-                    onPair = {
-                        onPair(
-                            row.bleName,
-                            row.address,
-                            row.connection?.phase == ConnectionPhase.READY,
-                        )
-                    },
                     onEditVin = { onEditVin(row.bleName) },
                     onWake = { onWake(row.bleName) },
                 )
@@ -474,9 +463,7 @@ private fun PermissionCard(
 @Composable
 private fun VehicleCard(
     row: VehicleRow,
-    explicitScan: Boolean,
     onOpen: () -> Unit,
-    onPair: () -> Unit,
     onEditVin: () -> Unit,
     onWake: () -> Unit,
 ) {
@@ -485,10 +472,6 @@ private fun VehicleCard(
     val canWake =
         row.connection?.status?.asleep == true &&
             row.connection?.sessions?.contains("DOMAIN_VEHICLE_SECURITY") == true
-    val paired =
-        row.vehicle?.keySlot != null ||
-            row.connection?.keySlot != null ||
-            row.connection?.pairing == PairingPhase.OK
     val vin = row.vehicle?.vin
     var menuOpen by remember { mutableStateOf(false) }
 
@@ -519,18 +502,6 @@ private fun VehicleCard(
                         fontFamily = if (vin != null) FontFamily.Monospace else null,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    if (explicitScan && !paired && row.connection != null) {
-                        val pairingInProgress =
-                            row.connection.pairing == PairingPhase.CHECKING ||
-                                row.connection.pairing == PairingPhase.SENDING ||
-                                row.connection.pairing == PairingPhase.WAITING_FOR_CARD
-                        TextButton(
-                            onClick = onPair,
-                            enabled = !pairingInProgress,
-                        ) {
-                            Text("Pair")
-                        }
-                    }
                 }
                 if (reading != null) {
                     Text(
@@ -571,7 +542,10 @@ private fun VehicleCard(
 
 /** The app-wide log; every line is tagged with the car it came from. */
 @Composable
-private fun LogCard(log: List<LogEntry>) {
+private fun LogCard(
+    log: List<LogEntry>,
+    maxContentHeight: Dp = 200.dp,
+) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp)) {
             Text("Log", style = MaterialTheme.typography.titleSmall)
@@ -591,7 +565,7 @@ private fun LogCard(log: List<LogEntry>) {
                     modifier =
                         Modifier
                             .fillMaxWidth()
-                            .heightIn(max = 200.dp)
+                            .heightIn(max = maxContentHeight)
                             .verticalScroll(logScroll),
                 ) {
                     log.takeLast(100).forEach { line ->
@@ -683,3 +657,6 @@ private fun statusColor(connection: TeslaConnection?): Color =
         connection?.phase == ConnectionPhase.FAILED -> MaterialTheme.colorScheme.error
         else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
+
+/** The log card's share of the cars-list height; the list keeps the rest. */
+private const val LOG_HEIGHT_FRACTION = 0.3f
