@@ -2,6 +2,7 @@
 package com.dzid26.teslable.core.protocol
 
 import java.math.BigInteger
+import java.security.KeyPair
 import java.security.KeyPairGenerator
 import java.security.MessageDigest
 import java.security.interfaces.ECPublicKey
@@ -19,7 +20,11 @@ object TeslaKeys {
     fun generate(): TeslaKeyPair {
         val generator = KeyPairGenerator.getInstance("EC")
         generator.initialize(ECGenParameterSpec("secp256r1"))
-        val keyPair = generator.generateKeyPair()
+        return fromKeyPair(generator.generateKeyPair())
+    }
+
+    // Internal so tests can encode a fixed key pair; generate() is random.
+    internal fun fromKeyPair(keyPair: KeyPair): TeslaKeyPair {
         val publicKey = keyPair.public as ECPublicKey
         val raw =
             byteArrayOf(0x04) +
