@@ -27,8 +27,10 @@ buys nothing.
   with an empty id live in `legacy.pblog`. If the app later accepts other
   suffixes or prefers a VIN-derived key, files can be merged on the shared
   hash.
-- Time comes from the record's `timestamp`; when the car leaves it unset, the
-  phone fills it at write time. Absent fields stay absent: records are sparse
+- Time comes only from the car's own `timestamp`, which it sets on every
+  sample. The app never fills one in, so every logged record is exactly what
+  the car sent; a record without a timestamp or a level has no place on the
+  timeline and is not logged. Absent fields stay absent: records are sparse
   snapshots, readers ignore unknown fields, and new car fields never drop old
   rows. The whole raw response is kept, not just the fields the app parses.
 - Pre-store CSV history is not migrated: the old CSV and older formats are
@@ -38,8 +40,9 @@ buys nothing.
   atomic move, trimming a thousand below the cap so a full file costs one
   rewrite per thousand appends); the in-memory cache holds the newest 20k
   samples overall. Every SOC read is logged; nothing is deduplicated.
-- `HistoryStore`'s public API is unchanged: constructor, `samples`
-  StateFlow, `record(vehicleId, charge, nowMillis)`.
+- `HistoryStore` keeps the old store's API (constructor, `samples`
+  StateFlow, `record(vehicleId, charge)`), minus the phone-time parameter that
+  `record` no longer needs.
 - Backup rules exclude the log directory.
 
 ## Consequences

@@ -63,14 +63,6 @@ class ChargeStateMappingTest {
     }
 
     @Test
-    fun phoneFillsAMissingTimestampButKeepsTheCars() {
-        val missing = ChargeState(battery_level = 50)
-        assertEquals(Instant.ofEpochMilli(1_000L), missing.withTimestamp(1_000L).timestamp)
-        val carTime = ChargeState(battery_level = 50, timestamp = Instant.ofEpochSecond(7))
-        assertEquals(Instant.ofEpochSecond(7), carTime.withTimestamp(1_000L).timestamp)
-    }
-
-    @Test
     fun chargingStateNameReadsTheSetVariant() {
         assertEquals("Disconnected", TeslaCommands.chargingStateName(ChargeState.ChargingState(Disconnected = Void())))
         assertNull(TeslaCommands.chargingStateName(ChargeState.ChargingState()))

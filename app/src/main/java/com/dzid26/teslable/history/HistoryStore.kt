@@ -6,7 +6,6 @@ import android.content.Context
 import com.dzid26.teslable.core.history.BatterySample
 import com.dzid26.teslable.core.history.ProtoLog
 import com.dzid26.teslable.core.history.toBatterySample
-import com.dzid26.teslable.core.history.withTimestamp
 import com.dzid26.teslable.core.protocol.TeslaCommands
 import com.tesla.generated.carserver.vehicle.ChargeState
 import kotlinx.coroutines.CoroutineScope
@@ -50,10 +49,11 @@ class HistoryStore(
     fun record(
         vehicleId: String,
         charge: TeslaCommands.Charge,
-        nowMillis: Long = System.currentTimeMillis(),
     ) {
-        // Only the car's raw response is logged; Charge is a parsed view.
-        val record = charge.raw?.withTimestamp(nowMillis) ?: return
+        // Only the car's raw response is logged, verbatim; Charge is a parsed
+        // view. Time comes from the car's own timestamp and is never filled
+        // in, so a record without one has no place on the timeline.
+        val record = charge.raw ?: return
         val sample = record.toBatterySample(vehicleId) ?: return
         scope.launch {
             mutex.withLock {

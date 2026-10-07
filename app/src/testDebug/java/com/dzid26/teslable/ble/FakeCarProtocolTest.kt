@@ -126,6 +126,8 @@ class FakeCarProtocolTest {
         assertEquals("Disconnected", charge.chargingState)
         assertEquals(234f, charge.batteryRange)
         assertEquals(226.2f, charge.estBatteryRange!!, 0.01f)
+        // History takes time only from the car's own stamp.
+        assertNotNull(charge.raw?.timestamp)
     }
 
     @Test

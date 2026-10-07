@@ -4,14 +4,13 @@ package com.dzid26.teslable.core.history
 
 import com.dzid26.teslable.core.protocol.TeslaCommands
 import com.tesla.generated.carserver.vehicle.ChargeState
-import java.time.Instant
 
 // One-way conversion: raw car ChargeState records kept in the history log
 // become the app's BatterySample read model. The read model is derived on
 // load; nothing ever writes a record back from parsed fields — the store logs
 // the car's raw response verbatim.
 
-/** The app-facing sample for a raw record; null when it lacks a level or time. */
+/** The app-facing sample for a raw record; null when the car sent no level or no timestamp. */
 fun ChargeState.toBatterySample(vehicleId: String): BatterySample? {
     val level = battery_level ?: return null
     val time = timestamp?.toEpochMilli() ?: return null
@@ -35,7 +34,3 @@ fun ChargeState.toBatterySample(vehicleId: String): BatterySample? {
         chargingAmps = charging_amps,
     )
 }
-
-/** Fills the phone-side timestamp when the car left the record's time unset. */
-fun ChargeState.withTimestamp(nowMillis: Long): ChargeState =
-    if (timestamp != null) this else copy(timestamp = Instant.ofEpochMilli(nowMillis))
