@@ -7,7 +7,6 @@ set -euo pipefail
 
 TAG="${GITHUB_REF_NAME:?GITHUB_REF_NAME is required}"
 REPO="${GITHUB_REPOSITORY:?GITHUB_REPOSITORY is required}"
-VERSION="${TAG#v}"
 APK="dist/TeslaBatteryBLE-${TAG}.apk"
 NOTES="release-notes.md"
 SHOTS_DIR="screenshots"
@@ -74,6 +73,5 @@ gh release upload "$TAG" "$APK" --clobber
 
 # The release is not done until its APK is actually attached.
 assets="$(gh release view "$TAG" --json assets --jq '.assets[].name')"
-for expected in "$(basename "$APK")"; do
-  printf '%s\n' "$assets" | grep -qx "$expected" || { echo "release $TAG is missing $expected" >&2; exit 1; }
-done
+expected="$(basename "$APK")"
+printf '%s\n' "$assets" | grep -qx "$expected" || { echo "release $TAG is missing $expected" >&2; exit 1; }
