@@ -21,10 +21,12 @@ and below keep the encrypted keys out of backups; on Android 12+ a backup may
 include them, but they cannot be decrypted on another phone. Either way, a new
 phone requires re-pairing with an NFC card tap. One setting applies to all
 paired cars: if you opt in to "Include vehicle keys in Android backup", the keys
-can be restored on a new phone — Android backups are encrypted with your Google
-account and device lock, and on Android 12+ the app additionally requires that
-encrypted backup is available; Android 11 and below always keep the keys out of
-backup. A rooted or forensically extracted device is outside these protections.
+can be restored on a new phone from a cloud backup or a device-to-device
+transfer. Cloud backups are encrypted with your Google account and device lock,
+and on Android 12+ the app additionally requires that encrypted backup is
+available; it sets no such condition on a device-to-device transfer. Android 11
+and below always keep the keys out of backup. A rooted or forensically extracted
+device is outside these protections.
 The enrolled keys are charging-manager scoped: they can read vehicle data and
 control charging, but cannot unlock or drive, and new keys always need an NFC
 card tap plus vehicle confirmation. Uninstalling removes on-device data; a system
