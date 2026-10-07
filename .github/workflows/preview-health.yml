@@ -5,6 +5,14 @@ name: Preview health
 # on a periodic sweep, check that the release carries its APK and a screenshot
 # image in its notes, and that the preview is not stale. A problem opens (or
 # updates) a tracking issue; the issue closes itself when healthy again.
+#
+# Stale means the APK was not built from the latest completed Android CI push
+# run on main, and that run finished over 2 h ago. main's HEAD is the wrong
+# yardstick: pushes that only touch Markdown, docs/, website/, fastlane/ or
+# LICENSE skip Android CI (paths-ignore), and the tag job's "Refresh
+# screenshots" commit lands on main without a rebuild. A missing release is
+# healthy when a v* tag points at that run's commit, because
+# publish-preview-release.sh removes the preview then.
 on:
   workflow_run:
     workflows: [ Android CI ]
@@ -15,6 +23,7 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: read # latest Android CI run
   contents: read
   issues: write
 
@@ -30,27 +39,60 @@ jobs:
         run: |
           set -euo pipefail
 
-          release="$(gh api "repos/$REPO/releases/tags/preview" 2>/dev/null || echo '{}')"
-          assets="$(jq -r '[.assets[].name] | join(",")' <<< "$release")"
-          apk="$(jq -r '[.assets[] | select(.name | startswith("TeslaBatteryBLE-preview"))][0].name // empty' <<< "$release")"
-          apk_updated="$(jq -r '[.assets[] | select(.name | startswith("TeslaBatteryBLE-preview"))][0].updated_at // empty' <<< "$release")"
-          has_section="$(jq -r '.body | contains("## Screenshots")' <<< "$release")"
-          has_image="$(jq -r '.body | contains("![")' <<< "$release")"
+          # Only a 404 means "no preview release"; any other API failure aborts the
+          # check instead of being reported as a missing preview.
+          err="$(mktemp)"
+          if ! release="$(gh api "repos/$REPO/releases/tags/preview" 2>"$err")"; then
+            grep -q 'HTTP 404' "$err" || { cat "$err" >&2; exit 1; }
+            release='{}'
+          fi
+
+          # The preview should be built from the latest completed push run on main,
+          # not from main's HEAD (see the header).
+          runs="$(gh api "repos/$REPO/actions/workflows/android.yml/runs?branch=main&event=push&status=completed&per_page=1")"
+          run_sha="$(jq -r '.workflow_runs[0].head_sha // empty' <<< "$runs")"
+          run_done="$(jq -r '.workflow_runs[0].updated_at // empty' <<< "$runs")"
+
+          release_id="$(jq -r '.id // empty' <<< "$release")"
+          assets="$(jq -r '[(.assets // [])[].name] | join(",")' <<< "$release")"
+          apk="$(jq -r '[(.assets // [])[] | select(.name | startswith("TeslaBatteryBLE-preview"))][0].name // empty' <<< "$release")"
+          has_section="$(jq -r '(.body // "") | contains("## Screenshots")' <<< "$release")"
+          # The publish scripts embed the shots as HTML <img> tags; Markdown images
+          # count too. The image must follow the heading, so a commit subject in the
+          # change list cannot satisfy the check.
+          has_image="$(jq -r '(.body // "") | test("## Screenshots[\\s\\S]*(<img|!\\[)")' <<< "$release")"
 
           problem=""
-          if [ -z "$apk" ]; then problem="the preview APK asset is missing"; fi
-          if [ "$has_section" != "true" ]; then problem="${problem:+$problem; }the notes have no Screenshots section"; fi
-          if [ "$has_image" != "true" ]; then problem="${problem:+$problem; }the Screenshots section has no image"; fi
+          tagged=""
+          if [ -z "$release_id" ]; then
+            # publish-preview-release.sh removes the preview on purpose when a v* tag
+            # points at the commit it would have been built from.
+            if [ -n "$run_sha" ]; then
+              tagged="$(gh api --paginate "repos/$REPO/tags?per_page=100" |
+                jq -rs --arg sha "$run_sha" '[.[][] | select((.name | startswith("v")) and .commit.sha == $sha) | .name] | join(", ")')"
+            fi
+            if [ -z "$tagged" ]; then problem="the preview release is missing (no v* tag points at the latest Android CI run on main)"; fi
+          else
+            if [ -z "$apk" ]; then problem="the preview APK asset is missing"; fi
+            if [ "$has_section" != "true" ]; then problem="${problem:+$problem; }the notes have no Screenshots section"; fi
+            if [ "$has_image" != "true" ]; then problem="${problem:+$problem; }the Screenshots section has no image"; fi
 
-          head_date="$(gh api "repos/$REPO/commits/main" --jq '.commit.committer.date')"
-          if [ -n "$apk_updated" ]; then
-            age=$(( $(date -u -d "$head_date" +%s) - $(date -u -d "$apk_updated" +%s) ))
-            if [ "$age" -gt 7200 ]; then
-              problem="${problem:+$problem; }the preview is stale (APK updated $apk_updated, main is at $head_date)"
+            # Stale: the APK (TeslaBatteryBLE-preview-<sha7>.apk) was not built from
+            # that run's commit, and the run finished long enough ago for its preview
+            # to have been published. A name without a SHA counts as a different commit.
+            if [ -n "$apk" ] && [ -n "$run_sha" ]; then
+              apk_sha=""
+              if [[ "$apk" =~ ^TeslaBatteryBLE-preview-([0-9a-f]{7,40})\.apk$ ]]; then apk_sha="${BASH_REMATCH[1]}"; fi
+              same_commit=false
+              if [ -n "$apk_sha" ] && [ "${run_sha:0:${#apk_sha}}" = "$apk_sha" ]; then same_commit=true; fi
+              age=$(( $(date -u +%s) - $(date -u -d "$run_done" +%s) ))
+              if [ "$same_commit" != "true" ] && [ "$age" -gt 7200 ]; then
+                problem="${problem:+$problem; }the preview is stale (APK built from ${apk_sha:-an unknown commit}; the latest Android CI run on main is ${run_sha:0:7}, finished $run_done)"
+              fi
             fi
           fi
 
-          echo "assets=$assets apk_updated=${apk_updated:-none} head=$head_date problem=${problem:-none}"
+          echo "assets=${assets:-none} run=${run_sha:-none} run_done=${run_done:-none} tagged=${tagged:-none} problem=${problem:-none}"
 
           title="Preview release is missing screenshots"
           existing="$(gh issue list --repo "$REPO" --state open --search "$title in:title" --json number --jq '.[0].number // empty')"
