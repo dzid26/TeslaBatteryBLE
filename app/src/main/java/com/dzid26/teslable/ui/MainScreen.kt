@@ -297,10 +297,11 @@ private fun ConnectionsScreen(
                     .fillMaxSize()
                     .padding(innerPadding),
             indicator = {
-                // The pill is the manual-pull affordance only; the status row
-                // below carries the scan spinner, so a running scan never
+                // The pill is the manual-pull affordance only: it shows while
+                // the finger is dragging and no scan is running. The status
+                // row below carries the scan spinner, so a running scan never
                 // shows two spinners.
-                if (pullState.distanceFraction > 0f) {
+                if (pullState.distanceFraction > 0f && !state.scanning) {
                     RefreshPill(
                         state = pullState,
                         isRefreshing = state.scanning,
