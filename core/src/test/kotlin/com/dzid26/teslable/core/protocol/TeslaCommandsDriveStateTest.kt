@@ -71,20 +71,4 @@ class TeslaCommandsDriveStateTest {
         assertNull(TeslaCommands.parseDriveState(refusal))
         assertEquals("OPERATIONSTATUS_ERROR", TeslaCommands.parseActionStatus(refusal))
     }
-
-    @Test
-    fun `names every shift state`() {
-        assertEquals("P", TeslaCommands.shiftStateName(ShiftState(P = Void())))
-        assertEquals("R", TeslaCommands.shiftStateName(ShiftState(R = Void())))
-        assertEquals("N", TeslaCommands.shiftStateName(ShiftState(N = Void())))
-        assertEquals("D", TeslaCommands.shiftStateName(ShiftState(D = Void())))
-        assertEquals("Invalid", TeslaCommands.shiftStateName(ShiftState(CarServer_Invalid = Void())))
-        assertEquals("SNA", TeslaCommands.shiftStateName(ShiftState(SNA = Void())))
-    }
-
-    @Test
-    fun `an unset shift state has no name`() {
-        assertNull(TeslaCommands.shiftStateName(ShiftState()))
-        assertNull(TeslaCommands.shiftStateName(null))
-    }
 }

@@ -15,6 +15,11 @@ import com.dzid26.teslable.core.protocol.TeslaPairing
 import com.dzid26.teslable.core.protocol.TeslaSession
 import com.dzid26.teslable.core.protocol.TeslaSessionRequests
 import com.dzid26.teslable.core.protocol.TeslaVcsec
+import com.dzid26.teslable.core.protocol.asleep
+import com.dzid26.teslable.core.protocol.chargingStateName
+import com.dzid26.teslable.core.protocol.locked
+import com.dzid26.teslable.core.protocol.shiftStateName
+import com.dzid26.teslable.core.protocol.userPresent
 import com.dzid26.teslable.history.HistoryStore
 import com.tesla.generated.universalmessage.Domain
 import com.tesla.generated.universalmessage.RoutableMessage
@@ -1180,12 +1185,12 @@ class TeslaBleController(
                             it.copy(charge = charge, chargeAtMillis = acquiredAt.toEpochMilli())
                         }
                         historyStore.record(bleName, charge, acquiredAt, latestRssi(address))
-                        if (previous?.batteryLevel != charge.batteryLevel ||
-                            previous?.chargingState != charge.chargingState
+                        if (previous?.battery_level != charge.battery_level ||
+                            previous?.chargingStateName != charge.chargingStateName
                         ) {
                             log(
-                                "${name()}: SOC ${charge.batteryLevel}% " +
-                                    "(${charge.chargingState ?: "unknown"})",
+                                "${name()}: SOC ${charge.battery_level}% " +
+                                    "(${charge.chargingStateName ?: "unknown"})",
                             )
                         }
                         requestDriveState()
@@ -1222,7 +1227,7 @@ class TeslaBleController(
                 return
             }
             historyStore.recordDrive(bleName, drive, acquiredAt, latestRssi(address))
-            val shift = TeslaCommands.shiftStateName(drive.shift_state)
+            val shift = drive.shiftStateName
             if (shift != lastShiftState) {
                 lastShiftState = shift
                 log("${name()}: shift state ${shift ?: "unknown"}")
@@ -1493,10 +1498,8 @@ class TeslaBleController(
             if (status != null) {
                 // VCSEC replies carry no time: the phone's clock at receipt is
                 // the status log's timeline (ADR-0008).
-                status.raw?.let { raw ->
-                    val rssi = latestRssi(address)
-                    historyStore.recordStatus(bleName, raw, acquiredAt, rssi, firstAfterConnect = firstStatusAfterConnect)
-                }
+                val rssi = latestRssi(address)
+                historyStore.recordStatus(bleName, status, acquiredAt, rssi, firstAfterConnect = firstStatusAfterConnect)
                 firstStatusAfterConnect = false
                 if (!status.asleep) {
                     handler.removeCallbacks(wakeRefresh)

@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 package com.dzid26.teslable.ble
 
-import com.dzid26.teslable.core.protocol.TeslaCommands
+import com.tesla.generated.carserver.common.Void
+import com.tesla.generated.carserver.vehicle.ChargeState
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
@@ -57,7 +58,12 @@ class ReadingAgeTest {
             TeslaConnection(
                 address = "18:04:ED:84:79:80",
                 name = "Se1f0941734830fe7C",
-                charge = TeslaCommands.Charge(batteryLevel = 62, chargeLimit = 80, chargingState = "Disconnected"),
+                charge =
+                    ChargeState(
+                        battery_level = 62,
+                        charge_limit_soc = 80,
+                        charging_state = ChargeState.ChargingState(Disconnected = Void()),
+                    ),
                 chargeAtMillis = readAt,
             )
         val nowMillis = readAt + STALE_READING_MS + 1

@@ -10,6 +10,11 @@ import com.dzid26.teslable.core.protocol.TeslaPairing
 import com.dzid26.teslable.core.protocol.TeslaSession
 import com.dzid26.teslable.core.protocol.TeslaSessionRequests
 import com.dzid26.teslable.core.protocol.TeslaVcsec
+import com.dzid26.teslable.core.protocol.asleep
+import com.dzid26.teslable.core.protocol.chargingStateName
+import com.dzid26.teslable.core.protocol.locked
+import com.dzid26.teslable.core.protocol.shiftStateName
+import com.dzid26.teslable.core.protocol.userPresent
 import com.tesla.generated.universalmessage.Domain
 import com.tesla.generated.universalmessage.RoutableMessage
 import com.tesla.generated.vcsec.OperationStatus_E
@@ -120,14 +125,14 @@ class FakeCarProtocolTest {
 
         val charge = TeslaCommands.parseChargeState(plaintext)
         assertNotNull(charge)
-        assertEquals(78, charge!!.batteryLevel)
-        assertEquals(78, charge.usableBatteryLevel)
-        assertEquals(85, charge.chargeLimit)
-        assertEquals("Disconnected", charge.chargingState)
-        assertEquals(234f, charge.batteryRange)
-        assertEquals(226.2f, charge.estBatteryRange!!, 0.01f)
+        assertEquals(78, charge!!.battery_level)
+        assertEquals(78, charge.usable_battery_level)
+        assertEquals(85, charge.charge_limit_soc)
+        assertEquals("Disconnected", charge.chargingStateName)
+        assertEquals(234f, charge.battery_range)
+        assertEquals(226.2f, charge.est_battery_range!!, 0.01f)
         // History takes time only from the car's own stamp.
-        assertNotNull(charge.raw?.timestamp)
+        assertNotNull(charge.timestamp)
     }
 
     @Test
@@ -142,7 +147,7 @@ class FakeCarProtocolTest {
                 TeslaCommands.buildChargeStateRequest(),
             )
 
-        assertEquals("Charging", TeslaCommands.parseChargeState(plaintext)!!.chargingState)
+        assertEquals("Charging", TeslaCommands.parseChargeState(plaintext)!!.chargingStateName)
     }
 
     @Test
@@ -157,7 +162,7 @@ class FakeCarProtocolTest {
 
         val drive = TeslaCommands.parseDriveState(plaintext)
         assertNotNull(drive)
-        assertEquals("P", TeslaCommands.shiftStateName(drive!!.shift_state))
+        assertEquals("P", drive!!.shiftStateName)
         assertEquals(0, drive.speed)
         assertEquals(0, drive.power)
         assertNotNull(drive.odometer_in_hundredths_of_a_mile)

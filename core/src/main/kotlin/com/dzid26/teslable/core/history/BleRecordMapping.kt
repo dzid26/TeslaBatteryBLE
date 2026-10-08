@@ -2,14 +2,17 @@
 
 package com.dzid26.teslable.core.history
 
-import com.dzid26.teslable.core.protocol.TeslaCommands
-import com.dzid26.teslable.core.protocol.TeslaVcsec
+import com.dzid26.teslable.core.protocol.asleep
+import com.dzid26.teslable.core.protocol.locked
+import com.dzid26.teslable.core.protocol.shiftStateName
+import com.dzid26.teslable.core.protocol.userPresent
 
 // One-way conversion: BleRecords kept in the history logs become the app's
 // read models (BatterySample, StatusSample, DriveSample). The read models are
 // derived on load; nothing ever writes a record back from parsed fields — the
 // store logs the car's raw reply verbatim, next to the phone's acquisition
-// time (ADR-0008).
+// time (ADR-0008). A value that needs a rule (a name, the status flags) comes
+// from the shared properties in protocol/StateViews.kt, never re-derived here.
 
 /**
  * The battery sample for a logged charge reply, or null unless the record
@@ -24,15 +27,14 @@ fun BleRecord.toBatterySample(vehicleId: String): BatterySample? = charge_state?
  * phone's `acquired_at` is the sample's time.
  */
 fun BleRecord.toStatusSample(vehicleId: String): StatusSample? {
-    val raw = vehicle_status ?: return null
+    val status = vehicle_status ?: return null
     val time = acquired_at?.toEpochMilli() ?: return null
-    val parsed = TeslaVcsec.statusOf(raw)
     return StatusSample(
         timestampMillis = time,
         vehicleId = vehicleId,
-        asleep = parsed.asleep,
-        userPresent = parsed.userPresent,
-        locked = parsed.locked,
+        asleep = status.asleep,
+        userPresent = status.userPresent,
+        locked = status.locked,
     )
 }
 
@@ -47,7 +49,7 @@ fun BleRecord.toDriveSample(vehicleId: String): DriveSample? {
     return DriveSample(
         timestampMillis = time,
         vehicleId = vehicleId,
-        shiftState = TeslaCommands.shiftStateName(drive.shift_state),
+        shiftState = drive.shiftStateName,
         speed = drive.speed,
         power = drive.power,
         odometerInHundredthsOfAMile = drive.odometer_in_hundredths_of_a_mile,

@@ -21,6 +21,7 @@ import androidx.core.content.ContextCompat
 import com.dzid26.teslable.MainActivity
 import com.dzid26.teslable.R
 import com.dzid26.teslable.core.history.BatterySample
+import com.dzid26.teslable.core.protocol.asleep
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob

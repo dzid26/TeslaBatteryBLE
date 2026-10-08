@@ -2,7 +2,6 @@
 
 package com.dzid26.teslable.core.history
 
-import com.dzid26.teslable.core.protocol.TeslaCommands
 import com.tesla.generated.carserver.common.Void
 import com.tesla.generated.carserver.vehicle.ChargeState
 import org.junit.Assert.assertEquals
@@ -40,32 +39,22 @@ class ChargeStateMappingTest {
                 chargingState = "Charging",
                 chargeLimit = 85,
                 vehicleId = "Se1f0941734830fe7C",
-                usableBatteryLevel = 77,
                 ratedRangeMiles = 206.61f,
-                estRangeMiles = 200.5f,
-                idealRangeMiles = 220.25f,
                 chargeEnergyAdded = 12.3f,
                 chargeMilesAddedRated = 41.5f,
-                chargeMilesAddedIdeal = 45.25f,
-                chargeRateMph = 32,
-                chargeRateMphFloat = 32.5f,
-                chargerPower = 7200,
-                chargerVoltage = 240,
-                chargingAmps = 30,
             )
         assertEquals(expected, record().toBatterySample("Se1f0941734830fe7C"))
+    }
+
+    @Test
+    fun theSampleTakesTheDisplayedLevelNotTheUsableOne() {
+        val sample = record().copy(battery_level = 80, usable_battery_level = 79).toBatterySample("car")
+        assertEquals(80, sample?.batteryLevel)
     }
 
     @Test
     fun sampleNeedsALevelAndATimestamp() {
         assertNull(ChargeState(battery_level = 50).toBatterySample("car"))
         assertNull(ChargeState(timestamp = Instant.ofEpochSecond(1)).toBatterySample("car"))
-    }
-
-    @Test
-    fun chargingStateNameReadsTheSetVariant() {
-        assertEquals("Disconnected", TeslaCommands.chargingStateName(ChargeState.ChargingState(Disconnected = Void())))
-        assertNull(TeslaCommands.chargingStateName(ChargeState.ChargingState()))
-        assertNull(TeslaCommands.chargingStateName(null))
     }
 }

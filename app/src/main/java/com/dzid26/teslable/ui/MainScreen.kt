@@ -68,6 +68,7 @@ import com.dzid26.teslable.ble.Vehicle
 import com.dzid26.teslable.ble.batteryPercent
 import com.dzid26.teslable.ble.connectionDisplay
 import com.dzid26.teslable.core.history.BatterySample
+import com.dzid26.teslable.core.protocol.asleep
 import kotlinx.coroutines.delay
 
 /**

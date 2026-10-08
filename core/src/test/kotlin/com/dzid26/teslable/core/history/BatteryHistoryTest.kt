@@ -82,23 +82,6 @@ class BatteryHistoryTest {
     }
 
     @Test
-    fun chargeStatsDeriveFromTheDisplayedLevel() {
-        val samples =
-            listOf(
-                sample(0, 80, "Charging"),
-                sample(30, 80).copy(usableBatteryLevel = 79),
-                sample(60, 79).copy(usableBatteryLevel = 78),
-            )
-
-        val stats = chargeStats(samples)!!
-        assertEquals(80f, stats.startPercent)
-        assertEquals(79f, stats.currentPercent)
-        assertEquals(79f, stats.minPercent)
-        assertEquals(80f, stats.maxPercent)
-        assertEquals(1f, stats.usedPercent)
-    }
-
-    @Test
     fun percentDerivesFromTheDisplayedLevel() {
         assertEquals(78, sample(0, 78).percent)
         assertEquals(77, sample(0, 78).copy(batteryLevel = 77).percent)

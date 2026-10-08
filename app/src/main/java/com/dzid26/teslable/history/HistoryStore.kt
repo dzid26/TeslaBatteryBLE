@@ -13,7 +13,7 @@ import com.dzid26.teslable.core.history.shouldLogStatus
 import com.dzid26.teslable.core.history.toBatterySample
 import com.dzid26.teslable.core.history.toDriveSample
 import com.dzid26.teslable.core.history.toStatusSample
-import com.dzid26.teslable.core.protocol.TeslaCommands
+import com.tesla.generated.carserver.vehicle.ChargeState
 import com.tesla.generated.carserver.vehicle.DriveState
 import com.tesla.generated.vcsec.VehicleStatus
 import kotlinx.coroutines.CoroutineScope
@@ -97,16 +97,14 @@ class HistoryStore(
      */
     fun record(
         vehicleId: String,
-        charge: TeslaCommands.Charge,
+        charge: ChargeState,
         acquiredAt: Instant,
         rssi: Int?,
     ) {
-        // Every reply is logged as the car sent it; Charge is a parsed view.
-        // Chart time comes only from the car's own timestamp and is never
-        // filled in, so a reply without one (or without a level) stays in the
-        // log but off the chart.
-        val raw = charge.raw ?: return
-        val record = BleRecord(acquired_at = acquiredAt, rssi = rssi, charge_state = raw)
+        // Every reply is logged as the car sent it. Chart time comes only from
+        // the car's own timestamp and is never filled in, so a reply without
+        // one (or without a level) stays in the log but off the chart.
+        val record = BleRecord(acquired_at = acquiredAt, rssi = rssi, charge_state = charge)
         val sample = record.toBatterySample(vehicleId)
         scope.launch {
             mutex.withLock {
