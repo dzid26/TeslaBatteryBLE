@@ -34,7 +34,7 @@ import java.time.Instant
  * memory and exposed as [StateFlow]s:
  * - `<vehicleId>.charge.pblog`: one record per SOC read, on the car's own
  *   `ChargeState.timestamp` ([samples]);
- * - `<vehicleId>.status.pblog`: VCSEC status readings logged when
+ * - `<vehicleId>.vcsec.pblog`: VCSEC status readings logged when
  *   [shouldLogStatus] says so, timed by `acquired_at` ([statusSamples]).
  *
  * Older raw `<vehicleId>.pblog` charge files and the pre-store CSV history are
@@ -145,8 +145,8 @@ class HistoryStore(
         /** `<vehicleId>.charge.pblog`: charge replies in [BleRecord]s, on the car's own timestamp (ADR-0008). */
         const val CHARGE_LOG_SUFFIX = ".charge.pblog"
 
-        /** `<vehicleId>.status.pblog`: VCSEC status replies in [BleRecord]s, timed by `acquired_at` (ADR-0008). */
-        const val STATUS_LOG_SUFFIX = ".status.pblog"
+        /** `<vehicleId>.vcsec.pblog`: VCSEC status replies in [BleRecord]s, timed by `acquired_at` (ADR-0008). */
+        const val STATUS_LOG_SUFFIX = ".vcsec.pblog"
         const val MAX_SAMPLES = 20_000
     }
 }

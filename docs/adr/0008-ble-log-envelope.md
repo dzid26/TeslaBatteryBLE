@@ -47,7 +47,7 @@ identity), `docs/requirements/multi-phone.md`
 - **One file per vehicle per kind**, in `filesDir/battery-history/`, framed by
   the same `ProtoLog` codec with the same 20k-record cap and trim per file:
   - `<vehicleId>.charge.pblog` for charge replies;
-  - `<vehicleId>.status.pblog` for VCSEC status replies;
+  - `<vehicleId>.vcsec.pblog` for VCSEC status replies;
   - `<vehicleId>.drive.pblog` for DriveState replies, later.
 
   Each kind has its own suffix and none ends with another, so a reader never
@@ -88,7 +88,9 @@ identity), `docs/requirements/multi-phone.md`
   old files stay in app storage, so a one-time import that wraps them in
   `BleRecord`s can come later if wanted; the charge timeline needs no
   `acquired_at`, so those records could leave it absent. No migration code
-  runs.
+  runs. Status logs use the new name `.vcsec.pblog`, so a `.status.pblog`
+  left by a pre-merge test build (an earlier record format) is ignored the
+  same way instead of hiding every later record.
 - **Clock skew.** Status samples sit on the phone's clock, charge samples on
   the car's. The two agree to within seconds, which is fine for this use:
   status marks stretches of minutes to hours (asleep, parked, someone in the
