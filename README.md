@@ -29,7 +29,9 @@ Light and dark themes, side by side.
 
 - **Scan & connect** to nearby Teslas by advertised BLE name, with VIN-based hinting
 - **Pair a key** (CHARGING_MANAGER role by default) via Tesla's unsigned `addKey` flow: NFC card tap on the console + vehicle confirmation
-- **Read battery SOC** and charge state over an authenticated, encrypted session
+- **Read battery SOC** and charge state over an authenticated, encrypted session; a
+  reading older than five minutes turns gray, and the car view and the notification
+  say how long ago it was read
 - **On-demand wake** — the car is only woken when you ask, never in the background
 - **Background tracking** via a foreground service: SOC timeline and connection state while parked or charging
 - **History graph** (6 h / 24 h / 7 d / all) with since-last-charge stats;

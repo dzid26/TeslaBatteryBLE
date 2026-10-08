@@ -44,6 +44,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -54,15 +55,20 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import com.dzid26.teslable.ble.BleUiState
 import com.dzid26.teslable.ble.ConnectionPhase
 import com.dzid26.teslable.ble.LogEntry
+import com.dzid26.teslable.ble.STALENESS_TICK_MS
 import com.dzid26.teslable.ble.TeslaAdvert
 import com.dzid26.teslable.ble.TeslaConnection
 import com.dzid26.teslable.ble.Vehicle
 import com.dzid26.teslable.ble.batteryPercent
 import com.dzid26.teslable.ble.connectionDisplay
 import com.dzid26.teslable.core.history.BatterySample
+import kotlinx.coroutines.delay
 
 /**
  * Two surfaces, no tabs: the cars list, and the car you opened. The last car
@@ -468,7 +474,7 @@ private fun VehicleCard(
     onWake: () -> Unit,
 ) {
     val display = connectionDisplay(row.connection, row.advert, vehicle = row.vehicle)
-    val reading = batteryPercent(row.connection, row.lastKnown, System.currentTimeMillis())
+    val reading = batteryPercent(row.connection, row.lastKnown, rememberNowMillis())
     val canWake =
         row.connection?.status?.asleep == true &&
             row.connection?.sessions?.contains("DOMAIN_VEHICLE_SECURITY") == true
@@ -646,6 +652,26 @@ internal fun StatusPill(
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
         )
     }
+}
+
+/**
+ * The wall clock, re-read each time the screen starts and then every
+ * [STALENESS_TICK_MS] while it shows. A reading's age measured against it keeps
+ * growing on a quiet screen, where a clock read once per composition would leave
+ * an old reading looking fresh until something else redrew the screen.
+ */
+@Composable
+internal fun rememberNowMillis(): Long {
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    val nowMillis by produceState(System.currentTimeMillis(), lifecycle) {
+        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            while (true) {
+                value = System.currentTimeMillis()
+                delay(STALENESS_TICK_MS)
+            }
+        }
+    }
+    return nowMillis
 }
 
 @Composable

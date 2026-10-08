@@ -104,6 +104,12 @@ fun BleUiState.shouldTrack(): Boolean =
 /** How old a reading may be before the UI treats it as last known, not live. */
 const val STALE_READING_MS = 5 * 60_000L
 
+/**
+ * How often a screen or the notification re-checks reading ages, so a reading
+ * can turn stale while it is on display instead of waiting for new data.
+ */
+const val STALENESS_TICK_MS = 60_000L
+
 /** A battery percentage with its freshness: live, or the last stored sample. */
 data class BatteryPercent(
     val value: Int,
@@ -133,6 +139,25 @@ fun batteryPercent(
     }
     return lastKnown?.let {
         BatteryPercent(value = it.percent, stale = true, readAtMillis = it.timestampMillis)
+    }
+}
+
+/** Minute granularity for the age shown next to a stale percentage. */
+private const val AGE_BUCKET_MINUTES = 10
+
+/**
+ * How long ago a reading was taken, worded the same on the notification and the
+ * car view: "just now" while it is under [STALE_READING_MS] old, then coarse
+ * buckets ("10m ago", "2h ago", "3d ago") so the notification re-posts at most
+ * every [AGE_BUCKET_MINUTES] minutes.
+ */
+fun readingAgeText(ageMillis: Long): String {
+    val minutes = ageMillis / 60_000
+    return when {
+        ageMillis < STALE_READING_MS -> "just now"
+        minutes < 60 -> "${(minutes / AGE_BUCKET_MINUTES).coerceAtLeast(1) * AGE_BUCKET_MINUTES}m ago"
+        minutes < 24 * 60 -> "${minutes / 60}h ago"
+        else -> "${minutes / (24 * 60)}d ago"
     }
 }
 

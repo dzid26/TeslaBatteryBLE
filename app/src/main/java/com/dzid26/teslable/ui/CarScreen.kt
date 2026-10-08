@@ -55,14 +55,17 @@ import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
+import com.dzid26.teslable.ble.BatteryPercent
 import com.dzid26.teslable.ble.BleUiState
 import com.dzid26.teslable.ble.ConnectionPhase
 import com.dzid26.teslable.ble.PairingPhase
 import com.dzid26.teslable.ble.TeslaAdvert
 import com.dzid26.teslable.ble.TeslaConnection
 import com.dzid26.teslable.ble.Vehicle
+import com.dzid26.teslable.ble.batteryPercent
 import com.dzid26.teslable.ble.chargingStateText
 import com.dzid26.teslable.ble.connectionDisplay
+import com.dzid26.teslable.ble.readingAgeText
 import com.dzid26.teslable.ble.vehicleStatusText
 import com.dzid26.teslable.core.history.BatterySample
 import com.dzid26.teslable.core.history.ChargeProjection
@@ -215,10 +218,11 @@ private fun HeroCard(
     val context = LocalContext.current
     val display = connectionDisplay(connection, advert, vehicle = vehicle)
     val charge = connection?.charge
-    val level = charge?.batteryLevel
     // With no live reading, the newest stored sample still answers "how full
     // is the car?" at a glance; the caption makes its age explicit.
     val lastKnown = history.lastOrNull()
+    val nowMillis = rememberNowMillis()
+    val reading = batteryPercent(connection, lastKnown, nowMillis)
     val keySlot = connection?.keySlot ?: vehicle?.keySlot
     val pairing = connection?.pairing ?: PairingPhase.IDLE
     Card(
@@ -264,7 +268,13 @@ private fun HeroCard(
                 )
             }
             Spacer(Modifier.height(12.dp))
-            SocBlock(level = level, lastKnown = lastKnown, stateText = display.stateText)
+            SocBlock(
+                reading = reading,
+                live = charge?.batteryLevel != null,
+                lastKnown = lastKnown,
+                stateText = display.stateText,
+                nowMillis = nowMillis,
+            )
             Spacer(Modifier.height(8.dp))
             connection?.status?.let { status ->
                 Text(vehicleStatusText(status), style = MaterialTheme.typography.bodySmall)
@@ -293,76 +303,67 @@ private fun ChargeDetails(charge: TeslaCommands.Charge?) {
     }
 }
 
-/** The big battery reading: live percent, last known, or the connection state. */
+/**
+ * The big battery reading, colored like the cars list: primary while fresh,
+ * outline once stale, with how old it is under the number. With no reading at
+ * all, the connection state shows instead.
+ */
 @Composable
 private fun SocBlock(
-    level: Int?,
+    reading: BatteryPercent?,
+    live: Boolean,
     lastKnown: BatterySample?,
     stateText: String,
+    nowMillis: Long,
 ) {
-    when {
-        level != null -> {
-            Row(verticalAlignment = Alignment.Bottom) {
-                Text(
-                    text = "$level",
-                    style = MaterialTheme.typography.displayLarge,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Text(
-                    text = "%",
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(bottom = 6.dp),
-                )
-            }
-            Spacer(Modifier.height(8.dp))
-            LinearProgressIndicator(
-                progress = { level / 100f },
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .height(8.dp)
-                        .clip(RoundedCornerShape(4.dp)),
-            )
-        }
-
-        lastKnown != null -> {
-            Row(verticalAlignment = Alignment.Bottom) {
-                Text(
-                    text = "${lastKnown.percent}",
-                    style = MaterialTheme.typography.displayLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.outline,
-                )
-                Text(
-                    text = "%",
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = MaterialTheme.colorScheme.outline,
-                    modifier = Modifier.padding(bottom = 6.dp),
-                )
-            }
-            Spacer(Modifier.height(4.dp))
-            val age = System.currentTimeMillis() - lastKnown.timestampMillis
+    if (reading == null) {
+        Text(text = stateText, style = MaterialTheme.typography.headlineSmall)
+        return
+    }
+    val color = if (reading.stale) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.primary
+    Row(verticalAlignment = Alignment.Bottom) {
+        Text(
+            text = "${reading.value}",
+            style = MaterialTheme.typography.displayLarge,
+            fontWeight = FontWeight.SemiBold,
+            color = color,
+        )
+        Text(
+            text = "%",
+            style = MaterialTheme.typography.headlineSmall,
+            color = color,
+            modifier = Modifier.padding(bottom = 6.dp),
+        )
+    }
+    val readAtMillis = reading.readAtMillis
+    if (reading.stale && readAtMillis != null) {
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = "Last known · ${readingAgeText(nowMillis - readAtMillis)}",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+    if (live) {
+        Spacer(Modifier.height(8.dp))
+        LinearProgressIndicator(
+            progress = { reading.value / 100f },
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .height(8.dp)
+                    .clip(RoundedCornerShape(4.dp)),
+            color = color,
+        )
+    } else {
+        // The stored sample carries its own range; a live one shows it below.
+        lastKnown?.ratedRangeMiles?.let { miles ->
             Text(
-                text =
-                    if (age < 60_000) {
-                        "Last known · just now"
-                    } else {
-                        "Last known · ${formatDuration(age)} ago"
-                    },
+                text = "${formatRangeMiles(miles)} mi",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            lastKnown.ratedRangeMiles?.let { miles ->
-                Text(
-                    text = "${formatRangeMiles(miles)} mi",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
         }
-
-        else -> Text(text = stateText, style = MaterialTheme.typography.headlineSmall)
     }
 }
 
