@@ -3,12 +3,11 @@
 ## Versioning policy
 
 - Semantic versioning (`MAJOR.MINOR.PATCH`).
-- `versionCode` (integer, always increments) and `versionName` (semver string) live in `app/build.gradle.kts` (`defaultConfig`).
-- Git tags are `vX.Y.Z` and must match `versionName` (e.g. tag `v0.2.0` = `versionName "0.2.0"` with a bumped `versionCode`).
+- `versionName` and `versionCode` are derived from the git tag by `app/build.gradle.kts` (`git describe`): tag `v0.3.0-beta.3` builds as `versionName 0.3.0-beta.3`, and `versionCode` is computed from the semver (major*1,000,000 + minor*10,000 + patch*100 + pre-release number, 99 for a stable release). Nothing to bump by hand.
+- Git tags are `vX.Y.Z` or `vX.Y.Z-<pre>.N` (for example `v0.3.0-beta.3`); use one pre-release label per patch version so `versionCode` keeps rising.
 
 ## Pre-release
 
-- [ ] Bump `versionCode` (+1) and set `versionName` in `app/build.gradle.kts`.
 - [ ] Run `./gradlew :core:test` — must pass.
 - [ ] Run `./gradlew :app:testDebugUnitTest` — must pass.
 - [ ] Run `./gradlew :app:lintDebug` — must be clean.

@@ -17,6 +17,15 @@ import android.os.Looper
 import com.dzid26.teslable.core.TeslaGatt
 import com.dzid26.teslable.core.framing.BleFramer
 
+/**
+ * [TeslaTransport] over Android GATT.
+ *
+ * Every GATT callback runs on the main thread, the thread callers use, so the
+ * write queue, the framer and the listener need no locking. Android allows one
+ * GATT operation in flight per connection, so setup runs one step at a time:
+ * MTU exchange, then the CCCD write that enables indications, then the
+ * device-name read, then READY. Frames sent before READY wait in the queue.
+ */
 class TeslaGattClient(
     private val context: Context,
     private val listener: TeslaTransport.Listener,
@@ -25,9 +34,7 @@ class TeslaGattClient(
     private var txCharacteristic: BluetoothGattCharacteristic? = null
     private var rxCharacteristic: BluetoothGattCharacteristic? = null
     private var negotiatedMtu = DEFAULT_MTU
-    private var descriptorWriteDone = false
-    private var mtuDone = false
-    private var deviceNameRequested = false
+    private var setupStep = SetupStep.IDLE
     private val framer = BleFramer()
     private val handler = Handler(Looper.getMainLooper())
     private val writeQueue = ArrayDeque<ByteArray>()
@@ -52,7 +59,13 @@ class TeslaGattClient(
             return
         }
         listener.onPhase(ConnectionPhase.CONNECTING)
-        gatt = device.connectGatt(context, false, callback, BluetoothDevice.TRANSPORT_LE)
+        gatt =
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+                device.connectGatt(context, false, callback, BluetoothDevice.TRANSPORT_LE, BluetoothDevice.PHY_LE_1M_MASK, handler)
+            } else {
+                // Android 8.0 cannot hand notifications to a Handler safely; see binderCallback.
+                device.connectGatt(context, false, binderCallback, BluetoothDevice.TRANSPORT_LE)
+            }
     }
 
     @SuppressLint("MissingPermission")
@@ -63,9 +76,7 @@ class TeslaGattClient(
         txCharacteristic = null
         rxCharacteristic = null
         negotiatedMtu = DEFAULT_MTU
-        descriptorWriteDone = false
-        mtuDone = false
-        deviceNameRequested = false
+        setupStep = SetupStep.IDLE
         writeQueue.clear()
         writeInProgress = false
         handler.removeCallbacks(writeTimeout)
@@ -90,12 +101,13 @@ class TeslaGattClient(
 
     @SuppressLint("MissingPermission")
     private fun processWriteQueue() {
-        if (writeInProgress) return
+        if (writeInProgress || setupStep != SetupStep.DONE) return
         val gatt = gatt ?: return
         val characteristic = txCharacteristic ?: return
         val chunk = writeQueue.removeFirstOrNull() ?: return
 
         writeInProgress = true
+        // The Go reference writes with response; write without response is validated on a real car.
         val started =
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 gatt.writeCharacteristic(
@@ -175,7 +187,6 @@ class TeslaGattClient(
                 val service = gatt.getService(TeslaGatt.SERVICE_UUID)
                 if (service == null) {
                     listener.onLog("Tesla GATT service not found")
-                    descriptorWriteDone = true
                 } else {
                     txCharacteristic = service.getCharacteristic(TeslaGatt.TO_VEHICLE_UUID)
                     rxCharacteristic = service.getCharacteristic(TeslaGatt.FROM_VEHICLE_UUID)
@@ -183,19 +194,8 @@ class TeslaGattClient(
                         "TX characteristic: ${txCharacteristic != null}, " +
                             "RX characteristic: ${rxCharacteristic != null}",
                     )
-                    val rx = rxCharacteristic
-                    if (rx == null) {
-                        descriptorWriteDone = true
-                    } else {
-                        subscribe(gatt, rx)
-                    }
                 }
-
-                if (!gatt.requestMtu(MTU_REQUEST)) {
-                    listener.onLog("requestMtu() returned false")
-                    mtuDone = true
-                }
-                maybeReadDeviceName(gatt)
+                if (setupStep == SetupStep.IDLE) exchangeMtu(gatt)
             }
 
             override fun onMtuChanged(
@@ -209,8 +209,7 @@ class TeslaGattClient(
                 } else {
                     listener.onLog("MTU negotiation failed with status $status")
                 }
-                mtuDone = true
-                maybeReadDeviceName(gatt)
+                if (setupStep == SetupStep.MTU) subscribe(gatt)
             }
 
             override fun onDescriptorWrite(
@@ -218,7 +217,7 @@ class TeslaGattClient(
                 descriptor: BluetoothGattDescriptor,
                 status: Int,
             ) {
-                if (descriptor.uuid == TeslaGatt.CLIENT_CHARACTERISTIC_CONFIG_UUID) {
+                if (descriptor.uuid == TeslaGatt.CLIENT_CHARACTERISTIC_CONFIG_UUID && setupStep == SetupStep.NOTIFICATIONS) {
                     listener.onLog(
                         if (status == BluetoothGatt.GATT_SUCCESS) {
                             "Notifications enabled"
@@ -226,8 +225,7 @@ class TeslaGattClient(
                             "Notification setup failed with status $status"
                         },
                     )
-                    descriptorWriteDone = true
-                    maybeReadDeviceName(gatt)
+                    readGattDeviceName(gatt)
                 }
             }
 
@@ -237,9 +235,7 @@ class TeslaGattClient(
                 characteristic: BluetoothGattCharacteristic,
                 status: Int,
             ) {
-                if (status == BluetoothGatt.GATT_SUCCESS) {
-                    handleDeviceName(characteristic.value)
-                }
+                handleDeviceName(characteristic.value, status)
             }
 
             override fun onCharacteristicRead(
@@ -248,9 +244,7 @@ class TeslaGattClient(
                 value: ByteArray,
                 status: Int,
             ) {
-                if (status == BluetoothGatt.GATT_SUCCESS) {
-                    handleDeviceName(value)
-                }
+                handleDeviceName(value, status)
             }
 
             @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
@@ -294,15 +288,112 @@ class TeslaGattClient(
             }
         }
 
-    @SuppressLint("MissingPermission")
-    private fun subscribe(
+    /**
+     * Android 8.0 only. Its BluetoothGatt stores each notification in the shared
+     * characteristic on the Binder thread before posting the callback to a
+     * Handler, so a queued callback can read the next notification's bytes
+     * (fixed in 8.1). There the client takes callbacks on the Binder thread,
+     * reads values at once and posts the work to the main thread itself.
+     */
+    private val binderCallback =
+        object : BluetoothGattCallback() {
+            override fun onConnectionStateChange(
+                gatt: BluetoothGatt,
+                status: Int,
+                newState: Int,
+            ) {
+                postToMain(gatt) { callback.onConnectionStateChange(gatt, status, newState) }
+            }
+
+            override fun onServicesDiscovered(
+                gatt: BluetoothGatt,
+                status: Int,
+            ) {
+                postToMain(gatt) { callback.onServicesDiscovered(gatt, status) }
+            }
+
+            override fun onMtuChanged(
+                gatt: BluetoothGatt,
+                mtu: Int,
+                status: Int,
+            ) {
+                postToMain(gatt) { callback.onMtuChanged(gatt, mtu, status) }
+            }
+
+            override fun onDescriptorWrite(
+                gatt: BluetoothGatt,
+                descriptor: BluetoothGattDescriptor,
+                status: Int,
+            ) {
+                postToMain(gatt) { callback.onDescriptorWrite(gatt, descriptor, status) }
+            }
+
+            @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
+            override fun onCharacteristicRead(
+                gatt: BluetoothGatt,
+                characteristic: BluetoothGattCharacteristic,
+                status: Int,
+            ) {
+                val value = characteristic.value
+                postToMain(gatt) { handleDeviceName(value, status) }
+            }
+
+            @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
+            override fun onCharacteristicChanged(
+                gatt: BluetoothGatt,
+                characteristic: BluetoothGattCharacteristic,
+            ) {
+                val value = characteristic.value
+                postToMain(gatt) { handleNotification(value) }
+            }
+
+            override fun onCharacteristicWrite(
+                gatt: BluetoothGatt,
+                characteristic: BluetoothGattCharacteristic,
+                status: Int,
+            ) {
+                postToMain(gatt) { callback.onCharacteristicWrite(gatt, characteristic, status) }
+            }
+
+            override fun onReadRemoteRssi(
+                gatt: BluetoothGatt,
+                rssi: Int,
+                status: Int,
+            ) {
+                postToMain(gatt) { callback.onReadRemoteRssi(gatt, rssi, status) }
+            }
+        }
+
+    /** Runs [block] on the main thread unless [gatt] was closed or replaced by then. */
+    private fun postToMain(
         gatt: BluetoothGatt,
-        characteristic: BluetoothGattCharacteristic,
+        block: () -> Unit,
     ) {
+        handler.post { if (gatt === this.gatt) block() }
+    }
+
+    /** Setup step 1: MTU exchange, so frames sent after READY use full-size chunks. */
+    @SuppressLint("MissingPermission")
+    private fun exchangeMtu(gatt: BluetoothGatt) {
+        setupStep = SetupStep.MTU
+        if (!gatt.requestMtu(MTU_REQUEST)) {
+            listener.onLog("requestMtu() returned false")
+            subscribe(gatt)
+        }
+    }
+
+    /** Setup step 2: enable indications on the RX characteristic. */
+    @SuppressLint("MissingPermission")
+    private fun subscribe(gatt: BluetoothGatt) {
+        setupStep = SetupStep.NOTIFICATIONS
+        val characteristic = rxCharacteristic
+        if (characteristic == null) {
+            readGattDeviceName(gatt)
+            return
+        }
         if (!gatt.setCharacteristicNotification(characteristic, true)) {
             listener.onLog("setCharacteristicNotification() failed")
-            descriptorWriteDone = true
-            maybeReadDeviceName(gatt)
+            readGattDeviceName(gatt)
             return
         }
         val descriptor =
@@ -310,8 +401,7 @@ class TeslaGattClient(
                 .getDescriptor(TeslaGatt.CLIENT_CHARACTERISTIC_CONFIG_UUID)
         if (descriptor == null) {
             listener.onLog("CCCD descriptor missing")
-            descriptorWriteDone = true
-            maybeReadDeviceName(gatt)
+            readGattDeviceName(gatt)
             return
         }
         val value = BluetoothGattDescriptor.ENABLE_INDICATION_VALUE
@@ -326,41 +416,50 @@ class TeslaGattClient(
             }
         if (!started) {
             listener.onLog("writeDescriptor() failed")
-            descriptorWriteDone = true
-            maybeReadDeviceName(gatt)
-        }
-    }
-
-    private fun maybeReadDeviceName(gatt: BluetoothGatt) {
-        if (descriptorWriteDone && mtuDone && !deviceNameRequested) {
-            deviceNameRequested = true
             readGattDeviceName(gatt)
         }
     }
 
+    /** Setup step 3: read the GAP device name; READY follows whether or not it works. */
     @SuppressLint("MissingPermission")
     private fun readGattDeviceName(gatt: BluetoothGatt) {
+        setupStep = SetupStep.DEVICE_NAME
         val characteristic =
             gatt
                 .getService(GENERIC_ACCESS_SERVICE)
                 ?.getCharacteristic(DEVICE_NAME_CHARACTERISTIC)
         if (characteristic == null) {
             listener.onLog("Device name characteristic not exposed")
-            listener.onPhase(ConnectionPhase.READY)
+            finishSetup()
             return
         }
         if (!gatt.readCharacteristic(characteristic)) {
             listener.onLog("readCharacteristic() returned false")
-            listener.onPhase(ConnectionPhase.READY)
+            finishSetup()
         }
     }
 
-    private fun handleDeviceName(value: ByteArray?) {
-        val name = value?.toString(Charsets.UTF_8)?.trim()
-        if (!name.isNullOrEmpty()) {
-            listener.onLog("Device name: $name")
+    private fun handleDeviceName(
+        value: ByteArray?,
+        status: Int,
+    ) {
+        if (setupStep != SetupStep.DEVICE_NAME) return
+        if (status == BluetoothGatt.GATT_SUCCESS) {
+            val name = value?.toString(Charsets.UTF_8)?.trim()
+            if (!name.isNullOrEmpty()) {
+                listener.onLog("Device name: $name")
+            }
+            listener.onGattDeviceName(name)
+        } else {
+            listener.onLog("Device name read failed with status $status")
         }
-        listener.onGattDeviceName(name)
+        finishSetup()
+    }
+
+    /** Frames queued during setup go out first, then the link reports READY. */
+    private fun finishSetup() {
+        setupStep = SetupStep.DONE
+        processWriteQueue()
         listener.onPhase(ConnectionPhase.READY)
     }
 
@@ -370,6 +469,9 @@ class TeslaGattClient(
             listener.onMessage(message)
         }
     }
+
+    /** Setup after service discovery; each step waits for the previous step's callback. */
+    private enum class SetupStep { IDLE, MTU, NOTIFICATIONS, DEVICE_NAME, DONE }
 
     companion object {
         private const val MTU_REQUEST = 256
