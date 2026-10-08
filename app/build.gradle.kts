@@ -23,6 +23,9 @@ val keystoreProperties =
 // Preview, release and demo builds never set it and keep the real ID.
 val ciDebugBuild = project.findProperty("ciDebugBuild") == "true"
 
+// Pull request number (-PciPrNumber=<n>), shown in the PR build's versionName.
+val ciPrNumber = (project.findProperty("ciPrNumber") as String?).orEmpty()
+
 android {
     namespace = "com.dzid26.teslable"
     compileSdk = 37
@@ -60,7 +63,7 @@ android {
             signingConfigs.findByName("release")?.let { signingConfig = it }
             if (ciDebugBuild) {
                 applicationIdSuffix = ".pr"
-                versionNameSuffix = "-pr"
+                versionNameSuffix = "-pr$ciPrNumber"
                 manifestPlaceholders["appLabel"] = "TeslaBatteryBLE PR"
             }
         }
