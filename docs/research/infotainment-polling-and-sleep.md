@@ -1,43 +1,57 @@
 # Infotainment polling and vehicle sleep
 
 Evidence behind ADR-0009. Competitive research lives here only (AGENTS.md).
+Sources were read on 2026-10-08; quotes are short extracts.
 
-## Observed by other BLE projects
+## What other projects found
 
-- yoziru/esphome-tesla-ble, PR #198 (https://github.com/yoziru/esphome-tesla-ble/pull/198):
-  found that polling the Infotainment domain keeps the car awake. The owner of
-  that project confirmed it and approved a back-off model.
-- yoziru/esphome-tesla-ble, PR #213 (https://github.com/yoziru/esphome-tesla-ble/pull/213):
-  the back-off model, as the owner described it to us:
-  - VCSEC status every 10 s, always: it does not affect sleep, and it keeps the
-    BLE link alive (cars drop idle links after about 30 s).
-  - Infotainment every 10 s while the car is "active".
-  - Every 30 s while awake but not active, for an idle window of 660 s after the
-    last activity; the window also restarts on (re)connect.
-  - After the window, one Infotainment poll every 660 s, never waking the car.
-  - Only genuine activity resets the idle timer. "User present" is true whenever
-    a phone key is near, and merely staying unlocked is not activity.
-  - A car that blips awake on its own must not restart the window, or it is kept
-    awake each time it tries to sleep.
-- yoziru/esphome-tesla-ble issues #201 and #202
-  (https://github.com/yoziru/esphome-tesla-ble/issues/201,
-  https://github.com/yoziru/esphome-tesla-ble/issues/202): related reports.
-  Not re-read for ADR-0009; check them before citing specifics.
-- tesla_ble_mqtt and TeslaMate's documentation on vehicle sleep also describe
-  Infotainment or API polling as a reason a car stays awake. Not re-read for
-  ADR-0009; the maintainer should add links when verifying.
+- **VCSEC status does not affect sleep.** Tesla's Go SDK says a VCSEC-only
+  client "can avoid waking infotainment"
+  (https://pkg.go.dev/github.com/teslamotors/vehicle-command/pkg/vehicle).
+  The esphome-tesla-ble README: "VCSEC status polling is low-power and does not
+  affect vehicle sleep" (https://github.com/yoziru/esphome-tesla-ble).
+- **Infotainment polling keeps the car awake.** esphome-tesla-ble PR #198:
+  "Infotainment polling with WAKE_IF_NEEDED every 30s kept the car awake,
+  preventing VCSEC from ever reporting ASLEEP"
+  (https://github.com/yoziru/esphome-tesla-ble/pull/198).
+- **Their back-off, PR #213** (https://github.com/yoziru/esphome-tesla-ble/pull/213),
+  read from the code (`TeslaBLEVehicle::update`):
+  - VCSEC every 10 s, always.
+  - "Active" is charging or Sentry Mode only. Unlocked and user present were
+    removed, because "a car that is merely left unlocked, or reports user
+    presence because a phone is in range, can still fall asleep on its own"
+    (their issues #201 and #202).
+  - Infotainment every 10 s while active, every 30 s while awake and idle for
+    the first 660 s after the last activity or a (re)connect, then every 660 s
+    without waking the car.
+  - "A car that is merely observed asleep, or briefly blips awake on its own,
+    must not restart the aggressive polling window or it would be re-woken
+    every time it tried to sleep."
+- **Idle time before sleep.** esphome-tesla-ble defaults to 660 s ("default 11
+  min"); tesla_ble_mqtt recommends at least 660 s
+  (https://github.com/iainbullock/tesla_ble_mqtt_docker). TeslaMate's FAQ: the
+  car "does not fall asleep before it have been inactive for some 15 minutes"
+  (cloud API, not BLE;
+  https://github.com/teslamate-org/teslamate/blob/main/website/docs/faq.md).
+- **Idle links.** TeslaBleHttpProxy: cars "may terminate connections after ~30
+  seconds" (https://github.com/wimaha/TeslaBleHttpProxy#connection-timeouts).
+  Our 10 s VCSEC status poll keeps the link busy.
 
-## Our own premise
+## Where ADR-0009 differs, and why
 
 - Any Infotainment request restarts the car's own sleep countdown (about 10
-  minutes), per the project owner (2026-10-08). So the window in PR #213 (30 s
-  reads for 11 minutes) keeps a car awake about 21 minutes instead of 10, and
-  its 660 s idle reads keep it awake indefinitely when the idle gap is shorter
-  than the countdown. This app never wakes the car and rides along on drives and
-  charges, so ADR-0009 keeps only the activity model: 10 s while charging or
-  driving, otherwise single event reads.
+  minutes; the project owner's premise, 2026-10-08). A 30 s window for 11
+  minutes would keep the car awake about 21 minutes instead of 10, and 660 s
+  idle reads could keep it awake indefinitely. So ADR-0009 drops both: 10 s
+  while charging or driving, otherwise single reads on events.
+- Driving counts as active because the phone rides along; the ESP32 bridge
+  stays home and never sees a drive.
+- This app never wakes the car, so a wake-up blip gets one read and no window.
+
+## To measure
+
 - Not yet measured on a real car. The real-car check in the ADR-0009 PR is the
-  first measurement; record the result here.
+  first measurement: record the time from idle to asleep here.
 
 ## Related
 
