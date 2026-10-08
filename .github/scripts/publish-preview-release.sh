@@ -10,7 +10,6 @@ REPO="${GITHUB_REPOSITORY:?GITHUB_REPOSITORY is required}"
 SHA="${GITHUB_SHA:-$(git rev-parse HEAD)}"
 TAG="preview"
 TITLE="Preview build"
-SHORT_SHA="${SHA:0:7}"
 
 git fetch --tags origin
 
