@@ -66,11 +66,15 @@ class BleRecordMappingTest {
             userPresence = UserPresence_E.VEHICLE_USER_PRESENCE_NOT_PRESENT,
         )
 
+    private val connected = ConnectionEvent(state = ConnectionEvent.State.CONNECTED)
+
+    private val disconnected = ConnectionEvent(state = ConnectionEvent.State.DISCONNECTED)
+
     @Test
     fun `envelope fields follow a reading's order on the wire`() {
         // Field numbers are the stored format (ADR-0008): time, VCSEC status,
-        // charge, drive, then the signal strength (5) and the link event (6)
-        // added later. The logs are append-only, so renumbering would orphan
+        // charge, drive, then the signal strength (5) and the connection event
+        // (6) added later. The logs are append-only, so renumbering would orphan
         // every record already written. The first byte of each encoding is the
         // field's tag.
         fun tag(record: BleRecord) = record.encode().first().toInt()
@@ -81,15 +85,15 @@ class BleRecordMappingTest {
         assertEquals(2 shl 3 or lengthDelimited, tag(BleRecord(vehicle_status = asleep)))
         assertEquals(3 shl 3 or lengthDelimited, tag(BleRecord(charge_state = charging)))
         assertEquals(4 shl 3 or lengthDelimited, tag(BleRecord(drive_state = DriveState())))
-        assertEquals(5 shl 3 or varint, tag(BleRecord(rssi_dbm = -60)))
-        assertEquals(6 shl 3 or lengthDelimited, tag(BleRecord(link_event = LinkEvent(state = LinkEvent.State.CONNECTED))))
+        assertEquals(5 shl 3 or varint, tag(BleRecord(rssi = -60)))
+        assertEquals(6 shl 3 or lengthDelimited, tag(BleRecord(connection_event = connected)))
     }
 
     @Test
-    fun `link event states keep their numbers on the wire`() {
-        // The state is field 1 of LinkEvent: tag 0x08, then the enum number.
-        assertContentEquals(byteArrayOf(0x08, 1), LinkEvent(state = LinkEvent.State.CONNECTED).encode())
-        assertContentEquals(byteArrayOf(0x08, 2), LinkEvent(state = LinkEvent.State.LOST).encode())
+    fun `connection event states keep their numbers on the wire`() {
+        // The state is field 1 of ConnectionEvent: tag 0x08, then the enum number.
+        assertContentEquals(byteArrayOf(0x08, 1), ConnectionEvent(state = ConnectionEvent.State.CONNECTED).encode())
+        assertContentEquals(byteArrayOf(0x08, 2), ConnectionEvent(state = ConnectionEvent.State.DISCONNECTED).encode())
     }
 
     @Test
@@ -191,17 +195,17 @@ class BleRecordMappingTest {
         val charge = BleRecord(acquired_at = acquiredAt, charge_state = charging)
         val status = BleRecord(acquired_at = acquiredAt, vehicle_status = asleep)
         val drive = BleRecord(acquired_at = acquiredAt, drive_state = driving)
-        val link = BleRecord(acquired_at = acquiredAt, rssi_dbm = -70, link_event = LinkEvent(state = LinkEvent.State.CONNECTED))
+        val connection = BleRecord(acquired_at = acquiredAt, rssi = -70, connection_event = connected)
         assertNull(charge.toStatusSample("car"))
         assertNull(charge.toDriveSample("car"))
         assertNull(status.toBatterySample("car"))
         assertNull(status.toDriveSample("car"))
         assertNull(drive.toBatterySample("car"))
         assertNull(drive.toStatusSample("car"))
-        // A link event feeds no read model.
-        assertNull(link.toBatterySample("car"))
-        assertNull(link.toStatusSample("car"))
-        assertNull(link.toDriveSample("car"))
+        // A connection event feeds no read model.
+        assertNull(connection.toBatterySample("car"))
+        assertNull(connection.toStatusSample("car"))
+        assertNull(connection.toDriveSample("car"))
         val empty = BleRecord(acquired_at = acquiredAt)
         assertNull(empty.toBatterySample("car"))
         assertNull(empty.toDriveSample("car"))
@@ -223,38 +227,38 @@ class BleRecordMappingTest {
     }
 
     @Test
-    fun `link events and signal strength round-trip through the log codec`() {
+    fun `connection events and signal strength round-trip through the log codec`() {
         val records =
             listOf(
-                BleRecord(acquired_at = ofEpochSecond(10, 0), rssi_dbm = -72, link_event = LinkEvent(state = LinkEvent.State.CONNECTED)),
-                BleRecord(acquired_at = ofEpochSecond(11, 0), rssi_dbm = -58, vehicle_status = asleep),
-                BleRecord(acquired_at = ofEpochSecond(12, 0), rssi_dbm = -64, charge_state = charging),
-                BleRecord(acquired_at = ofEpochSecond(13, 0), rssi_dbm = -80, link_event = LinkEvent(state = LinkEvent.State.LOST)),
+                BleRecord(acquired_at = ofEpochSecond(10, 0), rssi = -72, connection_event = connected),
+                BleRecord(acquired_at = ofEpochSecond(11, 0), rssi = -58, vehicle_status = asleep),
+                BleRecord(acquired_at = ofEpochSecond(12, 0), rssi = -64, charge_state = charging),
+                BleRecord(acquired_at = ofEpochSecond(13, 0), rssi = -80, connection_event = disconnected),
                 // The phone had no reading yet.
-                BleRecord(acquired_at = ofEpochSecond(14, 0), link_event = LinkEvent(state = LinkEvent.State.CONNECTED)),
+                BleRecord(acquired_at = ofEpochSecond(14, 0), connection_event = connected),
             )
         val decoded = ProtoLog.decode(ProtoLog.encode(records), BleRecord.ADAPTER)
         assertEquals(records, decoded)
-        assertEquals(-72, decoded[0].rssi_dbm)
-        assertEquals(LinkEvent.State.CONNECTED, decoded[0].link_event?.state)
-        assertEquals(LinkEvent.State.LOST, decoded[3].link_event?.state)
-        assertNull(decoded[4].rssi_dbm)
+        assertEquals(-72, decoded[0].rssi)
+        assertEquals(ConnectionEvent.State.CONNECTED, decoded[0].connection_event?.state)
+        assertEquals(ConnectionEvent.State.DISCONNECTED, decoded[3].connection_event?.state)
+        assertNull(decoded[4].rssi)
     }
 
     @Test
     fun `a record without a signal strength reads it as absent`() {
-        // A record from before rssi_dbm existed, or from a phone with no reading, has no field 5.
+        // A record from before rssi existed, or from a phone with no reading, has no field 5.
         val withoutSignal = BleRecord(acquired_at = ofEpochSecond(5, 0), vehicle_status = asleep)
         val decoded = ProtoLog.decode(ProtoLog.encode(listOf(withoutSignal)), BleRecord.ADAPTER).single()
-        assertNull(decoded.rssi_dbm)
+        assertNull(decoded.rssi)
         assertEquals(withoutSignal, decoded)
         // A reading of 0 dBm is a reading, not an absence.
-        assertEquals(0, BleRecord.ADAPTER.decode(BleRecord(rssi_dbm = 0).encode()).rssi_dbm)
+        assertEquals(0, BleRecord.ADAPTER.decode(BleRecord(rssi = 0).encode()).rssi)
     }
 
     @Test
     fun `a payload kind from a newer version reads as a record without a known payload`() {
-        // A newer writer's record: field 7, a payload kind added after link_event, beside acquired_at.
+        // A newer writer's record: field 7, a payload kind added after connection_event, beside acquired_at.
         val fieldSeven = byteArrayOf(0x3A, 0x02, 0x08, 0x01)
         val record = BleRecord.ADAPTER.decode(BleRecord(acquired_at = ofEpochSecond(5, 0)).encode() + fieldSeven)
         assertEquals(ofEpochSecond(5, 0), record.acquired_at)

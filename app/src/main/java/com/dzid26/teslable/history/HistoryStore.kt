@@ -5,8 +5,8 @@ package com.dzid26.teslable.history
 import android.content.Context
 import com.dzid26.teslable.core.history.BatterySample
 import com.dzid26.teslable.core.history.BleRecord
+import com.dzid26.teslable.core.history.ConnectionEvent
 import com.dzid26.teslable.core.history.DriveSample
-import com.dzid26.teslable.core.history.LinkEvent
 import com.dzid26.teslable.core.history.ProtoLog
 import com.dzid26.teslable.core.history.StatusSample
 import com.dzid26.teslable.core.history.shouldLogStatus
@@ -42,11 +42,11 @@ import java.time.Instant
  *   ones with the car's own `ChargeState.timestamp` and a level ([samples]);
  * - `<vehicleId>.drive.pblog`: every DriveState reply, raw; [driveSamples]
  *   holds the ones with the car's own `DriveState.timestamp`;
- * - `<vehicleId>.link.pblog`: when the link to the car became ready or an
- *   established one dropped. Log only: nothing reads it back yet.
+ * - `<vehicleId>.connection.pblog`: when the connection to the car became
+ *   ready or an established one ended. Log only: nothing reads it back yet.
  *
  * Every record also carries the phone's latest RSSI for the car, when it had
- * one (`rssi_dbm`).
+ * one (`rssi`).
  *
  * Older raw `<vehicleId>.pblog` charge files and the pre-store CSV history are
  * neither read nor written (pre-1.0 reset).
@@ -60,7 +60,7 @@ class HistoryStore(
     private val chargeLogs = VehicleLogs(historyDir, CHARGE_LOG_SUFFIX)
     private val statusLogs = VehicleLogs(historyDir, STATUS_LOG_SUFFIX)
     private val driveLogs = VehicleLogs(historyDir, DRIVE_LOG_SUFFIX)
-    private val linkLogs = VehicleLogs(historyDir, LINK_LOG_SUFFIX)
+    private val connectionLogs = VehicleLogs(historyDir, CONNECTION_LOG_SUFFIX)
     private val _samples = MutableStateFlow<List<BatterySample>>(emptyList())
     val samples: StateFlow<List<BatterySample>> = _samples.asStateFlow()
     private val _statusSamples = MutableStateFlow<List<StatusSample>>(emptyList())
@@ -81,10 +81,10 @@ class HistoryStore(
                 _samples.value = readSamples()
                 _statusSamples.value = readStatusSamples()
                 _driveSamples.value = readDriveSamples()
-                // Link events have no read model yet. Reading the files only
-                // refreshes the record counts the cap trims by, so it holds
-                // across restarts.
-                runCatching { linkLogs.readAll() }
+                // Connection events have no read model yet. Reading the files
+                // only refreshes the record counts the cap trims by, so it
+                // holds across restarts.
+                runCatching { connectionLogs.readAll() }
             }
         }
     }
@@ -92,21 +92,21 @@ class HistoryStore(
     /**
      * Logs one charge reply. [acquiredAtMillis] is the phone's clock when it
      * arrived; it goes only into the record's own `acquired_at`, so the sample
-     * stays on the car's `ChargeState.timestamp`. [rssiDbm] is the phone's
+     * stays on the car's `ChargeState.timestamp`. [rssi] is the phone's
      * latest RSSI for the car, or null when it has none.
      */
     fun record(
         vehicleId: String,
         charge: TeslaCommands.Charge,
         acquiredAtMillis: Long,
-        rssiDbm: Int?,
+        rssi: Int?,
     ) {
         // Every reply is logged as the car sent it; Charge is a parsed view.
         // Chart time comes only from the car's own timestamp and is never
         // filled in, so a reply without one (or without a level) stays in the
         // log but off the chart.
         val raw = charge.raw ?: return
-        val record = BleRecord(acquired_at = Instant.ofEpochMilli(acquiredAtMillis), rssi_dbm = rssiDbm, charge_state = raw)
+        val record = BleRecord(acquired_at = Instant.ofEpochMilli(acquiredAtMillis), rssi = rssi, charge_state = raw)
         val sample = record.toBatterySample(vehicleId)
         scope.launch {
             mutex.withLock {
@@ -120,17 +120,17 @@ class HistoryStore(
      * Logs one VCSEC status reading when [shouldLogStatus] says so. The reply
      * carries no time, so [acquiredAtMillis] is the phone's clock at receipt
      * and the reading's time on the timeline; it goes only into the record's
-     * own `acquired_at`, never into a car field. [rssiDbm] is the phone's
-     * latest RSSI for the car, or null when it has none.
+     * own `acquired_at`, never into a car field. [rssi] is the phone's latest
+     * RSSI for the car, or null when it has none.
      */
     fun recordStatus(
         vehicleId: String,
         status: VehicleStatus,
         acquiredAtMillis: Long,
-        rssiDbm: Int?,
+        rssi: Int?,
         firstAfterConnect: Boolean,
     ) {
-        val record = BleRecord(acquired_at = Instant.ofEpochMilli(acquiredAtMillis), rssi_dbm = rssiDbm, vehicle_status = status)
+        val record = BleRecord(acquired_at = Instant.ofEpochMilli(acquiredAtMillis), rssi = rssi, vehicle_status = status)
         scope.launch {
             mutex.withLock {
                 if (shouldLogStatus(lastLoggedStatus[vehicleId], status, acquiredAtMillis, firstAfterConnect)) {
@@ -145,18 +145,18 @@ class HistoryStore(
      * navigation destination and route included. [acquiredAtMillis] is the
      * phone's clock when it arrived; it goes only into the record's own
      * `acquired_at`, so the sample stays on the car's `DriveState.timestamp`.
-     * [rssiDbm] is the phone's latest RSSI for the car, or null when it has none.
+     * [rssi] is the phone's latest RSSI for the car, or null when it has none.
      */
     fun recordDrive(
         vehicleId: String,
         drive: DriveState,
         acquiredAtMillis: Long,
-        rssiDbm: Int?,
+        rssi: Int?,
     ) {
         // Every reply is logged as the car sent it. Drive time comes only from
         // the car's own timestamp and is never filled in, so a reply without
         // one stays in the log but out of [driveSamples].
-        val record = BleRecord(acquired_at = Instant.ofEpochMilli(acquiredAtMillis), rssi_dbm = rssiDbm, drive_state = drive)
+        val record = BleRecord(acquired_at = Instant.ofEpochMilli(acquiredAtMillis), rssi = rssi, drive_state = drive)
         val sample = record.toDriveSample(vehicleId)
         scope.launch {
             mutex.withLock {
@@ -167,27 +167,28 @@ class HistoryStore(
     }
 
     /**
-     * Logs a change in the phone's link to [vehicleId] (ADR-0008): [state] is
-     * `CONNECTED` when the link became ready and `LOST` when an established
-     * one dropped, so a LOST marks when watching ended. [acquiredAtMillis] is
-     * when it happened, and [rssiDbm] the phone's last RSSI for the car before
-     * that, or null when it has none. Nothing reads these records back yet.
+     * Logs a change in the phone's connection to [vehicleId] (ADR-0008):
+     * [state] is `CONNECTED` when the connection became ready and
+     * `DISCONNECTED` when an established one ended, so a DISCONNECTED marks
+     * when watching ended. [acquiredAtMillis] is when it happened, and [rssi]
+     * the phone's last RSSI for the car before that, or null when it has none.
+     * Nothing reads these records back yet.
      */
-    fun recordLink(
+    fun recordConnection(
         vehicleId: String,
-        state: LinkEvent.State,
+        state: ConnectionEvent.State,
         acquiredAtMillis: Long,
-        rssiDbm: Int?,
+        rssi: Int?,
     ) {
         val record =
             BleRecord(
                 acquired_at = Instant.ofEpochMilli(acquiredAtMillis),
-                rssi_dbm = rssiDbm,
-                link_event = LinkEvent(state = state),
+                rssi = rssi,
+                connection_event = ConnectionEvent(state = state),
             )
         scope.launch {
             mutex.withLock {
-                linkLogs.append(vehicleId, record)
+                connectionLogs.append(vehicleId, record)
             }
         }
     }
@@ -248,16 +249,16 @@ class HistoryStore(
         /** `<vehicleId>.drive.pblog`: DriveState replies in [BleRecord]s, on the car's own timestamp (ADR-0008). */
         const val DRIVE_LOG_SUFFIX = ".drive.pblog"
 
-        /** `<vehicleId>.link.pblog`: link events in [BleRecord]s, timed by `acquired_at` (ADR-0008). */
-        const val LINK_LOG_SUFFIX = ".link.pblog"
+        /** `<vehicleId>.connection.pblog`: connection events in [BleRecord]s, timed by `acquired_at` (ADR-0008). */
+        const val CONNECTION_LOG_SUFFIX = ".connection.pblog"
         const val MAX_SAMPLES = 20_000
     }
 }
 
 /**
  * One kind of per-vehicle log: `<vehicleId><suffix>` files in [dir], holding
- * [BleRecord]s. Each kind (charge, VCSEC status, drive, link) is one instance,
- * and all share the same cap and trim. Callers hold the store's mutex.
+ * [BleRecord]s. Each kind (charge, VCSEC status, drive, connection) is one
+ * instance, and all share the same cap and trim. Callers hold the store's mutex.
  */
 private class VehicleLogs(
     private val dir: File,

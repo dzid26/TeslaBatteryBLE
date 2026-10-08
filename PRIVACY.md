@@ -15,8 +15,8 @@ anywhere.**
   navigating, the navigation destination and route it reports), each with the
   time your phone received it and the signal strength (RSSI) it last measured
   from the car, in local files that stay on this phone
-- When your phone's Bluetooth link to each car became ready and when it
-  dropped, with the signal strength at that moment, in local files that stay
+- When your phone's Bluetooth connection to each car was established and when
+  it ended, with the signal strength at that moment, in local files that stay
   on this phone. Signal strength hints at how close your phone was to the car,
   so with the times it shows when you were near the car and when you left
 - App settings
