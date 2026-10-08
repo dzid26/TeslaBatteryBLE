@@ -36,8 +36,10 @@ val tagVersion =
 val gitVersionName = if (tagVersion != null) gitDescribe.removePrefix("v") else "0.0.0-dev"
 val gitVersionCode: Int =
     tagVersion?.let { match ->
-        val (major, minor, patch) = match.groupValues.drop(1).take(3).map { it.toInt() }
-        val preRelease = match.groupValues[4]
+        val (majorText, minorText, patchText, preRelease) = match.destructured
+        val major = majorText.toInt()
+        val minor = minorText.toInt()
+        val patch = patchText.toInt()
         require(minor < 100 && patch < 100) { "minor and patch must stay below 100: $gitDescribe" }
         val stage =
             when {
