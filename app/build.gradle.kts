@@ -111,7 +111,7 @@ android {
             if (ciDebugBuild) {
                 applicationIdSuffix = ".pr"
                 versionNameSuffix = "-pr$ciPrNumber"
-                manifestPlaceholders["appLabel"] = "TeslaBatteryBLE PR"
+                manifestPlaceholders["appLabel"] = "TeslaBatteryBLE PR$ciPrNumber"
             }
         }
         release {
