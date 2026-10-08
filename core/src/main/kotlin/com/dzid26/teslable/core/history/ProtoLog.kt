@@ -16,9 +16,11 @@ import okio.Buffer
  * followed by one Wire message. The codec adds nothing of its own: the
  * history logs frame [BleRecord]s, which wrap the car's raw reply with the
  * phone's acquisition time (ADR-0008). Readers ignore unknown fields, so new
- * fields never drop old rows. A truncated trailing record (an interrupted
- * append) is ignored on load; records after it are not read. The same codec
- * frames every message type; the adapter passed to [decode] picks the type.
+ * fields never drop old rows. A complete record that does not decode (one
+ * from an incompatible test build, or a damaged one) is skipped, so the
+ * records after it still read; a truncated tail (an interrupted append) ends
+ * the read. The same codec frames every message type; the adapter passed to
+ * [decode] picks the type.
  */
 object ProtoLog {
     /** Encodes all [messages] into one buffer, for a full rewrite. */
@@ -39,7 +41,10 @@ object ProtoLog {
         return frame.readByteArray()
     }
 
-    /** Reads every complete record with [adapter]; stops at a truncated or unreadable tail. */
+    /**
+     * Reads every complete record with [adapter]. Empty frames and records that
+     * do not decode are skipped; a truncated tail ends the read.
+     */
     fun <M : Message<M, *>> decode(
         bytes: ByteArray,
         adapter: ProtoAdapter<M>,
@@ -47,10 +52,10 @@ object ProtoLog {
         val messages = mutableListOf<M>()
         val reader = ProtoReader(Buffer().write(bytes))
         while (true) {
-            val length = runCatching { reader.nextLengthDelimited() }.getOrNull() ?: break
-            if (length == 0) break
+            runCatching { reader.nextLengthDelimited() }.getOrNull() ?: break
             val payload = runCatching { reader.readBytes() }.getOrNull() ?: break
-            messages += runCatching { adapter.decode(payload) }.getOrNull() ?: break
+            if (payload.size == 0) continue
+            runCatching { adapter.decode(payload) }.getOrNull()?.let { messages += it }
         }
         return messages
     }

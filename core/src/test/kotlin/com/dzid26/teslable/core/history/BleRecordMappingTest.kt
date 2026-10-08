@@ -44,6 +44,18 @@ class BleRecordMappingTest {
         )
 
     @Test
+    fun `envelope fields follow a reading's order on the wire`() {
+        // Field numbers are the stored format (ADR-0008): time, VCSEC status,
+        // charge. The first byte of each encoding is the field's tag.
+        fun tag(record: BleRecord) = record.encode().first().toInt()
+
+        val lengthDelimited = 2
+        assertEquals(1 shl 3 or lengthDelimited, tag(BleRecord(acquired_at = ofEpochSecond(1, 0))))
+        assertEquals(2 shl 3 or lengthDelimited, tag(BleRecord(vehicle_status = asleep)))
+        assertEquals(3 shl 3 or lengthDelimited, tag(BleRecord(charge_state = charging)))
+    }
+
+    @Test
     fun `a charge record maps onto the sample its raw charge state maps onto`() {
         val sample = BleRecord(acquired_at = ofEpochSecond(1_001, 0), charge_state = charging).toBatterySample(VEHICLE)
         assertEquals(charging.toBatterySample(VEHICLE), sample)
