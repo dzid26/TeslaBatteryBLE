@@ -301,11 +301,21 @@ jobs:
       - name: Stage the preview APK
         run: |
           mkdir -p dist
-          cp app/build/outputs/apk/debug/app-debug.apk dist/app-debug.apk
+          cp app/build/outputs/apk/debug/app-debug.apk "dist/TeslaBatteryBLE-preview-${GITHUB_SHA:0:7}.apk"
+
+      # The preview release carries no APK asset; its notes link to this
+      # artifact (a zip holding the signed APK) instead.
+      - name: Upload the preview APK
+        id: upload-apk
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: teslable-preview-apk
+          path: dist/*.apk
 
       - name: Publish preview release
         env:
           GH_TOKEN: ${{ github.token }}
+          APK_ARTIFACT_URL: ${{ steps.upload-apk.outputs.artifact-url }}
         run: bash .github/scripts/publish-preview-release.sh
 
   go-vectors:
