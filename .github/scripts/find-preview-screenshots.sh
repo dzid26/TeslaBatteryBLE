@@ -21,7 +21,7 @@ for rel in "$TAG" preview; do
     continue
   fi
   body="$(gh release view "$rel" --json body --jq .body 2>/dev/null || true)"
-  printf '%s' "$body" | tr -d '' | sed -n '/^## Screenshots/,$p' > screenshots-section.md
+  printf '%s' "$body" | sed -n '/^## Screenshots/,$p' > screenshots-section.md
   grep -q '<img' screenshots-section.md || { rm -f screenshots-section.md; continue; }
 
   # Best effort: the PNGs only feed the committed README/website refresh.
