@@ -15,12 +15,18 @@ import com.tesla.generated.vcsec.ClosureStatuses
  *    exists.
  * 2. Active (charging state Charging or Starting, or shift state D, R or N): a read every
  *    [ACTIVE_INTERVAL_MS]. When activity ends the reads stop right away.
- * 3. Not active: single reads on events, each sent at once. Events: a (re)connect, VCSEC asleep to
- *    awake, locked to unlocked, any closure changing state (opening or closing), and an explicit
- *    user request. Each event also schedules one follow-up read [FOLLOW_UP_DELAY_MS] later, to catch
- *    a shift into D or charging starting just after it. A new event replaces a pending follow-up
- *    instead of stacking. Then nothing until the next event.
+ * 3. Not active: single reads on events, each sent at once. Events: a fresh start (see
+ *    [onFreshStart]), VCSEC asleep to awake, locked to unlocked, any closure changing between open and
+ *    not open (a closure that is neither CLOSED nor UNKNOWN counts as open, so ajar is open), and an
+ *    explicit user request. A plain reconnect after a dropped link is not an event. Each event also
+ *    schedules one follow-up read [FOLLOW_UP_DELAY_MS] later, to catch a shift into D or charging
+ *    starting just after it. A new event replaces a pending follow-up instead of stacking. Then
+ *    nothing until the next event.
  * 4. User presence, and staying unlocked or locked without a closure change, are not events.
+ *
+ * Reconnects: the transition memory (previous asleep, locked and closure state) survives a dropped
+ * link, so a wake, unlock or door change that happened while the link was down still is an event on
+ * the first status after it. The caller therefore does nothing at a plain reconnect.
  *
  * Pure and clock-free (the caller passes `nowMillis`) so it ports to other platforms; one instance
  * per vehicle link, not thread-safe.
@@ -37,8 +43,13 @@ class InfotainmentPollPolicy {
 
     private val active: Boolean get() = charging || driving
 
-    /** A (re)connect: forgets the previous link, reads at the first awake status, follows up once. */
-    fun onConnect(nowMillis: Long) {
+    /**
+     * A fresh start: the first READY link since the app process or tracking started (app start,
+     * auto-start after boot or update, tracking switched on), or the first READY link right after
+     * pairing or key enrollment. Forgets everything, including the transition memory, reads at the
+     * first awake status and follows up once. Not for a reconnect after a dropped link.
+     */
+    fun onFreshStart(nowMillis: Long) {
         lastReadAtMs = null
         charging = false
         driving = false
@@ -131,9 +142,11 @@ class InfotainmentPollPolicy {
                 closures.tonneau,
             )
         return states.foldIndexed(0) { index, mask, state ->
-            if (state == ClosureState_E.CLOSURESTATE_OPEN) mask or (1 shl index) else mask
+            if (state.isOpen()) mask or (1 shl index) else mask
         }
     }
+
+    private fun ClosureState_E.isOpen() = this != ClosureState_E.CLOSURESTATE_CLOSED && this != ClosureState_E.CLOSURESTATE_UNKNOWN
 
     companion object {
         /** Reads while charging or driving, matching the VCSEC status cadence. */
