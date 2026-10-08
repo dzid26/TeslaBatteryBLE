@@ -75,7 +75,7 @@ android {
 
     defaultConfig {
         applicationId = "com.dzid26.teslable"
-        minSdk = 26
+        minSdk = 27
         targetSdk = 37
         versionCode = gitVersionCode
         versionName = gitVersionName

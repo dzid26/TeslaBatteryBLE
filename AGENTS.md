@@ -6,7 +6,7 @@ Master plan: `docs/master-plan.md` — read it first and update its checkboxes w
 
 ## Layout
 
-- `app/` — Android UI (Compose), BLE integration, foreground service. minSdk 26.
+- `app/` — Android UI (Compose), BLE integration, foreground service. minSdk 27.
 - `core/` — protocol core (Kotlin/JVM, Wire protos). **No Android dependencies allowed.**
 - `tools/go-fixtures/` — fixture generator run against `teslamotors/vehicle-command`; `expected.txt` is diffed in CI.
 - `docs/` — master plan, ADRs, protocol notes.

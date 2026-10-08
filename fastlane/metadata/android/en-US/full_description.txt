@@ -2,7 +2,7 @@ TeslaBatteryBLE tracks your Tesla's battery locally over Bluetooth LE. Scan for 
 
 Privacy first: the app has no internet permission, needs no account, and never sends anything itself. Vehicle keys stay in app-private storage and are device-only by default (encrypted with this device's hardware-backed Keystore, so a backed-up copy cannot be used on another phone and a new phone needs re-pairing). One setting applies to all paired cars: opt in to include the keys in Android backup — cloud backups are encrypted with your Google account and device lock — on Android 12+, so pairing survives a phone change; older versions keep the keys out of backup. The charging-manager scoped keys can read and control charging, but cannot unlock or drive. Battery history stays in a local file on your device and is excluded from Android backup. Uninstalling removes on-device data.
 
-Requirements: Android 8.0+ and a Tesla with BLE key support. Pairing needs physical access to the car (NFC key card tap plus on-screen vehicle confirmation).
+Requirements: Android 8.1+ and a Tesla with BLE key support. Pairing needs physical access to the car (NFC key card tap plus on-screen vehicle confirmation).
 
 Status: beta. Preview APKs are debug builds from GitHub Releases. Signed stable releases and F-Droid distribution are planned.
 
