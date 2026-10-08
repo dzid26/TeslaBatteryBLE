@@ -2,6 +2,7 @@
 package com.dzid26.teslable.core.health
 
 import com.dzid26.teslable.core.history.BatterySample
+import com.dzid26.teslable.core.protocol.ChargingStateKind
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -11,7 +12,7 @@ class ChargeSessionsTest {
     private fun sample(
         minutes: Long,
         level: Int,
-        state: String? = "Charging",
+        state: ChargingStateKind? = ChargingStateKind.Charging,
         energyAddedKwh: Float? = null,
         milesAddedRated: Float? = null,
     ) = BatterySample(
@@ -28,7 +29,7 @@ class ChargeSessionsTest {
         // Plugged in at 20%, but the app first saw the car at 50% with 22.5 kWh already added.
         val samples =
             listOf(
-                sample(0, 20, "Disconnected"),
+                sample(0, 20, ChargingStateKind.Disconnected),
                 sample(300, 50, energyAddedKwh = 22.5f, milesAddedRated = 100f),
                 sample(330, 65, energyAddedKwh = 33.75f, milesAddedRated = 150f),
                 sample(360, 80, energyAddedKwh = 45f, milesAddedRated = 200f),
@@ -51,7 +52,7 @@ class ChargeSessionsTest {
         // Starting still shows the previous session's totals until the car restarts them.
         val samples =
             listOf(
-                sample(0, 20, "Starting", energyAddedKwh = 38.4f, milesAddedRated = 170f),
+                sample(0, 20, ChargingStateKind.Starting, energyAddedKwh = 38.4f, milesAddedRated = 170f),
                 sample(1, 20, energyAddedKwh = 0f, milesAddedRated = 0f),
                 sample(60, 50, energyAddedKwh = 22.5f, milesAddedRated = 100f),
             )
@@ -64,7 +65,7 @@ class ChargeSessionsTest {
     fun `a restart that climbs back above the first value is still a restart`() {
         val samples =
             listOf(
-                sample(0, 20, "Starting", energyAddedKwh = 5f),
+                sample(0, 20, ChargingStateKind.Starting, energyAddedKwh = 5f),
                 sample(1, 20, energyAddedKwh = 0f),
                 sample(60, 50, energyAddedKwh = 22.5f),
             )
@@ -103,7 +104,7 @@ class ChargeSessionsTest {
     fun `Starting then Charging is one session that begins at Starting`() {
         val samples =
             listOf(
-                sample(0, 20, "Starting", energyAddedKwh = 0f),
+                sample(0, 20, ChargingStateKind.Starting, energyAddedKwh = 0f),
                 sample(1, 21, energyAddedKwh = 0.2f),
                 sample(30, 35, energyAddedKwh = 11.25f),
             )
@@ -115,7 +116,7 @@ class ChargeSessionsTest {
 
     @Test
     fun `a short Stopped or NoPower blip does not split a session`() {
-        for (pause in listOf("Stopped", "NoPower")) {
+        for (pause in listOf(ChargingStateKind.Stopped, ChargingStateKind.NoPower)) {
             val samples =
                 listOf(
                     sample(0, 40, energyAddedKwh = 10f),
@@ -124,10 +125,10 @@ class ChargeSessionsTest {
                     sample(60, 60, energyAddedKwh = 20f),
                 )
             val sessions = chargeSessions(samples)
-            assertEquals(1, sessions.size, pause)
-            assertEquals(40f, sessions.single().startPercent, pause)
-            assertEquals(60f, sessions.single().endPercent, pause)
-            assertEquals(10f, sessions.single().energyAddedKwh, pause)
+            assertEquals(1, sessions.size, pause.name)
+            assertEquals(40f, sessions.single().startPercent, pause.name)
+            assertEquals(60f, sessions.single().endPercent, pause.name)
+            assertEquals(10f, sessions.single().energyAddedKwh, pause.name)
         }
     }
 
@@ -136,8 +137,8 @@ class ChargeSessionsTest {
         val samples =
             listOf(
                 sample(0, 40, energyAddedKwh = 10f),
-                sample(5, 40, "Stopped", energyAddedKwh = 10f),
-                sample(7, 40, "Starting", energyAddedKwh = 10f),
+                sample(5, 40, ChargingStateKind.Stopped, energyAddedKwh = 10f),
+                sample(7, 40, ChargingStateKind.Starting, energyAddedKwh = 10f),
                 sample(8, 41, energyAddedKwh = 10.2f),
             )
         assertEquals(1, chargeSessions(samples).size)
@@ -145,10 +146,10 @@ class ChargeSessionsTest {
 
     @Test
     fun `a pause shorter than ten minutes is bridged and ten minutes is not`() {
-        val nineMinutes = listOf(sample(0, 40), sample(1, 40, "Stopped"), sample(9, 41))
+        val nineMinutes = listOf(sample(0, 40), sample(1, 40, ChargingStateKind.Stopped), sample(9, 41))
         assertEquals(1, chargeSessions(nineMinutes).size)
 
-        val tenMinutes = listOf(sample(0, 40), sample(1, 40, "Stopped"), sample(10, 41))
+        val tenMinutes = listOf(sample(0, 40), sample(1, 40, ChargingStateKind.Stopped), sample(10, 41))
         assertEquals(2, chargeSessions(tenMinutes).size)
     }
 
@@ -158,9 +159,9 @@ class ChargeSessionsTest {
             listOf(
                 sample(0, 30, energyAddedKwh = 0f),
                 sample(40, 50, energyAddedKwh = 15f),
-                sample(45, 50, "Stopped", energyAddedKwh = 15f),
-                sample(120, 50, "Stopped", energyAddedKwh = 15f),
-                sample(125, 50, "Starting", energyAddedKwh = 15f),
+                sample(45, 50, ChargingStateKind.Stopped, energyAddedKwh = 15f),
+                sample(120, 50, ChargingStateKind.Stopped, energyAddedKwh = 15f),
+                sample(125, 50, ChargingStateKind.Starting, energyAddedKwh = 15f),
                 sample(160, 70, energyAddedKwh = 30f),
             )
         val sessions = chargeSessions(samples)
@@ -179,9 +180,9 @@ class ChargeSessionsTest {
             listOf(
                 sample(0, 40),
                 sample(8, 41),
-                sample(9, 41, "Stopped"),
+                sample(9, 41, ChargingStateKind.Stopped),
                 sample(15, 42),
-                sample(16, 42, "NoPower"),
+                sample(16, 42, ChargingStateKind.NoPower),
                 sample(30, 43),
             )
         // The first pause lasts 7 minutes and the second 15, whatever the session's age.
@@ -194,9 +195,9 @@ class ChargeSessionsTest {
             listOf(
                 sample(0, 60, energyAddedKwh = 0f),
                 sample(30, 84, energyAddedKwh = 18f),
-                sample(32, 85, "Complete", energyAddedKwh = 18.75f),
+                sample(32, 85, ChargingStateKind.Complete, energyAddedKwh = 18.75f),
                 // The limit was raised and the car started again.
-                sample(35, 85, "Starting", energyAddedKwh = 18.75f),
+                sample(35, 85, ChargingStateKind.Starting, energyAddedKwh = 18.75f),
                 sample(60, 95, energyAddedKwh = 26.25f),
             )
         val sessions = chargeSessions(samples)
@@ -214,8 +215,8 @@ class ChargeSessionsTest {
             listOf(
                 sample(0, 40, energyAddedKwh = 5f),
                 sample(20, 50, energyAddedKwh = 12.5f),
-                sample(25, 50, "Disconnected"),
-                sample(30, 50, "Starting", energyAddedKwh = 0f),
+                sample(25, 50, ChargingStateKind.Disconnected),
+                sample(30, 50, ChargingStateKind.Starting, energyAddedKwh = 0f),
                 sample(60, 60, energyAddedKwh = 7.5f),
             )
         val sessions = chargeSessions(samples)
@@ -226,7 +227,7 @@ class ChargeSessionsTest {
 
     @Test
     fun `a missing or unrecognised state ends a session`() {
-        for (state in listOf(null, "Unknown", "Calibrating")) {
+        for (state in listOf(null, ChargingStateKind.Unknown, ChargingStateKind.Calibrating)) {
             val samples = listOf(sample(0, 40), sample(5, 41, state), sample(6, 42))
             assertEquals(2, chargeSessions(samples).size, state.toString())
         }
@@ -248,7 +249,12 @@ class ChargeSessionsTest {
     @Test
     fun `history without charging has no sessions`() {
         assertTrue(chargeSessions(emptyList()).isEmpty())
-        val idle = listOf(sample(0, 80, "Disconnected"), sample(5, 80, "Stopped"), sample(10, 79, "NoPower"))
+        val idle =
+            listOf(
+                sample(0, 80, ChargingStateKind.Disconnected),
+                sample(5, 80, ChargingStateKind.Stopped),
+                sample(10, 79, ChargingStateKind.NoPower),
+            )
         assertTrue(chargeSessions(idle).isEmpty())
     }
 

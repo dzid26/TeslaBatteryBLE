@@ -76,8 +76,10 @@ import com.dzid26.teslable.core.history.chargeStats
 import com.dzid26.teslable.core.history.dischargeProjection
 import com.dzid26.teslable.core.history.projectionWindowMillis
 import com.dzid26.teslable.core.history.within
-import com.dzid26.teslable.core.protocol.TeslaCommands
+import com.dzid26.teslable.core.protocol.asleep
+import com.dzid26.teslable.core.protocol.chargingStateKind
 import com.dzid26.teslable.health.healthSummary
+import com.tesla.generated.carserver.vehicle.ChargeState
 import kotlinx.coroutines.delay
 import java.time.Instant
 import java.time.ZoneId
@@ -270,7 +272,7 @@ private fun HeroCard(
             Spacer(Modifier.height(12.dp))
             SocBlock(
                 reading = reading,
-                live = charge?.batteryLevel != null,
+                live = charge?.battery_level != null,
                 lastKnown = lastKnown,
                 stateText = display.stateText,
                 nowMillis = nowMillis,
@@ -286,13 +288,13 @@ private fun HeroCard(
 
 /** Range · charge limit · charging state, as one quiet line under the hero. */
 @Composable
-private fun ChargeDetails(charge: TeslaCommands.Charge?) {
+private fun ChargeDetails(charge: ChargeState?) {
     if (charge == null) return
     val details =
         buildList {
-            charge.batteryRange?.let { add("${formatRangeMiles(it)} mi") }
-            charge.chargeLimit?.let { add("Charge limit $it%") }
-            charge.chargingState?.let { add(chargingStateText(it)) }
+            charge.battery_range?.let { add("${formatRangeMiles(it)} mi") }
+            charge.charge_limit_soc?.let { add("Charge limit $it%") }
+            charge.chargingStateKind?.let { add(chargingStateText(it)) }
         }
     if (details.isNotEmpty()) {
         Text(

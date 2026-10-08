@@ -2,8 +2,12 @@
 package com.dzid26.teslable.ble
 
 import com.dzid26.teslable.core.history.BatterySample
-import com.dzid26.teslable.core.protocol.TeslaCommands
-import com.dzid26.teslable.core.protocol.TeslaVcsec
+import com.dzid26.teslable.core.protocol.ChargingStateKind
+import com.dzid26.teslable.core.protocol.asleep
+import com.dzid26.teslable.core.protocol.locked
+import com.dzid26.teslable.core.protocol.userPresent
+import com.tesla.generated.carserver.vehicle.ChargeState
+import com.tesla.generated.vcsec.VehicleStatus
 import java.util.UUID
 
 data class TeslaAdvert(
@@ -20,10 +24,10 @@ data class TeslaConnection(
     val services: List<GattServiceInfo> = emptyList(),
     val mtu: Int? = null,
     val rssi: Int? = null,
-    val status: TeslaVcsec.Status? = null,
+    val status: VehicleStatus? = null,
     val keySlot: Int? = null,
     val sessions: List<String> = emptyList(),
-    val charge: TeslaCommands.Charge? = null,
+    val charge: ChargeState? = null,
     /** When [charge] was last read; null until the first charge response. */
     val chargeAtMillis: Long? = null,
     /** Pairing flow state for this car; idle unless a Pair is in flight. */
@@ -128,7 +132,7 @@ fun batteryPercent(
     lastKnown: BatterySample?,
     nowMillis: Long,
 ): BatteryPercent? {
-    val live = connection?.charge?.batteryLevel
+    val live = connection?.charge?.battery_level
     if (live != null) {
         val readAt = connection.chargeAtMillis
         return BatteryPercent(
@@ -206,8 +210,8 @@ private fun connectionStateText(connection: TeslaConnection?): String =
         connection.phase == ConnectionPhase.READY && connection.status?.asleep == true ->
             "Connected \uD83D\uDCA4"
 
-        connection.phase == ConnectionPhase.READY && connection.charge?.batteryLevel != null ->
-            "Connected · ${connection.charge.batteryLevel}%"
+        connection.phase == ConnectionPhase.READY && connection.charge?.battery_level != null ->
+            "Connected · ${connection.charge.battery_level}%"
 
         connection.phase == ConnectionPhase.READY -> "Connected"
 
@@ -221,7 +225,7 @@ private fun connectionStateText(connection: TeslaConnection?): String =
     }
 
 /** "Locked · Asleep · User away" instead of raw booleans. */
-fun vehicleStatusText(status: TeslaVcsec.Status): String =
+fun vehicleStatusText(status: VehicleStatus): String =
     listOf(
         if (status.locked) "Locked" else "Unlocked",
         if (status.asleep) "Asleep" else "Awake",
@@ -240,14 +244,14 @@ fun sessionNames(sessions: List<String>): String =
     }
 
 /** Friendly charging state for the charge details line. */
-fun chargingStateText(state: String): String =
+fun chargingStateText(state: ChargingStateKind): String =
     when (state) {
-        "Charging" -> "Charging"
-        "Complete" -> "Charging complete"
-        "Stopped" -> "Charging stopped"
-        "Disconnected" -> "Unplugged"
-        "NoPower" -> "No power"
-        "Starting" -> "Starting"
-        "Calibrating" -> "Calibrating"
-        else -> state
+        ChargingStateKind.Charging -> "Charging"
+        ChargingStateKind.Complete -> "Charging complete"
+        ChargingStateKind.Stopped -> "Charging stopped"
+        ChargingStateKind.Disconnected -> "Unplugged"
+        ChargingStateKind.NoPower -> "No power"
+        ChargingStateKind.Starting -> "Starting"
+        ChargingStateKind.Calibrating -> "Calibrating"
+        ChargingStateKind.Unknown -> "Unknown"
     }

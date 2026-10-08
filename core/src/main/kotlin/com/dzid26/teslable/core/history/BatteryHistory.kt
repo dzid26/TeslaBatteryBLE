@@ -2,16 +2,20 @@
 
 package com.dzid26.teslable.core.history
 
+import com.dzid26.teslable.core.protocol.ChargingStateKind
+
 /**
  * One battery reading, recorded whenever a car reports charge state.
  *
- * Storage holds raw car fields only; display values are derived at runtime.
+ * Holds just the fields the app reads, taken from the car's raw `ChargeState`
+ * by [toBatterySample]; the raw record stays in the log (ADR-0008). Display
+ * values are derived at runtime.
  */
 data class BatterySample(
     val timestampMillis: Long,
     /** Displayed SOC (`battery_level`). */
     val batteryLevel: Int,
-    val chargingState: String?,
+    val chargingState: ChargingStateKind?,
     val chargeLimit: Int?,
     /**
      * Which vehicle the reading came from: the advertised BLE name
@@ -19,35 +23,17 @@ data class BatterySample(
      * rows written before per-vehicle history existed.
      */
     val vehicleId: String = "",
-    /** Usable SOC (`usable_battery_level`); can sit below [batteryLevel]. */
-    val usableBatteryLevel: Int? = null,
     /** `battery_range`: rated range in miles at this SOC. */
     val ratedRangeMiles: Float? = null,
-    /** `est_battery_range`: estimated range in miles at this SOC. */
-    val estRangeMiles: Float? = null,
-    /** `ideal_battery_range`: ideal range in miles at this SOC. */
-    val idealRangeMiles: Float? = null,
     /** `charge_energy_added`: kWh added so far this session; 0 when idle. */
     val chargeEnergyAdded: Float? = null,
     /** `charge_miles_added_rated`: rated miles added so far this session. */
     val chargeMilesAddedRated: Float? = null,
-    /** `charge_miles_added_ideal`: ideal miles added so far this session. */
-    val chargeMilesAddedIdeal: Float? = null,
-    /** `charge_rate_mph`: charging speed in miles per hour (int field). */
-    val chargeRateMph: Int? = null,
-    /** `charge_rate_mph_float`: charging speed in miles per hour (float field). */
-    val chargeRateMphFloat: Float? = null,
-    /** `charger_power`: charger power in watts. */
-    val chargerPower: Int? = null,
-    /** `charger_voltage`: charger voltage in volts. */
-    val chargerVoltage: Int? = null,
-    /** `charging_amps`: charging current limit in amps. */
-    val chargingAmps: Int? = null,
 ) {
     /** The displayed level, derived for the chart, stats, and car view. */
     val percent: Int get() = batteryLevel
 
-    val isCharging: Boolean get() = chargingState == "Charging"
+    val isCharging: Boolean get() = chargingState == ChargingStateKind.Charging
 }
 
 /** Time window for the battery graph. */

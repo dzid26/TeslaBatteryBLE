@@ -2,6 +2,7 @@
 
 package com.dzid26.teslable.core.history
 
+import com.dzid26.teslable.core.protocol.ChargingStateKind
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -10,7 +11,7 @@ class BatteryHistoryTest {
     private fun sample(
         minutes: Long,
         percent: Int,
-        state: String? = "Disconnected",
+        state: ChargingStateKind? = ChargingStateKind.Disconnected,
     ) = BatterySample(
         timestampMillis = minutes * 60_000L,
         batteryLevel = percent,
@@ -41,7 +42,7 @@ class BatteryHistoryTest {
 
     @Test
     fun chargeStatsNullWhileStillCharging() {
-        val samples = listOf(sample(0, 80), sample(30, 81, "Charging"))
+        val samples = listOf(sample(0, 80), sample(30, 81, ChargingStateKind.Charging))
         assertNull(chargeStats(samples))
     }
 
@@ -50,8 +51,8 @@ class BatteryHistoryTest {
         val samples =
             listOf(
                 sample(0, 70),
-                sample(30, 80, "Charging"),
-                sample(60, 85, "Charging"),
+                sample(30, 80, ChargingStateKind.Charging),
+                sample(60, 85, ChargingStateKind.Charging),
                 sample(90, 84),
                 sample(120, 78),
             )
@@ -69,9 +70,9 @@ class BatteryHistoryTest {
     fun chargeStatsUseLastCharge() {
         val samples =
             listOf(
-                sample(0, 60, "Charging"),
+                sample(0, 60, ChargingStateKind.Charging),
                 sample(30, 70),
-                sample(60, 80, "Charging"),
+                sample(60, 80, ChargingStateKind.Charging),
                 sample(90, 75),
             )
 
@@ -79,23 +80,6 @@ class BatteryHistoryTest {
         assertEquals(90 * 60_000L, stats.sinceMillis)
         assertEquals(75f, stats.startPercent)
         assertEquals(0f, stats.usedPercent)
-    }
-
-    @Test
-    fun chargeStatsDeriveFromTheDisplayedLevel() {
-        val samples =
-            listOf(
-                sample(0, 80, "Charging"),
-                sample(30, 80).copy(usableBatteryLevel = 79),
-                sample(60, 79).copy(usableBatteryLevel = 78),
-            )
-
-        val stats = chargeStats(samples)!!
-        assertEquals(80f, stats.startPercent)
-        assertEquals(79f, stats.currentPercent)
-        assertEquals(79f, stats.minPercent)
-        assertEquals(80f, stats.maxPercent)
-        assertEquals(1f, stats.usedPercent)
     }
 
     @Test

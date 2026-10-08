@@ -145,7 +145,7 @@ Owner direction 2026-10-05: make rated miles the primary unit everywhere — sto
 ### Design
 
 1. **Storage stays raw** (no format change now): rated/est/ideal miles, both SOC ints, session energy and miles-added. Add `chargeRateMph` / `chargeRateMphFloat` to raw logging with the storage rework (or a deliberate format bump), not in the frozen PR #74 format.
-2. **Model**: parse `charge_rate_mph` / `charge_rate_mph_float` on `TeslaCommands.Charge` (float preferred, int fallback, null when absent or implausible). Keep SOC ints for anchors and the rounding verdict.
+2. **Model**: read `charge_rate_mph` / `charge_rate_mph_float` off the raw `ChargeState` (`ChargeState.chargingMph` in `StateViews.kt`: float preferred, int fallback, null when absent or implausible). Keep SOC ints for anchors and the rounding verdict.
 3. **Stats and projections in miles**:
    - `ChargeStats`: start/current/min/max in rated miles (Float), `usedMiles` instead of `usedPercent`.
    - `ChargeProjection`: ETA from `charge_rate_mph_float` when charging and plausible, else from ΔratedRange/Δt over the trailing run; target = `chargeLimit / 100 × fullRatedRange` miles (needs the learned scale; keep the percent-based projection as fallback until it is pinned).

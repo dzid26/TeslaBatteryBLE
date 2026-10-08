@@ -9,52 +9,10 @@ import com.tesla.generated.carserver.server.Response
 import com.tesla.generated.carserver.server.VehicleAction
 import com.tesla.generated.carserver.vehicle.ChargeState
 import com.tesla.generated.carserver.vehicle.DriveState
-import com.tesla.generated.carserver.vehicle.ShiftState
 import com.tesla.generated.vcsec.RKEAction_E
 import com.tesla.generated.vcsec.UnsignedMessage
 
 object TeslaCommands {
-    data class Charge(
-        val batteryLevel: Int?,
-        val chargeLimit: Int?,
-        val chargingState: String?,
-        /** Rated range in miles (`battery_range`). */
-        val batteryRange: Float? = null,
-        /** Estimated range in miles (`est_battery_range`). */
-        val estBatteryRange: Float? = null,
-        /** Ideal range in miles (`ideal_battery_range`); absent on most newer cars. */
-        val idealBatteryRange: Float? = null,
-        /** Usable SOC (`usable_battery_level`); can sit below [batteryLevel]. */
-        val usableBatteryLevel: Int? = null,
-        /** Energy in kWh added so far this session (`charge_energy_added`). */
-        val chargeEnergyAdded: Float? = null,
-        /** Rated miles added so far this session (`charge_miles_added_rated`). */
-        val chargeMilesAddedRated: Float? = null,
-        /** Ideal miles added so far this session (`charge_miles_added_ideal`). */
-        val chargeMilesAddedIdeal: Float? = null,
-        /** Charging speed in miles per hour (`charge_rate_mph`, int field). */
-        val chargeRateMph: Int? = null,
-        /** Charging speed in miles per hour (`charge_rate_mph_float`, float field). */
-        val chargeRateMphFloat: Float? = null,
-        /** Charger power in watts (`charger_power`). */
-        val chargerPower: Int? = null,
-        /** Charger voltage in volts (`charger_voltage`). */
-        val chargerVoltage: Int? = null,
-        /** Charging current limit in amps (`charging_amps`). */
-        val chargingAmps: Int? = null,
-        /**
-         * The raw `ChargeState` this was parsed from, logged verbatim by the
-         * history store. Null for hand-built instances (tests).
-         */
-        val raw: ChargeState? = null,
-    ) {
-        /** Charging slope in miles per hour: the float rate when plausible, else the int rate. */
-        val chargingMph: Float?
-            get() =
-                chargeRateMphFloat?.takeIf { it.isFinite() && it > 0f }
-                    ?: chargeRateMph?.takeIf { it > 0 }?.toFloat()
-    }
-
     fun buildWakeRequest(): ByteArray = UnsignedMessage(RKEAction = RKEAction_E.RKE_ACTION_WAKE_VEHICLE).encode()
 
     fun buildChargeStateRequest(): ByteArray =
@@ -74,27 +32,15 @@ object TeslaCommands {
                 ),
         ).encode()
 
-    fun parseChargeState(payload: ByteArray): Charge? {
+    /**
+     * The car's raw `ChargeState` from a vehicle-data reply, or null when the
+     * reply holds none. It is returned whole: the history logs it verbatim
+     * (ADR-0008), and derived values come from [chargingStateKind] and the
+     * other properties in `StateViews.kt`.
+     */
+    fun parseChargeState(payload: ByteArray): ChargeState? {
         val data = Response.ADAPTER.decode(payload).vehicleData ?: return null
-        val charge = data.charge_state ?: return null
-        return Charge(
-            batteryLevel = charge.battery_level,
-            chargeLimit = charge.charge_limit_soc,
-            chargingState = chargingStateName(charge.charging_state),
-            batteryRange = charge.battery_range,
-            estBatteryRange = charge.est_battery_range,
-            idealBatteryRange = charge.ideal_battery_range,
-            usableBatteryLevel = charge.usable_battery_level,
-            chargeEnergyAdded = charge.charge_energy_added,
-            chargeMilesAddedRated = charge.charge_miles_added_rated,
-            chargeMilesAddedIdeal = charge.charge_miles_added_ideal,
-            chargeRateMph = charge.charge_rate_mph,
-            chargeRateMphFloat = charge.charge_rate_mph_float,
-            chargerPower = charge.charger_power,
-            chargerVoltage = charge.charger_voltage,
-            chargingAmps = charge.charging_amps,
-            raw = charge,
-        )
+        return data.charge_state
     }
 
     /**
@@ -107,34 +53,6 @@ object TeslaCommands {
         val data = Response.ADAPTER.decode(payload).vehicleData ?: return null
         return data.drive_state
     }
-
-    /** The car's charging-state name (`Charging`, `Complete`, ...), or null when unset. */
-    internal fun chargingStateName(state: ChargeState.ChargingState?): String? =
-        when {
-            state == null -> null
-            state.Charging != null -> "Charging"
-            state.Complete != null -> "Complete"
-            state.Stopped != null -> "Stopped"
-            state.Disconnected != null -> "Disconnected"
-            state.NoPower != null -> "NoPower"
-            state.Starting != null -> "Starting"
-            state.Calibrating != null -> "Calibrating"
-            state.Unknown != null -> "Unknown"
-            else -> null
-        }
-
-    /** The car's shift-state name (`P`, `R`, `N`, `D`, `Invalid`, `SNA`), or null when unset. */
-    fun shiftStateName(state: ShiftState?): String? =
-        when {
-            state == null -> null
-            state.P != null -> "P"
-            state.R != null -> "R"
-            state.N != null -> "N"
-            state.D != null -> "D"
-            state.CarServer_Invalid != null -> "Invalid"
-            state.SNA != null -> "SNA"
-            else -> null
-        }
 
     fun parseActionStatus(payload: ByteArray): String? =
         Response.ADAPTER

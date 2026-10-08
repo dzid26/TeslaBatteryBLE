@@ -9,9 +9,6 @@ import com.tesla.generated.vcsec.InformationRequest
 import com.tesla.generated.vcsec.InformationRequestType
 import com.tesla.generated.vcsec.OperationStatus_E
 import com.tesla.generated.vcsec.UnsignedMessage
-import com.tesla.generated.vcsec.UserPresence_E
-import com.tesla.generated.vcsec.VehicleLockState_E
-import com.tesla.generated.vcsec.VehicleSleepStatus_E
 import com.tesla.generated.vcsec.VehicleStatus
 import com.tesla.generated.vcsec.WhitelistEntryInfo
 import com.tesla.generated.vcsec.WhitelistInfo
@@ -21,17 +18,6 @@ import java.security.SecureRandom
 object TeslaVcsec {
     private const val ADDRESS_LENGTH = 16
     private val random = SecureRandom()
-
-    data class Status(
-        val locked: Boolean,
-        val asleep: Boolean,
-        val userPresent: Boolean,
-        /**
-         * The raw `VehicleStatus` this was parsed from, logged verbatim by the
-         * history store. Null for hand-built instances (tests).
-         */
-        val raw: VehicleStatus? = null,
-    )
 
     fun buildStatusRequest(): ByteArray = buildInformationRequest(InformationRequestType.INFORMATION_REQUEST_TYPE_GET_STATUS)
 
@@ -43,21 +29,17 @@ object TeslaVcsec {
             slot,
         )
 
-    fun parseStatusResponse(bytes: ByteArray): Status? {
+    /**
+     * The car's raw `VehicleStatus` from a VCSEC reply, or null when the reply
+     * holds none. It is returned whole: the history logs it verbatim (ADR-0008),
+     * and the flags the app shows ([locked], [asleep], [userPresent]) come from
+     * `StateViews.kt`.
+     */
+    fun parseStatusResponse(bytes: ByteArray): VehicleStatus? {
         val message = RoutableMessage.ADAPTER.decode(bytes)
         val payload = message.protobuf_message_as_bytes ?: return null
-        val status = FromVCSECMessage.ADAPTER.decode(payload).vehicleStatus ?: return null
-        return statusOf(status)
+        return FromVCSECMessage.ADAPTER.decode(payload).vehicleStatus
     }
-
-    /** The parsed view of a raw VCSEC status; [Status.raw] keeps the original. */
-    internal fun statusOf(raw: VehicleStatus): Status =
-        Status(
-            locked = raw.vehicleLockState != VehicleLockState_E.VEHICLELOCKSTATE_UNLOCKED,
-            asleep = raw.vehicleSleepStatus == VehicleSleepStatus_E.VEHICLE_SLEEP_STATUS_ASLEEP,
-            userPresent = raw.userPresence == UserPresence_E.VEHICLE_USER_PRESENCE_PRESENT,
-            raw = raw,
-        )
 
     fun parseWhitelistInfoResponse(bytes: ByteArray): WhitelistInfo? {
         val message = RoutableMessage.ADAPTER.decode(bytes)

@@ -56,8 +56,8 @@ class TeslaVcsecTest {
         assertTrue(status!!.locked)
         assertTrue(status.asleep)
         assertFalse(status.userPresent)
-        // The raw status rides along for the history log.
-        assertEquals(vehicleStatus, status.raw)
+        // The status comes back whole, for the history log.
+        assertEquals(vehicleStatus, status)
     }
 
     @Test

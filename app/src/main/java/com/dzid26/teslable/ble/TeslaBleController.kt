@@ -8,6 +8,7 @@ import com.dzid26.teslable.core.TeslaNames
 import com.dzid26.teslable.core.history.BatterySample
 import com.dzid26.teslable.core.history.ConnectionEvent
 import com.dzid26.teslable.core.protocol.AntiReplayWindow
+import com.dzid26.teslable.core.protocol.ShiftStateKind
 import com.dzid26.teslable.core.protocol.TeslaCommands
 import com.dzid26.teslable.core.protocol.TeslaCrypto
 import com.dzid26.teslable.core.protocol.TeslaKeyPair
@@ -15,6 +16,11 @@ import com.dzid26.teslable.core.protocol.TeslaPairing
 import com.dzid26.teslable.core.protocol.TeslaSession
 import com.dzid26.teslable.core.protocol.TeslaSessionRequests
 import com.dzid26.teslable.core.protocol.TeslaVcsec
+import com.dzid26.teslable.core.protocol.asleep
+import com.dzid26.teslable.core.protocol.chargingStateKind
+import com.dzid26.teslable.core.protocol.locked
+import com.dzid26.teslable.core.protocol.shiftStateKind
+import com.dzid26.teslable.core.protocol.userPresent
 import com.dzid26.teslable.history.HistoryStore
 import com.tesla.generated.universalmessage.Domain
 import com.tesla.generated.universalmessage.RoutableMessage
@@ -24,6 +30,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import java.time.Instant
 
 /**
  * Owns every vehicle the app knows and one [VehicleLink] per car. Scanning,
@@ -611,7 +618,8 @@ class TeslaBleController(
         state: ConnectionEvent.State,
     ) {
         if (link.phase != ConnectionPhase.READY) return
-        historyStore.recordConnection(link.bleName, state, System.currentTimeMillis(), latestRssi(link.address))
+        val acquiredAt = Instant.ofEpochMilli(System.currentTimeMillis())
+        historyStore.recordConnection(link.bleName, state, acquiredAt, latestRssi(link.address))
     }
 
     private fun log(message: String) {
@@ -674,7 +682,7 @@ class TeslaBleController(
         private var firstStatusAfterConnect = true
 
         /** The shift state last written to the debug log, so only a change is logged again. */
-        private var lastShiftState: String? = null
+        private var lastShiftState: ShiftStateKind? = null
 
         val poll =
             object : Runnable {
@@ -1134,7 +1142,7 @@ class TeslaBleController(
 
         private fun handleEncryptedResponse(
             bytes: ByteArray,
-            acquiredAtMillis: Long,
+            acquiredAt: Instant,
         ): Boolean {
             val message =
                 runCatching { RoutableMessage.ADAPTER.decode(bytes) }.getOrNull()
@@ -1175,15 +1183,15 @@ class TeslaBleController(
                     if (charge != null) {
                         val previous = _state.value.connections[address]?.charge
                         updateConnection(address) {
-                            it.copy(charge = charge, chargeAtMillis = acquiredAtMillis)
+                            it.copy(charge = charge, chargeAtMillis = acquiredAt.toEpochMilli())
                         }
-                        historyStore.record(bleName, charge, acquiredAtMillis, latestRssi(address))
-                        if (previous?.batteryLevel != charge.batteryLevel ||
-                            previous?.chargingState != charge.chargingState
+                        historyStore.record(bleName, charge, acquiredAt, latestRssi(address))
+                        if (previous?.battery_level != charge.battery_level ||
+                            previous?.chargingStateKind != charge.chargingStateKind
                         ) {
                             log(
-                                "${name()}: SOC ${charge.batteryLevel}% " +
-                                    "(${charge.chargingState ?: "unknown"})",
+                                "${name()}: SOC ${charge.battery_level}% " +
+                                    "(${charge.chargingStateKind?.name ?: "unknown"})",
                             )
                         }
                         requestDriveState()
@@ -1196,7 +1204,7 @@ class TeslaBleController(
                     }
                 }
 
-                CommandKind.DRIVE -> handleDriveResponse(plaintext, acquiredAtMillis)
+                CommandKind.DRIVE -> handleDriveResponse(plaintext, acquiredAt)
             }
             return true
         }
@@ -1208,7 +1216,7 @@ class TeslaBleController(
          */
         private fun handleDriveResponse(
             plaintext: ByteArray,
-            acquiredAtMillis: Long,
+            acquiredAt: Instant,
         ) {
             val drive = runCatching { TeslaCommands.parseDriveState(plaintext) }.getOrNull()
             if (drive == null) {
@@ -1219,11 +1227,11 @@ class TeslaBleController(
                 )
                 return
             }
-            historyStore.recordDrive(bleName, drive, acquiredAtMillis, latestRssi(address))
-            val shift = TeslaCommands.shiftStateName(drive.shift_state)
+            historyStore.recordDrive(bleName, drive, acquiredAt, latestRssi(address))
+            val shift = drive.shiftStateKind
             if (shift != lastShiftState) {
                 lastShiftState = shift
-                log("${name()}: shift state ${shift ?: "unknown"}")
+                log("${name()}: shift state ${shift?.name ?: "unknown"}")
             }
         }
 
@@ -1468,10 +1476,11 @@ class TeslaBleController(
 
         fun onMessage(message: ByteArray) {
             // The phone's clock when this reply arrived, read once: both BLE
-            // logs keep it beside the car's reply (ADR-0008).
-            val acquiredAtMillis = System.currentTimeMillis()
+            // logs keep it beside the car's reply (ADR-0008). Whole milliseconds,
+            // as stored before; Instant.now() can carry finer digits.
+            val acquiredAt = Instant.ofEpochMilli(System.currentTimeMillis())
             if (handleSessionInfo(message)) return
-            if (handleEncryptedResponse(message, acquiredAtMillis)) return
+            if (handleEncryptedResponse(message, acquiredAt)) return
             if (handlePairingResponse(message)) return
 
             val whitelist = runCatching { TeslaVcsec.parseWhitelistInfoResponse(message) }.getOrNull()
@@ -1490,10 +1499,8 @@ class TeslaBleController(
             if (status != null) {
                 // VCSEC replies carry no time: the phone's clock at receipt is
                 // the status log's timeline (ADR-0008).
-                status.raw?.let { raw ->
-                    val rssi = latestRssi(address)
-                    historyStore.recordStatus(bleName, raw, acquiredAtMillis, rssi, firstAfterConnect = firstStatusAfterConnect)
-                }
+                val rssi = latestRssi(address)
+                historyStore.recordStatus(bleName, status, acquiredAt, rssi, firstAfterConnect = firstStatusAfterConnect)
                 firstStatusAfterConnect = false
                 if (!status.asleep) {
                     handler.removeCallbacks(wakeRefresh)

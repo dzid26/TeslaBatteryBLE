@@ -2,6 +2,8 @@
 
 package com.dzid26.teslable.core.history
 
+import com.dzid26.teslable.core.protocol.ShiftStateKind
+
 /**
  * One DriveState reading, derived from a logged [BleRecord] (ADR-0008). Like
  * [BatterySample] it sits on the car's own clock: the time is
@@ -17,8 +19,8 @@ data class DriveSample(
     val timestampMillis: Long,
     /** Which vehicle the reading came from: the advertised BLE name, as in [BatterySample.vehicleId]. */
     val vehicleId: String,
-    /** `shift_state` as `P`, `R`, `N`, `D`, `Invalid` or `SNA`; null when the car sent none. */
-    val shiftState: String?,
+    /** `shift_state`; null when the car sent none. */
+    val shiftState: ShiftStateKind?,
     /** `speed`, as the car reports it; null when absent. */
     val speed: Int?,
     /** `power`: coarse drive power in kW, whose sign separates driving from regenerating; null when absent. */
