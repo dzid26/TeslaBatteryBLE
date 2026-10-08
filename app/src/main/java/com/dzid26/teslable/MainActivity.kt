@@ -12,7 +12,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -24,6 +23,7 @@ import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.compose.LifecycleStartEffect
 import com.dzid26.teslable.ble.BleControllerHolder
 import com.dzid26.teslable.ble.BleTrackingService
 import com.dzid26.teslable.ble.PairingKeyStore
@@ -56,10 +56,12 @@ class MainActivity : ComponentActivity() {
                     controller.ensureConnected()
                 }
 
-                // Poll RSSI fast only while the screen is showing the app.
-                DisposableEffect(Unit) {
+                // Poll RSSI fast only while the app is visible (started). Home or Recents stop
+                // the activity, but the tracking service keeps the process alive, so tying this
+                // to composition alone would leave the fast poll running in the background.
+                LifecycleStartEffect(Unit) {
                     controller.setUiVisible(true)
-                    onDispose { controller.setUiVisible(false) }
+                    onStopOrDispose { controller.setUiVisible(false) }
                 }
 
                 val state by controller.state.collectAsState()
