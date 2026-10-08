@@ -63,6 +63,16 @@ if [ ! -s "$NOTES" ]; then
   echo "See the [commit history](https://github.com/$REPO/commits/$TAG)." > "$NOTES"
 fi
 
+# Publish the draft "next release" kept by update-draft-release.sh, if any, under
+# this tag. Its pre-release checkbox is left as the owner set it.
+DRAFT_ID="$(gh api --paginate "repos/$REPO/releases" \
+  --jq '.[] | select(.draft and .name == "Next release (draft)") | .id' | sed -n 1p)"
+if [ -n "$DRAFT_ID" ]; then
+  gh api -X PATCH "repos/$REPO/releases/$DRAFT_ID" \
+    -f tag_name="$TAG" -f name="$TAG" -F draft=false > /dev/null
+  PRE_FLAG=""
+fi
+
 if gh release view "$TAG" > /dev/null 2>&1; then
   gh release edit "$TAG" --title "$TAG" --notes-file "$NOTES" $PRE_FLAG
 else
@@ -80,8 +90,3 @@ done
 assets="$(gh release view "$TAG" --json assets --jq '.assets[].name')"
 expected="$(basename "$APK")"
 printf '%s\n' "$assets" | grep -qx "$expected" || { echo "release $TAG is missing $expected" >&2; exit 1; }
-
-# A separate rolling `preview` release cut from this same commit is now redundant.
-if [ "$(git rev-parse -q --verify "refs/tags/preview^{commit}" 2>/dev/null || true)" = "$(git rev-parse HEAD)" ]; then
-  gh release delete preview --yes --cleanup-tag
-fi

@@ -18,16 +18,16 @@
 ## Release
 
 - [ ] Create and push tag `vX.Y.Z` (e.g. `git tag v0.2.0 && git push origin v0.2.0`).
-- [ ] CI builds the APK (and removes the rolling preview when the tag promotes it), attaches it as `TeslaBatteryBLE-<tag>.apk`, captures screenshots from the simulated car on the emulator, and embeds them (light/dark rows) as user attachments.
+- [ ] CI builds the APK, publishes the draft "Next release" under the tag (its pre-release checkbox is left as you set it), attaches it as `TeslaBatteryBLE-<tag>.apk`, captures screenshots from the simulated car on the emulator, and embeds them (light/dark rows) as user attachments.
 - [ ] The capture is required: a failed capture or a missing screenshot fails the run, and the release is not published without its screenshots.
 - [ ] CI sets the release title, marks tags containing `-` as prereleases, and writes notes from the commits since the previous tag plus the screenshots.
 - [ ] Verify the release page: correct tag/version, notes, screenshots, and installable APK artifact.
-- [ ] The rolling preview is removed automatically when the tagged commit matches it; otherwise it remains until the next un-released push.
+- [ ] Set the draft's pre-release checkbox before tagging if the release should be a pre-release; CI never changes it on a draft. Without a draft, CI marks tags containing `-` as prereleases.
 
 ## Current status
 
-- Stable signing: one owner-held keystore signs local builds, preview builds and tagged releases. Gradle reads the gitignored `keystore.properties`; CI writes it from the `SIGNING_*` secrets in the `release` environment (Settings → Environments; limited to `main` and `v*` tags, no required reviewer), and only the tag-release and rolling-preview jobs read them. Pull request builds, like the `build` job on every run, get no secrets and use the default debug key. Keep the keystore and its password backed up - losing them means no further updates to installed apps.
-- The rolling `preview` release lists the un-released changes on `main`, updated on every push; it carries no APK.
+- Stable signing: one owner-held keystore signs local builds and tagged releases. Gradle reads the gitignored `keystore.properties`; CI writes it from the `SIGNING_*` secrets in the `release` environment (Settings → Environments; limited to `main` and `v*` tags, no required reviewer), and only the tag-release job reads them. Pull request builds, like the `build` job on every run, get no secrets and use the default debug key. Keep the keystore and its password backed up - losing them means no further updates to installed apps.
+- A draft release "Next release (draft)" lists the un-released changes on `main`, updated in place on every push; it has no tag or APK. Tagging publishes it.
 - Switching signing keys (or installing a build signed elsewhere, e.g. F-Droid) requires uninstall + reinstall, which also deletes the car pairing key (re-pair with the NFC card).
 - Screenshots live in `website/images/` — one set shared by the README and the landing page; release notes embed the same CI capture as individual shots.
 
@@ -41,12 +41,11 @@
 ## Post-release
 
 - [ ] Review the generated release notes and correct any commit subjects that read poorly.
-- [ ] Verify the rolling preview still rebuilds green.
+- [ ] Verify the draft release job still runs green.
 - [ ] Close the release milestone.
 - [ ] Announce (release notes link; channels per master plan).
 
 ## Rollback
 
 - [ ] Delete the release or mark it as pre-release/draft on GitHub if it is broken.
-- [ ] If the `preview` tag was moved, re-point it at the last good commit and re-run CI.
 - [ ] File a follow-up issue for anything that changed during the release.

@@ -25,15 +25,15 @@ permissions:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  # Main runs are never cancelled: a preview publish is not
-  # worth killing halfway when rapid pushes arrive. Only PR runs
-  # are superseded; queued previews collapse in the preview job below.
+  # Main runs are never cancelled: a draft update is not worth killing halfway
+  # when rapid pushes arrive. Only PR runs are superseded; queued draft updates
+  # collapse in the draft job below.
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # Secrets only reach jobs that run trusted code. `build` runs for pull requests
 # and pushes without secrets and signs with the default debug key. `release`
-# (v* tags) and `preview` (main) take the signing key and ATTACHMENTS_TOKEN
-# from the `release` environment and build the signed APK themselves.
+# (v* tags) takes the signing key and ATTACHMENTS_TOKEN from the `release`
+# environment and builds the signed APK itself. `draft` (main) needs no secrets.
 jobs:
   build:
     permissions:
@@ -85,7 +85,7 @@ jobs:
 
       # The artifact gets its own application ID (.pr), launcher label and a
       # versionName ending in -pr<number>, so it installs next to the release
-      # app. The preview and release jobs and the screenshot captures build
+      # app. The release job and the screenshot captures build
       # without the property.
       - name: Build debug APK
         env:
@@ -216,7 +216,7 @@ jobs:
       # Release bot: point the committed screenshots (README + website) at the
       # build that was just released. Tags only, commits to main, and only when
       # a PNG actually changed; website/** is ignored by Android CI, so the
-      # commit does not rebuild the app or the rolling preview.
+      # commit does not rebuild the app or update the draft release.
       - name: Refresh the committed screenshots
         env:
           GH_TOKEN: ${{ github.token }}
@@ -245,19 +245,17 @@ jobs:
           # pages.yml never sees this commit; dispatch it explicitly.
           gh workflow run pages.yml --ref main
 
-  preview:
-    name: Rolling preview release
+  draft:
+    name: Draft next release
     needs: build
-    environment: release
     permissions:
       contents: write
     if: |
       github.ref == 'refs/heads/main' &&
       (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     concurrency:
-      group: preview-release
-      # Let the in-flight capture finish; newer pending previews replace older
-      # pending ones, so the newest build still wins without killing the capture.
+      group: draft-release
+      # Newer pending runs replace older pending ones; the in-flight one finishes.
       cancel-in-progress: false
     runs-on: ubuntu-latest
     steps:
@@ -265,49 +263,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Set up JDK 21
-        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6
-        with:
-          distribution: temurin
-          java-version: '21'
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6
-
-      - name: Make gradlew executable
-        run: chmod +x gradlew
-
-      - name: Set up signing
-        env:
-          SIGNING_KEYSTORE_BASE64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
-          SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
-          SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
-          SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
-        run: |
-          set -euo pipefail
-          # Never publish a debug-key build: fail when the release environment
-          # does not provide the signing secrets.
-          for name in SIGNING_KEYSTORE_BASE64 SIGNING_STORE_PASSWORD SIGNING_KEY_ALIAS SIGNING_KEY_PASSWORD; do
-            if [ -z "${!name:-}" ]; then
-              echo "::error::$name is not set in the release environment"
-              exit 1
-            fi
-          done
-          echo "$SIGNING_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
-          {
-            echo "storeFile=$RUNNER_TEMP/release.jks"
-            echo "storePassword=$SIGNING_STORE_PASSWORD"
-            echo "keyAlias=$SIGNING_KEY_ALIAS"
-            echo "keyPassword=$SIGNING_KEY_PASSWORD"
-          } > keystore.properties
-
-      - name: Build the signed debug APK
-        run: ./gradlew :app:assembleDebug
-
-      - name: Publish preview release
+      - name: Update the draft release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: bash .github/scripts/publish-preview-release.sh
+        run: bash .github/scripts/update-draft-release.sh
 
   go-vectors:
     runs-on: ubuntu-latest

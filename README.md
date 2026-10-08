@@ -58,9 +58,8 @@ OBD path for pack-level data. See:
 
 ### GitHub Releases
 
-The rolling [preview release](https://github.com/dzid26/TeslaBatteryBLE/releases/tag/preview)
-lists the changes on `main` since the last release. It carries no APK; install tagged
-releases, which are signed with the owner key and include prereleases such as betas.
+Install the APK from the latest [release](https://github.com/dzid26/TeslaBatteryBLE/releases).
+Releases are signed with the owner key and include prereleases such as betas.
 
 ### Obtainium (auto-updates from GitHub)
 
@@ -89,7 +88,7 @@ On Windows, use `.\gradlew` instead of `./gradlew`. The debug APK lands in
 
 CI (`.github/workflows/android.yml`) runs the core tests, app unit tests, lint, a
 debug build, a Go-fixture diff against `teslamotors/vehicle-command`, and publishes
-the rolling preview release; tag releases add emulator screenshots.
+a draft of the next release; tag releases add the APK and emulator screenshots.
 
 ## Architecture
 
