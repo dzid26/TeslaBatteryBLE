@@ -59,13 +59,9 @@ class TeslaGattClient(
             return
         }
         listener.onPhase(ConnectionPhase.CONNECTING)
-        gatt =
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
-                device.connectGatt(context, false, callback, BluetoothDevice.TRANSPORT_LE, BluetoothDevice.PHY_LE_1M_MASK, handler)
-            } else {
-                // Android 8.0 cannot hand notifications to a Handler safely; see binderCallback.
-                device.connectGatt(context, false, binderCallback, BluetoothDevice.TRANSPORT_LE)
-            }
+        // From Android 8.1 (our minSdk) BluetoothGatt stores a notification's value inside the posted callback, so the
+        // main-looper Handler can't deliver the next notification's bytes to onCharacteristicChanged.
+        gatt = device.connectGatt(context, false, callback, BluetoothDevice.TRANSPORT_LE, BluetoothDevice.PHY_LE_1M_MASK, handler)
     }
 
     @SuppressLint("MissingPermission")
@@ -287,90 +283,6 @@ class TeslaGattClient(
                 }
             }
         }
-
-    /**
-     * Android 8.0 only. Its BluetoothGatt stores each notification in the shared
-     * characteristic on the Binder thread before posting the callback to a
-     * Handler, so a queued callback can read the next notification's bytes
-     * (fixed in 8.1). There the client takes callbacks on the Binder thread,
-     * reads values at once and posts the work to the main thread itself.
-     */
-    private val binderCallback =
-        object : BluetoothGattCallback() {
-            override fun onConnectionStateChange(
-                gatt: BluetoothGatt,
-                status: Int,
-                newState: Int,
-            ) {
-                postToMain(gatt) { callback.onConnectionStateChange(gatt, status, newState) }
-            }
-
-            override fun onServicesDiscovered(
-                gatt: BluetoothGatt,
-                status: Int,
-            ) {
-                postToMain(gatt) { callback.onServicesDiscovered(gatt, status) }
-            }
-
-            override fun onMtuChanged(
-                gatt: BluetoothGatt,
-                mtu: Int,
-                status: Int,
-            ) {
-                postToMain(gatt) { callback.onMtuChanged(gatt, mtu, status) }
-            }
-
-            override fun onDescriptorWrite(
-                gatt: BluetoothGatt,
-                descriptor: BluetoothGattDescriptor,
-                status: Int,
-            ) {
-                postToMain(gatt) { callback.onDescriptorWrite(gatt, descriptor, status) }
-            }
-
-            @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
-            override fun onCharacteristicRead(
-                gatt: BluetoothGatt,
-                characteristic: BluetoothGattCharacteristic,
-                status: Int,
-            ) {
-                val value = characteristic.value
-                postToMain(gatt) { handleDeviceName(value, status) }
-            }
-
-            @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
-            override fun onCharacteristicChanged(
-                gatt: BluetoothGatt,
-                characteristic: BluetoothGattCharacteristic,
-            ) {
-                val value = characteristic.value
-                postToMain(gatt) { handleNotification(value) }
-            }
-
-            override fun onCharacteristicWrite(
-                gatt: BluetoothGatt,
-                characteristic: BluetoothGattCharacteristic,
-                status: Int,
-            ) {
-                postToMain(gatt) { callback.onCharacteristicWrite(gatt, characteristic, status) }
-            }
-
-            override fun onReadRemoteRssi(
-                gatt: BluetoothGatt,
-                rssi: Int,
-                status: Int,
-            ) {
-                postToMain(gatt) { callback.onReadRemoteRssi(gatt, rssi, status) }
-            }
-        }
-
-    /** Runs [block] on the main thread unless [gatt] was closed or replaced by then. */
-    private fun postToMain(
-        gatt: BluetoothGatt,
-        block: () -> Unit,
-    ) {
-        handler.post { if (gatt === this.gatt) block() }
-    }
 
     /** Setup step 1: MTU exchange, so frames sent after READY use full-size chunks. */
     @SuppressLint("MissingPermission")
