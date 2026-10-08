@@ -2,6 +2,7 @@
 package com.dzid26.teslable.ble
 
 import com.dzid26.teslable.core.history.BatterySample
+import com.dzid26.teslable.core.protocol.ChargingStateKind
 import com.dzid26.teslable.core.protocol.asleep
 import com.dzid26.teslable.core.protocol.locked
 import com.dzid26.teslable.core.protocol.userPresent
@@ -243,14 +244,14 @@ fun sessionNames(sessions: List<String>): String =
     }
 
 /** Friendly charging state for the charge details line. */
-fun chargingStateText(state: String): String =
+fun chargingStateText(state: ChargingStateKind): String =
     when (state) {
-        "Charging" -> "Charging"
-        "Complete" -> "Charging complete"
-        "Stopped" -> "Charging stopped"
-        "Disconnected" -> "Unplugged"
-        "NoPower" -> "No power"
-        "Starting" -> "Starting"
-        "Calibrating" -> "Calibrating"
-        else -> state
+        ChargingStateKind.Charging -> "Charging"
+        ChargingStateKind.Complete -> "Charging complete"
+        ChargingStateKind.Stopped -> "Charging stopped"
+        ChargingStateKind.Disconnected -> "Unplugged"
+        ChargingStateKind.NoPower -> "No power"
+        ChargingStateKind.Starting -> "Starting"
+        ChargingStateKind.Calibrating -> "Calibrating"
+        ChargingStateKind.Unknown -> "Unknown"
     }

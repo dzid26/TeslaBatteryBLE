@@ -143,9 +143,12 @@ identity), `docs/requirements/multi-phone.md`
 - **Derived values are defined once.** The live state is the car's raw reply
   too: `parseChargeState`, `parseDriveState` and `parseStatusResponse` return
   the Wire message whole, and the screens read plain fields off it. A value
-  that needs a rule (an enum's name, a fallback, the status flags) is an
-  extension property in `core/.../protocol/StateViews.kt`, and the samples, the
-  screens and the debug log all use it; no read model re-derives it.
+  that needs a rule is an extension property in
+  `core/.../protocol/StateViews.kt`: the charging state and the gear as enums
+  (`ChargingStateKind`, `ShiftStateKind`, one value per member of the car's
+  oneof), the rate fallback, the status flags. The samples, the screens and the
+  debug log all use it; no read model re-derives it, and no code compares state
+  names as strings.
 - **Evolution rules** (repeated at the top of `ble_record.proto`). The logs
   are append-only and long-lived, so the envelope only ever grows additively:
   - New fields and new `oneof` payload kinds only get new field numbers. Old

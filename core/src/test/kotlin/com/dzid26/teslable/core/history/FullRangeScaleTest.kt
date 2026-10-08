@@ -2,6 +2,7 @@
 
 package com.dzid26.teslable.core.history
 
+import com.dzid26.teslable.core.protocol.ChargingStateKind
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -16,7 +17,7 @@ class FullRangeScaleTest {
     ) = BatterySample(
         timestampMillis = minutes * 60_000L,
         batteryLevel = level,
-        chargingState = "Disconnected",
+        chargingState = ChargingStateKind.Disconnected,
         chargeLimit = null,
         ratedRangeMiles = miles,
     )

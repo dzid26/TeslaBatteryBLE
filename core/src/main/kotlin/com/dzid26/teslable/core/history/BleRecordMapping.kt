@@ -4,14 +4,14 @@ package com.dzid26.teslable.core.history
 
 import com.dzid26.teslable.core.protocol.asleep
 import com.dzid26.teslable.core.protocol.locked
-import com.dzid26.teslable.core.protocol.shiftStateName
+import com.dzid26.teslable.core.protocol.shiftStateKind
 import com.dzid26.teslable.core.protocol.userPresent
 
 // One-way conversion: BleRecords kept in the history logs become the app's
 // read models (BatterySample, StatusSample, DriveSample). The read models are
 // derived on load; nothing ever writes a record back from parsed fields — the
 // store logs the car's raw reply verbatim, next to the phone's acquisition
-// time (ADR-0008). A value that needs a rule (a name, the status flags) comes
+// time (ADR-0008). A value that needs a rule (a gear, a charging state, the status flags) comes
 // from the shared properties in protocol/StateViews.kt, never re-derived here.
 
 /**
@@ -49,7 +49,7 @@ fun BleRecord.toDriveSample(vehicleId: String): DriveSample? {
     return DriveSample(
         timestampMillis = time,
         vehicleId = vehicleId,
-        shiftState = drive.shiftStateName,
+        shiftState = drive.shiftStateKind,
         speed = drive.speed,
         power = drive.power,
         odometerInHundredthsOfAMile = drive.odometer_in_hundredths_of_a_mile,

@@ -3,6 +3,8 @@
 package com.dzid26.teslable.ble
 
 import com.dzid26.teslable.core.protocol.AntiReplayWindow
+import com.dzid26.teslable.core.protocol.ChargingStateKind
+import com.dzid26.teslable.core.protocol.ShiftStateKind
 import com.dzid26.teslable.core.protocol.TeslaCommands
 import com.dzid26.teslable.core.protocol.TeslaCrypto
 import com.dzid26.teslable.core.protocol.TeslaKeys
@@ -11,9 +13,9 @@ import com.dzid26.teslable.core.protocol.TeslaSession
 import com.dzid26.teslable.core.protocol.TeslaSessionRequests
 import com.dzid26.teslable.core.protocol.TeslaVcsec
 import com.dzid26.teslable.core.protocol.asleep
-import com.dzid26.teslable.core.protocol.chargingStateName
+import com.dzid26.teslable.core.protocol.chargingStateKind
 import com.dzid26.teslable.core.protocol.locked
-import com.dzid26.teslable.core.protocol.shiftStateName
+import com.dzid26.teslable.core.protocol.shiftStateKind
 import com.dzid26.teslable.core.protocol.userPresent
 import com.tesla.generated.universalmessage.Domain
 import com.tesla.generated.universalmessage.RoutableMessage
@@ -128,7 +130,7 @@ class FakeCarProtocolTest {
         assertEquals(78, charge!!.battery_level)
         assertEquals(78, charge.usable_battery_level)
         assertEquals(85, charge.charge_limit_soc)
-        assertEquals("Disconnected", charge.chargingStateName)
+        assertEquals(ChargingStateKind.Disconnected, charge.chargingStateKind)
         assertEquals(234f, charge.battery_range)
         assertEquals(226.2f, charge.est_battery_range!!, 0.01f)
         // History takes time only from the car's own stamp.
@@ -147,7 +149,7 @@ class FakeCarProtocolTest {
                 TeslaCommands.buildChargeStateRequest(),
             )
 
-        assertEquals("Charging", TeslaCommands.parseChargeState(plaintext)!!.chargingStateName)
+        assertEquals(ChargingStateKind.Charging, TeslaCommands.parseChargeState(plaintext)!!.chargingStateKind)
     }
 
     @Test
@@ -162,7 +164,7 @@ class FakeCarProtocolTest {
 
         val drive = TeslaCommands.parseDriveState(plaintext)
         assertNotNull(drive)
-        assertEquals("P", drive!!.shiftStateName)
+        assertEquals(ShiftStateKind.P, drive!!.shiftStateKind)
         assertEquals(0, drive.speed)
         assertEquals(0, drive.power)
         assertNotNull(drive.odometer_in_hundredths_of_a_mile)

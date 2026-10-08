@@ -8,6 +8,7 @@ import com.dzid26.teslable.core.TeslaNames
 import com.dzid26.teslable.core.history.BatterySample
 import com.dzid26.teslable.core.history.ConnectionEvent
 import com.dzid26.teslable.core.protocol.AntiReplayWindow
+import com.dzid26.teslable.core.protocol.ShiftStateKind
 import com.dzid26.teslable.core.protocol.TeslaCommands
 import com.dzid26.teslable.core.protocol.TeslaCrypto
 import com.dzid26.teslable.core.protocol.TeslaKeyPair
@@ -16,9 +17,9 @@ import com.dzid26.teslable.core.protocol.TeslaSession
 import com.dzid26.teslable.core.protocol.TeslaSessionRequests
 import com.dzid26.teslable.core.protocol.TeslaVcsec
 import com.dzid26.teslable.core.protocol.asleep
-import com.dzid26.teslable.core.protocol.chargingStateName
+import com.dzid26.teslable.core.protocol.chargingStateKind
 import com.dzid26.teslable.core.protocol.locked
-import com.dzid26.teslable.core.protocol.shiftStateName
+import com.dzid26.teslable.core.protocol.shiftStateKind
 import com.dzid26.teslable.core.protocol.userPresent
 import com.dzid26.teslable.history.HistoryStore
 import com.tesla.generated.universalmessage.Domain
@@ -681,7 +682,7 @@ class TeslaBleController(
         private var firstStatusAfterConnect = true
 
         /** The shift state last written to the debug log, so only a change is logged again. */
-        private var lastShiftState: String? = null
+        private var lastShiftState: ShiftStateKind? = null
 
         val poll =
             object : Runnable {
@@ -1186,11 +1187,11 @@ class TeslaBleController(
                         }
                         historyStore.record(bleName, charge, acquiredAt, latestRssi(address))
                         if (previous?.battery_level != charge.battery_level ||
-                            previous?.chargingStateName != charge.chargingStateName
+                            previous?.chargingStateKind != charge.chargingStateKind
                         ) {
                             log(
                                 "${name()}: SOC ${charge.battery_level}% " +
-                                    "(${charge.chargingStateName ?: "unknown"})",
+                                    "(${charge.chargingStateKind?.name ?: "unknown"})",
                             )
                         }
                         requestDriveState()
@@ -1227,10 +1228,10 @@ class TeslaBleController(
                 return
             }
             historyStore.recordDrive(bleName, drive, acquiredAt, latestRssi(address))
-            val shift = drive.shiftStateName
+            val shift = drive.shiftStateKind
             if (shift != lastShiftState) {
                 lastShiftState = shift
-                log("${name()}: shift state ${shift ?: "unknown"}")
+                log("${name()}: shift state ${shift?.name ?: "unknown"}")
             }
         }
 

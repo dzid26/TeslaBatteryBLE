@@ -35,7 +35,7 @@ object TeslaCommands {
     /**
      * The car's raw `ChargeState` from a vehicle-data reply, or null when the
      * reply holds none. It is returned whole: the history logs it verbatim
-     * (ADR-0008), and derived values come from [chargingStateName] and the
+     * (ADR-0008), and derived values come from [chargingStateKind] and the
      * other properties in `StateViews.kt`.
      */
     fun parseChargeState(payload: ByteArray): ChargeState? {

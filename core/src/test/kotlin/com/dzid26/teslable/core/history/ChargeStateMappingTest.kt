@@ -2,6 +2,7 @@
 
 package com.dzid26.teslable.core.history
 
+import com.dzid26.teslable.core.protocol.ChargingStateKind
 import com.tesla.generated.carserver.common.Void
 import com.tesla.generated.carserver.vehicle.ChargeState
 import org.junit.Assert.assertEquals
@@ -36,7 +37,7 @@ class ChargeStateMappingTest {
             BatterySample(
                 timestampMillis = 1_000L,
                 batteryLevel = 77,
-                chargingState = "Charging",
+                chargingState = ChargingStateKind.Charging,
                 chargeLimit = 85,
                 vehicleId = "Se1f0941734830fe7C",
                 ratedRangeMiles = 206.61f,

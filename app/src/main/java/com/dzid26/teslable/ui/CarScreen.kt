@@ -77,7 +77,7 @@ import com.dzid26.teslable.core.history.dischargeProjection
 import com.dzid26.teslable.core.history.projectionWindowMillis
 import com.dzid26.teslable.core.history.within
 import com.dzid26.teslable.core.protocol.asleep
-import com.dzid26.teslable.core.protocol.chargingStateName
+import com.dzid26.teslable.core.protocol.chargingStateKind
 import com.dzid26.teslable.health.healthSummary
 import com.tesla.generated.carserver.vehicle.ChargeState
 import kotlinx.coroutines.delay
@@ -294,7 +294,7 @@ private fun ChargeDetails(charge: ChargeState?) {
         buildList {
             charge.battery_range?.let { add("${formatRangeMiles(it)} mi") }
             charge.charge_limit_soc?.let { add("Charge limit $it%") }
-            charge.chargingStateName?.let { add(chargingStateText(it)) }
+            charge.chargingStateKind?.let { add(chargingStateText(it)) }
         }
     if (details.isNotEmpty()) {
         Text(

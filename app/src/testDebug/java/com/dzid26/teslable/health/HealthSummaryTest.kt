@@ -2,6 +2,7 @@
 package com.dzid26.teslable.health
 
 import com.dzid26.teslable.core.history.BatterySample
+import com.dzid26.teslable.core.protocol.ChargingStateKind
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -12,7 +13,7 @@ class HealthSummaryTest {
     private fun sample(
         minutes: Long,
         level: Int,
-        state: String? = "Disconnected",
+        state: ChargingStateKind? = ChargingStateKind.Disconnected,
         limit: Int? = 85,
         ratedRangeMiles: Float? = null,
         energyAddedKwh: Float? = null,
@@ -33,9 +34,9 @@ class HealthSummaryTest {
         val twoSessions =
             listOf(
                 sample(0, 50),
-                sample(10, 60, "Charging", energyAddedKwh = 7.5f),
+                sample(10, 60, ChargingStateKind.Charging, energyAddedKwh = 7.5f),
                 sample(20, 60),
-                sample(30, 70, "Charging", energyAddedKwh = 7.5f),
+                sample(30, 70, ChargingStateKind.Charging, energyAddedKwh = 7.5f),
                 sample(40, 70),
             )
         assertEquals(HealthConfidence.LEARNING, healthSummary(twoSessions).confidence)
@@ -43,7 +44,7 @@ class HealthSummaryTest {
         assertEquals(3, healthSummary(twoSessions).learningTarget)
 
         val threeSessions =
-            twoSessions + listOf(sample(50, 80, "Charging", energyAddedKwh = 7.5f), sample(60, 80))
+            twoSessions + listOf(sample(50, 80, ChargingStateKind.Charging, energyAddedKwh = 7.5f), sample(60, 80))
         assertEquals(HealthConfidence.LOW, healthSummary(threeSessions).confidence)
     }
 
@@ -52,9 +53,9 @@ class HealthSummaryTest {
         val samples =
             listOf(
                 sample(0, 20),
-                sample(10, 20, "Charging", energyAddedKwh = 0f),
-                sample(20, 40, "Charging", energyAddedKwh = 13.125f, milesAddedRated = 60f),
-                sample(30, 60, "Charging", energyAddedKwh = 26.25f, milesAddedRated = 120f),
+                sample(10, 20, ChargingStateKind.Charging, energyAddedKwh = 0f),
+                sample(20, 40, ChargingStateKind.Charging, energyAddedKwh = 13.125f, milesAddedRated = 60f),
+                sample(30, 60, ChargingStateKind.Charging, energyAddedKwh = 26.25f, milesAddedRated = 120f),
                 sample(40, 60),
             )
         val summary = healthSummary(samples)
@@ -72,8 +73,8 @@ class HealthSummaryTest {
         val samples =
             listOf(
                 sample(0, 20),
-                sample(10, 20, "Charging", energyAddedKwh = 0f),
-                sample(20, 60, "Charging", energyAddedKwh = 26.25f, milesAddedRated = 120f),
+                sample(10, 20, ChargingStateKind.Charging, energyAddedKwh = 0f),
+                sample(20, 60, ChargingStateKind.Charging, energyAddedKwh = 26.25f, milesAddedRated = 120f),
                 sample(30, 60, ratedRangeMiles = 174f),
             )
         // The single reading extrapolates to 290 mi; the session's scale wins.
@@ -92,8 +93,8 @@ class HealthSummaryTest {
         val samples =
             listOf(
                 sample(0, 20),
-                sample(10, 20, "Charging", energyAddedKwh = 0f),
-                sample(20, 60, "Charging", energyAddedKwh = 26.25f, milesAddedRated = 120f),
+                sample(10, 20, ChargingStateKind.Charging, energyAddedKwh = 0f),
+                sample(20, 60, ChargingStateKind.Charging, energyAddedKwh = 26.25f, milesAddedRated = 120f),
                 sample(30, 60),
                 sample(40, 80, ratedRangeMiles = 216f),
             )
@@ -110,7 +111,12 @@ class HealthSummaryTest {
     @Test
     fun `thin inputs are flagged`() {
         val smallSwing =
-            healthSummary(listOf(sample(0, 50, "Charging", energyAddedKwh = 1f), sample(5, 55, "Charging", energyAddedKwh = 3f)))
+            healthSummary(
+                listOf(
+                    sample(0, 50, ChargingStateKind.Charging, energyAddedKwh = 1f),
+                    sample(5, 55, ChargingStateKind.Charging, energyAddedKwh = 3f),
+                ),
+            )
         assertNotNull(smallSwing.qualityNote)
 
         val lowSoc = healthSummary(listOf(sample(0, 20, ratedRangeMiles = 60f)))

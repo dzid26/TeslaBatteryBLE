@@ -2,6 +2,8 @@
 
 package com.dzid26.teslable.core.history
 
+import com.dzid26.teslable.core.protocol.ChargingStateKind
+import com.dzid26.teslable.core.protocol.ShiftStateKind
 import com.squareup.wire.ofEpochSecond
 import com.tesla.generated.carserver.common.LatLong
 import com.tesla.generated.carserver.common.Void
@@ -101,7 +103,7 @@ class BleRecordMappingTest {
         val sample = BleRecord(acquired_at = ofEpochSecond(1_001, 0), charge_state = charging).toBatterySample(VEHICLE)
         assertEquals(charging.toBatterySample(VEHICLE), sample)
         assertEquals(77, sample?.batteryLevel)
-        assertEquals("Charging", sample?.chargingState)
+        assertEquals(ChargingStateKind.Charging, sample?.chargingState)
     }
 
     @Test
@@ -161,7 +163,7 @@ class BleRecordMappingTest {
             DriveSample(
                 timestampMillis = 2_000_000L,
                 vehicleId = VEHICLE,
-                shiftState = "D",
+                shiftState = ShiftStateKind.D,
                 speed = 42,
                 power = -7,
                 odometerInHundredthsOfAMile = 1_234_567,
@@ -179,7 +181,16 @@ class BleRecordMappingTest {
     fun `a parked drive record keeps absent fields absent`() {
         val parked = DriveState(shift_state = ShiftState(P = Void()), timestamp = ofEpochSecond(5, 0))
         val sample = BleRecord(drive_state = parked).toDriveSample(VEHICLE)
-        assertEquals(DriveSample(5_000L, VEHICLE, shiftState = "P", speed = null, power = null, odometerInHundredthsOfAMile = null), sample)
+        val expected =
+            DriveSample(
+                timestampMillis = 5_000L,
+                vehicleId = VEHICLE,
+                shiftState = ShiftStateKind.P,
+                speed = null,
+                power = null,
+                odometerInHundredthsOfAMile = null,
+            )
+        assertEquals(expected, sample)
     }
 
     @Test

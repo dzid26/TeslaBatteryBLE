@@ -2,6 +2,7 @@
 
 package com.dzid26.teslable.core.history
 
+import com.dzid26.teslable.core.protocol.ChargingStateKind
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -10,7 +11,7 @@ class BatteryChartTest {
     private fun sample(
         minutes: Long,
         percent: Int,
-        state: String? = "Disconnected",
+        state: ChargingStateKind? = ChargingStateKind.Disconnected,
         limit: Int? = null,
     ) = BatterySample(
         timestampMillis = minutes * 60_000L,
@@ -21,7 +22,7 @@ class BatteryChartTest {
 
     @Test
     fun dischargeProjectionNullWhileCharging() {
-        val samples = listOf(sample(0, 80, "Charging", limit = 90), sample(30, 70, "Charging", limit = 90))
+        val samples = listOf(sample(0, 80, ChargingStateKind.Charging, limit = 90), sample(30, 70, ChargingStateKind.Charging, limit = 90))
         assertNull(dischargeProjection(samples, windowMillis = 6 * 60 * 60_000L, nowMillis = 31 * 60_000L))
     }
 
@@ -60,7 +61,7 @@ class BatteryChartTest {
     fun projectionNullWhenLastSampleIsNotCharging() {
         val samples =
             listOf(
-                sample(0, 50, "Charging", limit = 80),
+                sample(0, 50, ChargingStateKind.Charging, limit = 80),
                 sample(30, 60),
             )
         assertNull(chargeProjection(samples))
@@ -68,15 +69,15 @@ class BatteryChartTest {
 
     @Test
     fun projectionNullWithSingleChargingSample() {
-        assertNull(chargeProjection(listOf(sample(0, 50, "Charging", limit = 80))))
+        assertNull(chargeProjection(listOf(sample(0, 50, ChargingStateKind.Charging, limit = 80))))
     }
 
     @Test
     fun projectionNullWithoutChargeLimit() {
         val samples =
             listOf(
-                sample(0, 50, "Charging"),
-                sample(30, 60, "Charging"),
+                sample(0, 50, ChargingStateKind.Charging),
+                sample(30, 60, ChargingStateKind.Charging),
             )
         assertNull(chargeProjection(samples))
     }
@@ -85,15 +86,15 @@ class BatteryChartTest {
     fun projectionNullWhenLimitAlreadyReached() {
         val atLimit =
             listOf(
-                sample(0, 50, "Charging", limit = 80),
-                sample(30, 80, "Charging", limit = 80),
+                sample(0, 50, ChargingStateKind.Charging, limit = 80),
+                sample(30, 80, ChargingStateKind.Charging, limit = 80),
             )
         assertNull(chargeProjection(atLimit))
 
         val aboveLimit =
             listOf(
-                sample(0, 50, "Charging", limit = 70),
-                sample(30, 80, "Charging", limit = 70),
+                sample(0, 50, ChargingStateKind.Charging, limit = 70),
+                sample(30, 80, ChargingStateKind.Charging, limit = 70),
             )
         assertNull(chargeProjection(aboveLimit))
     }
@@ -102,8 +103,8 @@ class BatteryChartTest {
     fun projectionNullWhenPercentStalls() {
         val samples =
             listOf(
-                sample(0, 50, "Charging", limit = 80),
-                sample(30, 50, "Charging", limit = 80),
+                sample(0, 50, ChargingStateKind.Charging, limit = 80),
+                sample(30, 50, ChargingStateKind.Charging, limit = 80),
             )
         assertNull(chargeProjection(samples))
     }
@@ -112,8 +113,8 @@ class BatteryChartTest {
     fun projectionNullWhenRateSpanIsTooShort() {
         val samples =
             listOf(
-                sample(0, 50, "Charging", limit = 80),
-                sample(1, 55, "Charging", limit = 80),
+                sample(0, 50, ChargingStateKind.Charging, limit = 80),
+                sample(1, 55, ChargingStateKind.Charging, limit = 80),
             )
         assertNull(chargeProjection(samples))
     }
@@ -122,9 +123,9 @@ class BatteryChartTest {
     fun projectionComputesCompletionFromTheCurrentRun() {
         val samples =
             listOf(
-                sample(0, 50, "Charging", limit = 90),
-                sample(30, 60, "Charging", limit = 90),
-                sample(60, 70, "Charging", limit = 90),
+                sample(0, 50, ChargingStateKind.Charging, limit = 90),
+                sample(30, 60, ChargingStateKind.Charging, limit = 90),
+                sample(60, 70, ChargingStateKind.Charging, limit = 90),
             )
 
         val projection = chargeProjection(samples)!!
@@ -138,11 +139,11 @@ class BatteryChartTest {
     fun projectionUsesOnlyTheTrailingChargingRun() {
         val samples =
             listOf(
-                sample(0, 30, "Charging", limit = 80),
-                sample(30, 40, "Charging", limit = 80),
+                sample(0, 30, ChargingStateKind.Charging, limit = 80),
+                sample(30, 40, ChargingStateKind.Charging, limit = 80),
                 sample(60, 39),
-                sample(90, 50, "Charging", limit = 80),
-                sample(120, 60, "Charging", limit = 80),
+                sample(90, 50, ChargingStateKind.Charging, limit = 80),
+                sample(120, 60, ChargingStateKind.Charging, limit = 80),
             )
 
         val projection = chargeProjection(samples)!!
@@ -154,8 +155,8 @@ class BatteryChartTest {
     fun projectionUsesTheLiveRateAndTheRunsMiles() {
         val samples =
             listOf(
-                sample(0, 50, "Charging", limit = 80).copy(ratedRangeMiles = 150f),
-                sample(10, 60, "Charging", limit = 80).copy(ratedRangeMiles = 180f),
+                sample(0, 50, ChargingStateKind.Charging, limit = 80).copy(ratedRangeMiles = 150f),
+                sample(10, 60, ChargingStateKind.Charging, limit = 80).copy(ratedRangeMiles = 180f),
             )
 
         // 20% left at 3 mi/% = 60 mi; at the live 90 mph that is 40 min,
@@ -168,8 +169,8 @@ class BatteryChartTest {
     fun projectionUsesTheLearnedScaleWithTheLiveRate() {
         val samples =
             listOf(
-                sample(0, 50, "Charging", limit = 80),
-                sample(10, 60, "Charging", limit = 80),
+                sample(0, 50, ChargingStateKind.Charging, limit = 80),
+                sample(10, 60, ChargingStateKind.Charging, limit = 80),
             )
 
         // 20% x 2.4 mi/% = 48 mi; at 90 mph that is 32 min.
@@ -181,8 +182,8 @@ class BatteryChartTest {
     fun projectionKeepsThePercentFallbackWithoutARate() {
         val samples =
             listOf(
-                sample(0, 50, "Charging", limit = 80).copy(ratedRangeMiles = 150f),
-                sample(10, 60, "Charging", limit = 80).copy(ratedRangeMiles = 180f),
+                sample(0, 50, ChargingStateKind.Charging, limit = 80).copy(ratedRangeMiles = 150f),
+                sample(10, 60, ChargingStateKind.Charging, limit = 80).copy(ratedRangeMiles = 180f),
             )
 
         // No live rate: the run average still gives 20 min for the last 20%.

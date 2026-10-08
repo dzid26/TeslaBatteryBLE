@@ -2,13 +2,13 @@
 
 package com.dzid26.teslable.core.history
 
-import com.dzid26.teslable.core.protocol.chargingStateName
+import com.dzid26.teslable.core.protocol.chargingStateKind
 import com.tesla.generated.carserver.vehicle.ChargeState
 
 // One-way conversion: raw car ChargeState records kept in the history log
 // become the app's BatterySample read model. The read model is derived on
 // load; nothing ever writes a record back from parsed fields — the store logs
-// the car's raw response verbatim. The charging state's name comes from the
+// the car's raw response verbatim. The charging state comes from the
 // shared property in protocol/StateViews.kt, never re-derived here.
 
 /** The app-facing sample for a raw record; null when the car sent no level or no timestamp. */
@@ -18,7 +18,7 @@ fun ChargeState.toBatterySample(vehicleId: String): BatterySample? {
     return BatterySample(
         timestampMillis = time,
         batteryLevel = level,
-        chargingState = chargingStateName,
+        chargingState = chargingStateKind,
         chargeLimit = charge_limit_soc,
         vehicleId = vehicleId,
         ratedRangeMiles = battery_range,

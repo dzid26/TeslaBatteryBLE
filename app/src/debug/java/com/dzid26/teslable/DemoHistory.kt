@@ -7,6 +7,7 @@ import com.dzid26.teslable.ble.DemoMode
 import com.dzid26.teslable.core.TeslaNames
 import com.dzid26.teslable.core.history.BleRecord
 import com.dzid26.teslable.core.history.ProtoLog
+import com.dzid26.teslable.core.protocol.ChargingStateKind
 import com.tesla.generated.carserver.common.Void
 import com.tesla.generated.carserver.vehicle.ChargeState
 import java.io.File
@@ -46,7 +47,7 @@ internal object DemoHistory {
     private data class Point(
         val minutesAgo: Long,
         val percent: Int,
-        val state: String,
+        val state: ChargingStateKind,
         val chargeStartPercent: Int? = null,
     )
 
@@ -54,28 +55,28 @@ internal object DemoHistory {
         val points =
             buildList {
                 // 48 h ago: parked at 64%, then a morning drive to 55.
-                addAll(segment(2880, 2700, 64, 63, 60, "Disconnected"))
-                addAll(segment(2700, 2580, 63, 55, 15, "Disconnected"))
+                addAll(segment(2880, 2700, 64, 63, 60, ChargingStateKind.Disconnected))
+                addAll(segment(2700, 2580, 63, 55, 15, ChargingStateKind.Disconnected))
                 // Parked: 55 -> 54.
-                addAll(segment(2580, 2460, 55, 54, 60, "Disconnected"))
+                addAll(segment(2580, 2460, 55, 54, 60, ChargingStateKind.Disconnected))
                 // First charge of the window: a two-hour AC session to 66.
-                addAll(segment(2460, 2340, 54, 66, 10, "Charging"))
+                addAll(segment(2460, 2340, 54, 66, 10, ChargingStateKind.Charging))
                 // Drive to work: 66 -> 58.
-                addAll(segment(2340, 2220, 66, 58, 15, "Disconnected"))
+                addAll(segment(2340, 2220, 66, 58, 15, ChargingStateKind.Disconnected))
                 // Parked: 58 -> 57.
-                addAll(segment(2220, 2100, 58, 57, 60, "Disconnected"))
+                addAll(segment(2220, 2100, 58, 57, 60, ChargingStateKind.Disconnected))
                 // Second charge: a two-hour session to 69.
-                addAll(segment(2100, 1980, 57, 69, 10, "Charging"))
+                addAll(segment(2100, 1980, 57, 69, 10, ChargingStateKind.Charging))
                 // Drive home: 69 -> 60.
-                addAll(segment(1980, 1860, 69, 60, 15, "Disconnected"))
+                addAll(segment(1980, 1860, 69, 60, 15, ChargingStateKind.Disconnected))
                 // Parked overnight: 60 -> 58.
-                addAll(segment(1860, 1440, 60, 58, 60, "Disconnected"))
+                addAll(segment(1860, 1440, 60, 58, 60, ChargingStateKind.Disconnected))
                 // Third charge: the four-hour AC session to the limit.
-                addAll(segment(1440, 1200, 58, 85, 10, "Charging"))
+                addAll(segment(1440, 1200, 58, 85, 10, ChargingStateKind.Charging))
                 // Complete at the limit, then the slow parked drain to 78%.
-                add(Point(1200, 85, "Complete"))
-                addAll(segment(1140, 360, 84, 80, 60, "Disconnected"))
-                addAll(segment(360, 10, 80, 78, 30, "Disconnected"))
+                add(Point(1200, 85, ChargingStateKind.Complete))
+                addAll(segment(1140, 360, 84, 80, 60, ChargingStateKind.Disconnected))
+                addAll(segment(360, 10, 80, 78, 30, ChargingStateKind.Disconnected))
             }
         // A segment's end and the next segment's start share a timestamp; keep
         // the newer one so a charge session starts on its own first sample.
@@ -97,7 +98,7 @@ internal object DemoHistory {
         fromPercent: Int,
         toPercent: Int,
         stepMin: Long,
-        state: String,
+        state: ChargingStateKind,
     ): List<Point> {
         val span = (fromAgo - toAgo).coerceAtLeast(1L)
         val points = mutableListOf<Point>()
@@ -110,7 +111,7 @@ internal object DemoHistory {
                     minutesAgo = ago,
                     percent = percent,
                     state = state,
-                    chargeStartPercent = if (state == "Charging") fromPercent else null,
+                    chargeStartPercent = if (state == ChargingStateKind.Charging) fromPercent else null,
                 )
             ago -= stepMin
         }
@@ -121,7 +122,7 @@ internal object DemoHistory {
                     minutesAgo = toAgo,
                     percent = toPercent,
                     state = state,
-                    chargeStartPercent = if (state == "Charging") fromPercent else null,
+                    chargeStartPercent = if (state == ChargingStateKind.Charging) fromPercent else null,
                 )
         }
         return points
@@ -148,11 +149,11 @@ internal object DemoHistory {
         )
     }
 
-    private fun chargingState(state: String): ChargeState.ChargingState? =
+    private fun chargingState(state: ChargingStateKind): ChargeState.ChargingState? =
         when (state) {
-            "Charging" -> ChargeState.ChargingState(Charging = Void())
-            "Complete" -> ChargeState.ChargingState(Complete = Void())
-            "Disconnected" -> ChargeState.ChargingState(Disconnected = Void())
+            ChargingStateKind.Charging -> ChargeState.ChargingState(Charging = Void())
+            ChargingStateKind.Complete -> ChargeState.ChargingState(Complete = Void())
+            ChargingStateKind.Disconnected -> ChargeState.ChargingState(Disconnected = Void())
             else -> null
         }
 }

@@ -56,23 +56,23 @@ class StateViewsTest {
     }
 
     @Test
-    fun `names every charging state`() {
-        fun name(state: ChargeState.ChargingState) = ChargeState(charging_state = state).chargingStateName
+    fun `reads every charging state`() {
+        fun kind(state: ChargeState.ChargingState) = ChargeState(charging_state = state).chargingStateKind
 
-        assertEquals("Charging", name(ChargeState.ChargingState(Charging = Void())))
-        assertEquals("Complete", name(ChargeState.ChargingState(Complete = Void())))
-        assertEquals("Stopped", name(ChargeState.ChargingState(Stopped = Void())))
-        assertEquals("Disconnected", name(ChargeState.ChargingState(Disconnected = Void())))
-        assertEquals("NoPower", name(ChargeState.ChargingState(NoPower = Void())))
-        assertEquals("Starting", name(ChargeState.ChargingState(Starting = Void())))
-        assertEquals("Calibrating", name(ChargeState.ChargingState(Calibrating = Void())))
-        assertEquals("Unknown", name(ChargeState.ChargingState(Unknown = Void())))
+        assertEquals(ChargingStateKind.Charging, kind(ChargeState.ChargingState(Charging = Void())))
+        assertEquals(ChargingStateKind.Complete, kind(ChargeState.ChargingState(Complete = Void())))
+        assertEquals(ChargingStateKind.Stopped, kind(ChargeState.ChargingState(Stopped = Void())))
+        assertEquals(ChargingStateKind.Disconnected, kind(ChargeState.ChargingState(Disconnected = Void())))
+        assertEquals(ChargingStateKind.NoPower, kind(ChargeState.ChargingState(NoPower = Void())))
+        assertEquals(ChargingStateKind.Starting, kind(ChargeState.ChargingState(Starting = Void())))
+        assertEquals(ChargingStateKind.Calibrating, kind(ChargeState.ChargingState(Calibrating = Void())))
+        assertEquals(ChargingStateKind.Unknown, kind(ChargeState.ChargingState(Unknown = Void())))
     }
 
     @Test
-    fun `an unset charging state has no name`() {
-        assertNull(ChargeState(charging_state = ChargeState.ChargingState()).chargingStateName)
-        assertNull(ChargeState().chargingStateName)
+    fun `an unset charging state has no kind`() {
+        assertNull(ChargeState(charging_state = ChargeState.ChargingState()).chargingStateKind)
+        assertNull(ChargeState().chargingStateKind)
     }
 
     @Test
@@ -91,20 +91,27 @@ class StateViewsTest {
     }
 
     @Test
-    fun `names every shift state`() {
-        fun name(state: ShiftState) = DriveState(shift_state = state).shiftStateName
+    fun `reads every shift state`() {
+        fun kind(state: ShiftState) = DriveState(shift_state = state).shiftStateKind
 
-        assertEquals("P", name(ShiftState(P = Void())))
-        assertEquals("R", name(ShiftState(R = Void())))
-        assertEquals("N", name(ShiftState(N = Void())))
-        assertEquals("D", name(ShiftState(D = Void())))
-        assertEquals("Invalid", name(ShiftState(CarServer_Invalid = Void())))
-        assertEquals("SNA", name(ShiftState(SNA = Void())))
+        assertEquals(ShiftStateKind.P, kind(ShiftState(P = Void())))
+        assertEquals(ShiftStateKind.R, kind(ShiftState(R = Void())))
+        assertEquals(ShiftStateKind.N, kind(ShiftState(N = Void())))
+        assertEquals(ShiftStateKind.D, kind(ShiftState(D = Void())))
+        assertEquals(ShiftStateKind.Invalid, kind(ShiftState(CarServer_Invalid = Void())))
+        assertEquals(ShiftStateKind.SNA, kind(ShiftState(SNA = Void())))
     }
 
     @Test
-    fun `an unset shift state has no name`() {
-        assertNull(DriveState(shift_state = ShiftState()).shiftStateName)
-        assertNull(DriveState().shiftStateName)
+    fun `an unset shift state has no kind`() {
+        assertNull(DriveState(shift_state = ShiftState()).shiftStateKind)
+        assertNull(DriveState().shiftStateKind)
+    }
+
+    @Test
+    fun `the enums have a value for each member of the cars oneofs`() {
+        // The counts match the oneofs in vehicle.proto (8 charging states, 6 gears); the mappings above name every one.
+        assertEquals(8, ChargingStateKind.entries.size)
+        assertEquals(6, ShiftStateKind.entries.size)
     }
 }

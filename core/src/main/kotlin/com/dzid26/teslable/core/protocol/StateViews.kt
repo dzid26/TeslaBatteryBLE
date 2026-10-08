@@ -12,8 +12,8 @@ import com.tesla.generated.vcsec.VehicleStatus
 // What the app derives from the car's raw replies, each rule defined once, here.
 // The replies themselves are the live state: the parsers return the Wire message
 // as the car sent it, and plain fields are read straight off it
-// (`charge.battery_level`). Only a value that needs a rule, such as an enum's
-// name or a fallback, gets a property below, and everything that wants it (the
+// (`charge.battery_level`). Only a value that needs a rule, such as an enum or a
+// fallback, gets a property below, and everything that wants it (the
 // screens, the debug log, the history samples) uses these.
 
 /** Locked unless fully unlocked: locked, internally locked and selectively unlocked all count. */
@@ -28,19 +28,19 @@ val VehicleStatus.asleep: Boolean
 val VehicleStatus.userPresent: Boolean
     get() = userPresence == UserPresence_E.VEHICLE_USER_PRESENCE_PRESENT
 
-/** The car's charging-state name (`Charging`, `Complete`, ...), or null when it sent none. */
-val ChargeState.chargingStateName: String?
+/** The car's charging state, or null when it sent none (or an empty one). */
+val ChargeState.chargingStateKind: ChargingStateKind?
     get() {
         val state = charging_state ?: return null
         return when {
-            state.Charging != null -> "Charging"
-            state.Complete != null -> "Complete"
-            state.Stopped != null -> "Stopped"
-            state.Disconnected != null -> "Disconnected"
-            state.NoPower != null -> "NoPower"
-            state.Starting != null -> "Starting"
-            state.Calibrating != null -> "Calibrating"
-            state.Unknown != null -> "Unknown"
+            state.Charging != null -> ChargingStateKind.Charging
+            state.Complete != null -> ChargingStateKind.Complete
+            state.Stopped != null -> ChargingStateKind.Stopped
+            state.Disconnected != null -> ChargingStateKind.Disconnected
+            state.NoPower != null -> ChargingStateKind.NoPower
+            state.Starting != null -> ChargingStateKind.Starting
+            state.Calibrating != null -> ChargingStateKind.Calibrating
+            state.Unknown != null -> ChargingStateKind.Unknown
             else -> null
         }
     }
@@ -51,17 +51,17 @@ val ChargeState.chargingMph: Float?
         charge_rate_mph_float?.takeIf { it.isFinite() && it > 0f }
             ?: charge_rate_mph?.takeIf { it > 0 }?.toFloat()
 
-/** The car's shift-state name (`P`, `R`, `N`, `D`, `Invalid`, `SNA`), or null when it sent none. */
-val DriveState.shiftStateName: String?
+/** The car's gear, or null when it sent none (or an empty one). */
+val DriveState.shiftStateKind: ShiftStateKind?
     get() {
         val shift = shift_state ?: return null
         return when {
-            shift.P != null -> "P"
-            shift.R != null -> "R"
-            shift.N != null -> "N"
-            shift.D != null -> "D"
-            shift.CarServer_Invalid != null -> "Invalid"
-            shift.SNA != null -> "SNA"
+            shift.P != null -> ShiftStateKind.P
+            shift.R != null -> ShiftStateKind.R
+            shift.N != null -> ShiftStateKind.N
+            shift.D != null -> ShiftStateKind.D
+            shift.CarServer_Invalid != null -> ShiftStateKind.Invalid
+            shift.SNA != null -> ShiftStateKind.SNA
             else -> null
         }
     }

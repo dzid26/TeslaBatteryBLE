@@ -2,6 +2,8 @@
 
 package com.dzid26.teslable.core.history
 
+import com.dzid26.teslable.core.protocol.ChargingStateKind
+
 /**
  * One battery reading, recorded whenever a car reports charge state.
  *
@@ -13,7 +15,7 @@ data class BatterySample(
     val timestampMillis: Long,
     /** Displayed SOC (`battery_level`). */
     val batteryLevel: Int,
-    val chargingState: String?,
+    val chargingState: ChargingStateKind?,
     val chargeLimit: Int?,
     /**
      * Which vehicle the reading came from: the advertised BLE name
@@ -31,7 +33,7 @@ data class BatterySample(
     /** The displayed level, derived for the chart, stats, and car view. */
     val percent: Int get() = batteryLevel
 
-    val isCharging: Boolean get() = chargingState == "Charging"
+    val isCharging: Boolean get() = chargingState == ChargingStateKind.Charging
 }
 
 /** Time window for the battery graph. */

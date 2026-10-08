@@ -2,6 +2,7 @@
 package com.dzid26.teslable.core.health
 
 import com.dzid26.teslable.core.history.BatterySample
+import com.dzid26.teslable.core.protocol.ChargingStateKind
 
 /**
  * One charge session as the history saw it: from its first to its last charging
@@ -40,13 +41,13 @@ data class ChargeSession(
  * Splits [samples], one car's history oldest first, into charge sessions.
  *
  * Sessions are cut by `chargingState`:
- * - A session is a run of "Charging" or "Starting" samples.
- * - "Stopped" and "NoPower" samples are a pause. A pause shorter than ten minutes,
+ * - A session is a run of `Charging` or `Starting` samples.
+ * - `Stopped` and `NoPower` samples are a pause. A pause shorter than ten minutes,
  *   counted from the last charging sample to the one that resumes charging, does
  *   not end the session. A pause of ten minutes or longer does, and the resuming
  *   sample opens the next session.
- * - "Complete", "Disconnected" and any other state (a missing, "Unknown" or
- *   "Calibrating" one included) end the session.
+ * - `Complete`, `Disconnected` and any other state (a missing, `Unknown` or
+ *   `Calibrating` one included) end the session.
  * - Silence is not a pause: when the app saw nothing for a while (the link
  *   dropped), the session continues across the gap.
  *
@@ -58,7 +59,7 @@ data class ChargeSession(
  * carries the growth of those totals from its first to its last sample, which pairs
  * with the SOC swing between the same two samples. A total missing from the first
  * sample counts as zero there. A total that goes down inside the session was
- * restarted by the car (a stale value from the previous session on a "Starting"
+ * restarted by the car (a stale value from the previous session on a `Starting`
  * sample, say); the session then carries the last value.
  */
 fun chargeSessions(samples: List<BatterySample>): List<ChargeSession> {
@@ -67,7 +68,7 @@ fun chargeSessions(samples: List<BatterySample>): List<ChargeSession> {
     var paused = false
     for (sample in samples) {
         when (sample.chargingState) {
-            "Charging", "Starting" -> {
+            ChargingStateKind.Charging, ChargingStateKind.Starting -> {
                 val pausedTooLong =
                     paused && current != null && sample.timestampMillis - current.last().timestampMillis >= MAX_PAUSE_MILLIS
                 if (current == null || pausedTooLong) {
@@ -78,7 +79,7 @@ fun chargeSessions(samples: List<BatterySample>): List<ChargeSession> {
                 paused = false
             }
 
-            "Stopped", "NoPower" -> paused = true
+            ChargingStateKind.Stopped, ChargingStateKind.NoPower -> paused = true
 
             else -> {
                 current = null
