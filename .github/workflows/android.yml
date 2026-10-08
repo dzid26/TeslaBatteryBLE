@@ -116,6 +116,7 @@ jobs:
     environment: release
     permissions:
       contents: write
+      actions: write # dispatch the Pages deploy after the screenshot commit
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -238,6 +239,9 @@ jobs:
           git add website/images
           git commit -m "Refresh screenshots from ${{ github.ref_name }}"
           git push origin HEAD:main
+          # A push made with GITHUB_TOKEN does not trigger other workflows, so
+          # pages.yml never sees this commit; dispatch it explicitly.
+          GH_TOKEN="${{ github.token }}" gh workflow run pages.yml --ref main
 
   preview:
     name: Rolling preview release
