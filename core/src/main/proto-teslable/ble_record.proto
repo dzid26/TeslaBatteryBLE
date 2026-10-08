@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 //
 // TeslaBatteryBLE's own history envelope (ADR-0008): every BLE reply the app
-// logs is wrapped in one BleRecord. Tesla's protos live in ../proto, vendored
-// verbatim; this file is ours, so a re-vendor never touches it.
+// logs, and every change in its link to the car, is wrapped in one BleRecord.
+// Tesla's protos live in ../proto, vendored verbatim; this file is ours, so a
+// re-vendor never touches it.
 //
 // Evolution rules (the logs are append-only, so old records must keep reading):
 //  - New fields and new oneof payload kinds only get new field numbers. Old
@@ -22,16 +23,34 @@ import "vehicle.proto";
 
 option java_package = "com.dzid26.teslable.core.history";
 
-// One reply the phone acquired over BLE, kept verbatim. Fields follow a
-// reading's order: time, VCSEC status, charge, drive.
+// One record the phone acquired over BLE: a reply from the car, kept verbatim,
+// or a change in the phone's link to it. Fields follow a reading's order: time,
+// signal strength, then the payload kinds link, VCSEC status, charge, drive.
 message BleRecord {
-    // Phone clock when the reply arrived. A car timestamp inside the payload
+    // Phone clock when the record was acquired: when the reply arrived, or
+    // when the link changed. A car timestamp inside the payload
     // (ChargeState.timestamp, DriveState.timestamp) is never touched.
     google.protobuf.Timestamp acquired_at = 1;
 
+    // The phone's latest RSSI reading for the car when the record was
+    // acquired, in dBm. Absent when the phone had none. It hints at how close
+    // the phone was to the car.
+    optional sint32 rssi_dbm = 5;
+
     oneof payload {
+        LinkEvent link_event = 6;
         VCSEC.VehicleStatus vehicle_status = 2;
         CarServer.ChargeState charge_state = 3;
         CarServer.DriveState drive_state = 4;
     }
+}
+
+// A change in the phone's BLE link to the car.
+message LinkEvent {
+    enum State {
+        STATE_UNSPECIFIED = 0;
+        CONNECTED = 1; // the link became ready
+        LOST = 2;      // an established link dropped
+    }
+    State state = 1;
 }

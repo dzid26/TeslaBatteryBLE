@@ -6,6 +6,7 @@ import android.os.Handler
 import android.os.Looper
 import com.dzid26.teslable.core.TeslaNames
 import com.dzid26.teslable.core.history.BatterySample
+import com.dzid26.teslable.core.history.LinkEvent
 import com.dzid26.teslable.core.protocol.AntiReplayWindow
 import com.dzid26.teslable.core.protocol.TeslaCommands
 import com.dzid26.teslable.core.protocol.TeslaCrypto
@@ -597,6 +598,22 @@ class TeslaBleController(
             ?: address
     }
 
+    /** The phone's latest RSSI for the car at [address] in dBm, or null before the first reading; every history record carries it. */
+    private fun rssiDbm(address: String): Int? = _state.value.connections[address]?.rssi
+
+    /**
+     * Logs a change in the link to [link]'s car: [LinkEvent.State.CONNECTED] right after it became ready, [LinkEvent.State.LOST]
+     * right before a link that had become ready ends. Both run while the phase is READY, so a connection attempt that never got
+     * there is not logged.
+     */
+    private fun recordLink(
+        link: VehicleLink,
+        state: LinkEvent.State,
+    ) {
+        if (link.phase != ConnectionPhase.READY) return
+        historyStore.recordLink(link.bleName, state, System.currentTimeMillis(), rssiDbm(link.address))
+    }
+
     private fun log(message: String) {
         appendLog(null, message)
     }
@@ -791,6 +808,7 @@ class TeslaBleController(
         }
 
         fun close() {
+            recordLink(this, LinkEvent.State.LOST)
             cancelCallbacks()
             transport?.close()
             transport = null
@@ -1159,7 +1177,7 @@ class TeslaBleController(
                         updateConnection(address) {
                             it.copy(charge = charge, chargeAtMillis = acquiredAtMillis)
                         }
-                        historyStore.record(bleName, charge, acquiredAtMillis)
+                        historyStore.record(bleName, charge, acquiredAtMillis, rssiDbm(address))
                         if (previous?.batteryLevel != charge.batteryLevel ||
                             previous?.chargingState != charge.chargingState
                         ) {
@@ -1201,7 +1219,7 @@ class TeslaBleController(
                 )
                 return
             }
-            historyStore.recordDrive(bleName, drive, acquiredAtMillis)
+            historyStore.recordDrive(bleName, drive, acquiredAtMillis, rssiDbm(address))
             val shift = TeslaCommands.shiftStateName(drive.shift_state)
             if (shift != lastShiftState) {
                 lastShiftState = shift
@@ -1473,12 +1491,7 @@ class TeslaBleController(
                 // VCSEC replies carry no time: the phone's clock at receipt is
                 // the status log's timeline (ADR-0008).
                 status.raw?.let { raw ->
-                    historyStore.recordStatus(
-                        vehicleId = bleName,
-                        status = raw,
-                        acquiredAtMillis = acquiredAtMillis,
-                        firstAfterConnect = firstStatusAfterConnect,
-                    )
+                    historyStore.recordStatus(bleName, raw, acquiredAtMillis, rssiDbm(address), firstAfterConnect = firstStatusAfterConnect)
                 }
                 firstStatusAfterConnect = false
                 if (!status.asleep) {
@@ -1512,7 +1525,7 @@ class TeslaBleController(
             object : TeslaTransport.Listener {
                 override fun onPhase(phase: ConnectionPhase) {
                     if (phase == ConnectionPhase.FAILED || phase == ConnectionPhase.DISCONNECTED) {
-                        historyStore.onLinkLost(bleName)
+                        recordLink(this@VehicleLink, LinkEvent.State.LOST)
                         transport?.close()
                         transport = null
                         handler.removeCallbacks(poll)
@@ -1533,6 +1546,7 @@ class TeslaBleController(
                         reconnectAttempts = 0
                         nextRetryAtMs = 0
                         firstStatusAfterConnect = true
+                        recordLink(this@VehicleLink, LinkEvent.State.CONNECTED)
                         // Additive scans stay under the user's control; the selected
                         // car connecting is the one signal that means "found it".
                         if (_state.value.explicitScan && selectedBleName == bleName) stopScan()
