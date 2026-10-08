@@ -20,12 +20,8 @@ class InfotainmentPollPolicyTest {
         closures: ClosureStatuses? = null,
     ) = TeslaVcsec.Status(locked, asleep, userPresent, closures?.let { VehicleStatus(closureStatuses = it) })
 
-    private fun open(
-        closures: ClosureStatuses,
-        locked: Boolean = true,
-    ) = status(locked = locked, closures = closures)
-
     private val doorOpen = ClosureStatuses(frontDriverDoor = ClosureState_E.CLOSURESTATE_OPEN)
+    private val doorClosed = ClosureStatuses(frontDriverDoor = ClosureState_E.CLOSURESTATE_CLOSED)
 
     /** Advances the clock by one 10 s VCSEC tick and feeds the status; returns whether a read is due. */
     private fun tick(
@@ -49,31 +45,19 @@ class InfotainmentPollPolicyTest {
 
     private fun connectAndFirstRead() {
         policy.onConnect(now)
-        assertTrue(policy.onStatus(status(), true, now), "first status after connect reads")
+        assertTrue(policy.onStatus(status(), true, now), "first awake status after connect reads")
     }
 
-    /** Lets the window lapse with nothing happening. */
-    private fun expireWindow(status: TeslaVcsec.Status = status()) {
-        readsOver(InfotainmentPollPolicy.IDLE_WINDOW_MS + 60_000, status)
-    }
-
-    /** Within the window: reads are exactly 30 s apart. */
-    private fun assertWindowCadence(status: TeslaVcsec.Status = status()) {
-        val gaps = readsOver(300_000L, status).zipWithNext { a, b -> b - a }
-        assertTrue(gaps.size >= 8 && gaps.all { it == 30_000L }, "gaps $gaps")
-    }
-
-    /** Window expired and nothing triggered: reads are exactly 660 s apart. */
-    private fun assertIdleCadence(status: TeslaVcsec.Status = status()) {
-        val gaps = readsOver(4 * 660_000L, status).zipWithNext { a, b -> b - a }
-        assertTrue(gaps.size >= 2 && gaps.all { it == 660_000L }, "gaps $gaps")
+    /** Lets the connect follow-up pass, so the next assertions see a quiet, idle car. */
+    private fun settle() {
+        assertEquals(listOf(FOLLOW_UP), readsOver(10 * 60_000L))
     }
 
     @Test
     fun chargingReadsEveryTenSeconds() {
         connectAndFirstRead()
         repeat(6) {
-            policy.onChargeReading("Charging", now)
+            policy.onChargeReading("Charging")
             assertTrue(tick(), "tick $it")
         }
     }
@@ -81,9 +65,8 @@ class InfotainmentPollPolicyTest {
     @Test
     fun startingCountsAsActive() {
         connectAndFirstRead()
-        policy.onChargeReading("Starting", now)
+        policy.onChargeReading("Starting")
         assertTrue(tick())
-        policy.onChargeReading("Starting", now)
         assertTrue(tick())
     }
 
@@ -92,7 +75,7 @@ class InfotainmentPollPolicyTest {
         for (shift in listOf("D", "R", "N")) {
             connectAndFirstRead()
             repeat(3) {
-                policy.onDriveReading(shift, now)
+                policy.onDriveReading(shift)
                 assertTrue(tick(), "$shift $it")
             }
         }
@@ -102,58 +85,64 @@ class InfotainmentPollPolicyTest {
     fun parkedAndNonChargingStatesAreNotActive() {
         for (name in listOf("Complete", "Stopped", "Disconnected", "NoPower", "Calibrating", "Unknown", null)) {
             connectAndFirstRead()
-            policy.onChargeReading(name, now)
-            policy.onDriveReading("P", now)
+            policy.onChargeReading(name)
+            policy.onDriveReading("P")
             assertFalse(tick(), "$name")
         }
         connectAndFirstRead()
-        policy.onDriveReading("Invalid", now)
+        policy.onDriveReading("Invalid")
         assertFalse(tick())
     }
 
     @Test
-    fun activityEndsWhenTheReadingsStopShowingIt() {
+    fun readsStopRightAwayWhenActivityEnds() {
         connectAndFirstRead()
-        policy.onChargeReading("Charging", now)
+        policy.onChargeReading("Charging")
         assertTrue(tick())
-        policy.onChargeReading("Complete", now)
+        policy.onChargeReading("Complete")
         assertFalse(tick())
+        // Only the connect follow-up remains: no window, no idle reads.
+        assertEquals(listOf(FOLLOW_UP - 2 * TICK), readsOver(60 * 60_000L))
     }
 
     @Test
-    fun windowReadsEveryThirtySecondsThenStopsAtExpiry() {
+    fun activeCadenceKeepsGoingForHours() {
         connectAndFirstRead()
-        val reads = readsOver(InfotainmentPollPolicy.IDLE_WINDOW_MS + 1_320_000L)
-        val window = reads.takeWhile { it < InfotainmentPollPolicy.IDLE_WINDOW_MS }
-        assertEquals((1..21).map { it * 30_000L }, window)
-        // Then one read per 660 s, counted from the last window read.
-        assertEquals(listOf(630_000L + 660_000L, 630_000L + 1_320_000L), reads.drop(window.size))
-    }
-
-    @Test
-    fun idleReadsEverySixHundredSixtySeconds() {
-        connectAndFirstRead()
-        expireWindow()
-        assertIdleCadence()
-    }
-
-    @Test
-    fun activeReadingsKeepRestartingTheWindow() {
-        connectAndFirstRead()
-        repeat(100) {
-            policy.onChargeReading("Charging", now)
+        repeat(2_000) {
+            policy.onDriveReading("D")
             assertTrue(tick())
         }
-        policy.onChargeReading("Charging", now)
-        policy.onChargeReading("Complete", now)
-        val reads = readsOver(InfotainmentPollPolicy.IDLE_WINDOW_MS)
-        assertEquals((1..21).map { it * 30_000L }, reads)
+    }
+
+    @Test
+    fun connectReadsOnceThenFollowsUpOnceAfterSixtySeconds() {
+        connectAndFirstRead()
+        assertEquals(listOf(FOLLOW_UP), readsOver(60 * 60_000L))
+    }
+
+    @Test
+    fun connectWhileAsleepReadsNothingUntilTheWake() {
+        policy.onConnect(now)
+        assertTrue(readsOver(30 * 60_000L, status(asleep = true)).isEmpty())
+        assertTrue(tick(), "wake read")
+        assertEquals(listOf(FOLLOW_UP), readsOver(30 * 60_000L))
     }
 
     @Test
     fun noReadsWhileAsleep() {
         connectAndFirstRead()
-        assertTrue(readsOver(2 * 660_000L, status(asleep = true)).isEmpty())
+        policy.onChargeReading("Charging")
+        assertTrue(readsOver(2 * 60 * 60_000L, status(asleep = true)).isEmpty())
+    }
+
+    @Test
+    fun asleepDropsAPendingFollowUp() {
+        connectAndFirstRead()
+        readsOver(2 * TICK, status(asleep = true))
+        // The connect follow-up fell due while asleep and is gone; only the wake's own follow-up is left.
+        assertTrue(readsOver(FOLLOW_UP, status(asleep = true)).isEmpty())
+        assertTrue(tick(), "wake read")
+        assertEquals(listOf(FOLLOW_UP), readsOver(30 * 60_000L))
     }
 
     @Test
@@ -165,31 +154,29 @@ class InfotainmentPollPolicyTest {
     }
 
     @Test
-    fun wakeFromSleepReadsOnceAndDoesNotRestartTheWindow() {
+    fun wakeFromSleepReadsAtOnceThenOnceMore() {
         connectAndFirstRead()
-        expireWindow()
+        settle()
         readsOver(5 * TICK, status(asleep = true))
-        assertTrue(tick(), "one read right away on wake")
-        policy.onChargeReading("Disconnected", now)
-        policy.onDriveReading("P", now)
-        assertIdleCadence()
+        assertTrue(tick(), "read right away on wake")
+        assertEquals(listOf(FOLLOW_UP), readsOver(30 * 60_000L))
     }
 
     @Test
     fun wakeReadShowingActivityTakesOverAtTenSeconds() {
         connectAndFirstRead()
-        expireWindow()
+        settle()
         readsOver(3 * TICK, status(asleep = true))
         assertTrue(tick())
-        policy.onChargeReading("Charging", now)
+        policy.onChargeReading("Charging")
         assertTrue(tick())
-        policy.onChargeReading("Charging", now)
         assertTrue(tick())
     }
 
     @Test
     fun wakeReadWaitsForTheSession() {
         connectAndFirstRead()
+        settle()
         readsOver(3 * TICK, status(asleep = true))
         assertFalse(tick(sessionReady = false))
         assertTrue(tick(sessionReady = true))
@@ -199,31 +186,23 @@ class InfotainmentPollPolicyTest {
     @Test
     fun readingsFromBeforeSleepDoNotCountAsActiveAfterWake() {
         connectAndFirstRead()
-        policy.onChargeReading("Charging", now)
+        policy.onChargeReading("Charging")
         readsOver(3 * TICK, status(asleep = true))
         assertTrue(tick(), "wake read")
-        assertFalse(tick(), "stale charging reading must not keep the 10 s cadence")
+        assertFalse(tick(), "a stale charging reading must not keep the 10 s cadence")
     }
 
     @Test
-    fun reconnectRestartsTheWindow() {
+    fun lockedToUnlockedReadsAtOnceThenOnceMore() {
         connectAndFirstRead()
-        expireWindow()
-        connectAndFirstRead()
-        assertWindowCadence()
+        settle()
+        assertTrue(tick(status(locked = false)))
+        assertEquals(listOf(FOLLOW_UP), readsOver(30 * 60_000L, status(locked = false)))
     }
 
     @Test
-    fun lockedToUnlockedRestartsTheWindow() {
-        connectAndFirstRead()
-        expireWindow()
-        tick(status(locked = false))
-        assertWindowCadence(status(locked = false))
-    }
-
-    @Test
-    fun everyClosureOpeningRestartsTheWindow() {
-        val openings =
+    fun openingAnyClosureReadsAtOnceThenOnceMore() {
+        val all =
             listOf(
                 ClosureStatuses(frontDriverDoor = ClosureState_E.CLOSURESTATE_OPEN),
                 ClosureStatuses(frontPassengerDoor = ClosureState_E.CLOSURESTATE_OPEN),
@@ -234,86 +213,96 @@ class InfotainmentPollPolicyTest {
                 ClosureStatuses(chargePort = ClosureState_E.CLOSURESTATE_OPEN),
                 ClosureStatuses(tonneau = ClosureState_E.CLOSURESTATE_OPEN),
             )
-        for (closures in openings) {
+        for (closures in all) {
             connectAndFirstRead()
-            expireWindow()
-            tick(open(closures))
-            assertWindowCadence(open(closures))
+            settle()
+            assertTrue(tick(status(closures = closures)), "$closures")
+            assertEquals(listOf(FOLLOW_UP), readsOver(30 * 60_000L, status(closures = closures)), "$closures")
         }
     }
 
     @Test
-    fun aSecondClosureOpeningWhileOneIsAlreadyOpenRestartsTheWindow() {
+    fun closingAClosureIsAnEventToo() {
         connectAndFirstRead()
-        tick(open(doorOpen))
-        expireWindow()
-        val both = doorOpen.copy(chargePort = ClosureState_E.CLOSURESTATE_OPEN)
-        tick(open(both))
-        assertWindowCadence(open(both))
+        assertTrue(tick(status(closures = doorOpen)), "opening reads")
+        settle2(status(closures = doorOpen))
+        assertTrue(tick(status(closures = doorClosed)))
+        assertEquals(listOf(FOLLOW_UP), readsOver(30 * 60_000L, status(closures = doorClosed)))
     }
 
     @Test
-    fun userRequestRestartsTheWindowAndCountsAsTheRead() {
+    fun aSecondClosureChangingWhileOneIsOpenIsAnEvent() {
         connectAndFirstRead()
-        expireWindow()
+        tick(status(closures = doorOpen))
+        settle2(status(closures = doorOpen))
+        val both = doorOpen.copy(chargePort = ClosureState_E.CLOSURESTATE_OPEN)
+        assertTrue(tick(status(closures = both)))
+    }
+
+    @Test
+    fun userRequestCountsAsTheReadThenFollowsUpOnce() {
+        connectAndFirstRead()
+        settle()
         policy.onUserRequest(now)
         assertFalse(tick(), "the request itself was the read")
-        assertWindowCadence()
+        assertEquals(listOf(FOLLOW_UP - TICK), readsOver(30 * 60_000L))
     }
 
     @Test
-    fun userPresenceDoesNotRestartTheWindow() {
+    fun aNewEventReplacesAPendingFollowUp() {
         connectAndFirstRead()
-        expireWindow()
-        val present = status(userPresent = true)
-        tick(present)
-        assertIdleCadence(present)
+        readsOver(40_000L) // 40 s into the connect follow-up
+        assertTrue(tick(status(locked = false)), "unlock event at 50 s")
+        // Only one follow-up, 60 s after the unlock, not one for the connect as well.
+        assertEquals(listOf(FOLLOW_UP), readsOver(30 * 60_000L, status(locked = false)))
     }
 
     @Test
-    fun stayingUnlockedDoesNotRestartTheWindow() {
+    fun aClosureAlreadyOpenAtConnectIsNotAnEvent() {
+        policy.onConnect(now)
+        assertTrue(policy.onStatus(status(closures = doorOpen), true, now))
+        // Only the connect follow-up, nothing for the open door.
+        assertEquals(listOf(FOLLOW_UP), readsOver(30 * 60_000L, status(closures = doorOpen)))
+    }
+
+    @Test
+    fun userPresenceIsNotAnEvent() {
         connectAndFirstRead()
-        tick(status(locked = false)) // the unlock itself is a trigger
-        expireWindow(status(locked = false))
-        assertIdleCadence(status(locked = false))
+        settle()
+        assertTrue(readsOver(60 * 60_000L, status(userPresent = true)).isEmpty())
     }
 
     @Test
-    fun lockingDoesNotRestartTheWindow() {
+    fun stayingUnlockedIsNotAnEvent() {
         connectAndFirstRead()
         tick(status(locked = false))
-        expireWindow()
-        tick(status(locked = true))
-        assertIdleCadence(status(locked = true))
+        readsOver(30 * 60_000L, status(locked = false))
+        assertTrue(readsOver(60 * 60_000L, status(locked = false)).isEmpty())
     }
 
     @Test
-    fun closingAClosureDoesNotRestartTheWindow() {
+    fun lockingIsNotAnEvent() {
         connectAndFirstRead()
-        tick(open(doorOpen))
-        expireWindow()
-        tick(open(ClosureStatuses(frontDriverDoor = ClosureState_E.CLOSURESTATE_CLOSED)))
-        assertIdleCadence()
+        tick(status(locked = false))
+        readsOver(30 * 60_000L, status(locked = false))
+        assertFalse(tick(status(locked = true)))
+        assertTrue(readsOver(60 * 60_000L, status(locked = true)).isEmpty())
     }
 
     @Test
-    fun aClosureAlreadyOpenAtConnectIsNotATrigger() {
-        policy.onConnect(now)
-        assertTrue(policy.onStatus(open(doorOpen), true, now))
-        expireWindow(open(doorOpen))
-        assertIdleCadence(open(doorOpen))
-    }
-
-    @Test
-    fun aStatusWithoutClosuresIsNotATrigger() {
+    fun aStatusWithoutClosuresIsNotAnEvent() {
         connectAndFirstRead()
-        tick(open(doorOpen))
-        expireWindow()
-        tick(TeslaVcsec.Status(locked = true, asleep = false, userPresent = false))
-        assertIdleCadence()
+        settle()
+        assertTrue(readsOver(10 * 60_000L, TeslaVcsec.Status(locked = true, asleep = false, userPresent = false)).isEmpty())
+    }
+
+    /** Lets any pending follow-up pass with a fixed status. */
+    private fun settle2(status: TeslaVcsec.Status) {
+        readsOver(10 * 60_000L, status)
     }
 
     private companion object {
         const val TICK = 10_000L
+        const val FOLLOW_UP = InfotainmentPollPolicy.FOLLOW_UP_DELAY_MS
     }
 }
