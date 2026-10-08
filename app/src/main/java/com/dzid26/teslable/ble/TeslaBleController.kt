@@ -970,18 +970,10 @@ class TeslaBleController(
                     null
                 }
             if (session == null) {
-                val shownPaired =
-                    vehicles[bleName]?.keySlot != null ||
-                        _state.value.connections[address]?.keySlot != null ||
-                        pairingPhase == PairingPhase.OK
-                if (keyPair == null && shownPaired && !keyStore.hasKey(bleName)) {
+                if (keyPair == null && !keyStore.hasKey(bleName)) {
                     // The store dropped a key this phone can never decrypt (for
-                    // example a device-only key restored from another phone):
-                    // forget its enrollment so the car shows unpaired again.
-                    updateVehicle(bleName) { it.copy(keySlot = null) }
-                    updateConnection(address) { it.copy(keySlot = null) }
-                    if (pairingPhase == PairingPhase.OK) setPairing(PairingPhase.IDLE, null)
-                    log("${name()}: the stored key can't be used on this phone; pair again")
+                    // example a device-only key restored from another phone).
+                    forgetEnrollment("the stored key can't be used on this phone")
                 }
                 log("${name()}: session verification failed (${pending.domain.name})")
                 return true
@@ -1230,6 +1222,22 @@ class TeslaBleController(
             updateConnection(address) { it.copy(pairing = phase, pairingKeyId = keyId) }
         }
 
+        /**
+         * Once this car's key is known to be unusable, drops what still shows
+         * the car as paired (cached slot, a stale OK) so it offers pairing again.
+         */
+        private fun forgetEnrollment(reason: String) {
+            val shownPaired =
+                vehicles[bleName]?.keySlot != null ||
+                    _state.value.connections[address]?.keySlot != null ||
+                    pairingPhase == PairingPhase.OK
+            if (!shownPaired) return
+            updateVehicle(bleName) { it.copy(keySlot = null) }
+            updateConnection(address) { it.copy(keySlot = null) }
+            if (pairingPhase == PairingPhase.OK) setPairing(PairingPhase.IDLE, null)
+            log("${name()}: $reason; pair again")
+        }
+
         fun requestKeySlot() {
             if (_state.value.connections[address]?.keySlot != null) return
             if (!keyStore.hasKey(bleName)) return
@@ -1321,6 +1329,11 @@ class TeslaBleController(
                 log("${name()}: key not enrolled; generating a new key for pairing")
                 pairWithFreshKey()
                 return
+            }
+            if (storedKeyId != null && !enrolled && whitelist.isComplete(storedKeyId.size)) {
+                // Only a whole listing proves the car no longer has the key
+                // (removed in the car, or restored here from another phone).
+                forgetEnrollment("the car no longer lists this phone's key")
             }
             if (whitelistPollAttempts == 1) {
                 log("${name()}: whitelist has ${whitelist.numberOfEntries} keys")
@@ -1487,6 +1500,16 @@ class TeslaBleController(
     }
 
     private fun occupiedSlots(slotMask: Int): List<Int> = (0 until Int.SIZE_BITS).filter { (slotMask ushr it) and 1 == 1 }
+
+    /**
+     * True when the listing is whole: the car reported keys, listed an ID for
+     * each occupied slot, and every ID is long enough to compare with ours.
+     */
+    private fun WhitelistInfo.isComplete(keyIdSize: Int): Boolean =
+        numberOfEntries > 0 &&
+            whitelistEntries.size == numberOfEntries &&
+            slotMask.countOneBits() == numberOfEntries &&
+            whitelistEntries.all { it.publicKeySHA1.size >= keyIdSize }
 
     private fun ByteArray.toHex(): String = joinToString("") { (it.toInt() and 0xFF).toString(16).padStart(2, '0') }
 
