@@ -96,7 +96,6 @@ printf '%s\n' "$assets" | grep -E '^TeslaBatteryBLE-preview-.*\.apk$' | while re
 done
 
 # A separate rolling `preview` release cut from this same commit is now redundant.
-SHORT_SHA="$(git rev-parse --short=7 HEAD)"
-if gh release view preview --json assets --jq '.assets[].name' 2>/dev/null | grep -qx "TeslaBatteryBLE-preview-${SHORT_SHA}.apk"; then
+if [ "$(git rev-parse -q --verify refs/tags/preview^{commit} 2>/dev/null || true)" = "$(git rev-parse HEAD)" ]; then
   gh release delete preview --yes --cleanup-tag
 fi
