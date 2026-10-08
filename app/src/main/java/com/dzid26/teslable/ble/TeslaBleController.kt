@@ -621,7 +621,7 @@ class TeslaBleController(
         val window: AntiReplayWindow = AntiReplayWindow(),
     )
 
-    private enum class CommandKind { WAKE, CHARGE }
+    private enum class CommandKind { WAKE, CHARGE, DRIVE }
 
     /**
      * Everything that belongs to one car: the transport, sessions, pending
@@ -655,6 +655,9 @@ class TeslaBleController(
 
         /** The next VCSEC status is the first since the link became ready; the status log always keeps it. */
         private var firstStatusAfterConnect = true
+
+        /** The shift state last written to the debug log, so only a change is logged again. */
+        private var lastShiftState: String? = null
 
         val poll =
             object : Runnable {
@@ -1063,6 +1066,24 @@ class TeslaBleController(
             }
         }
 
+        /**
+         * Asks for the DriveState after a charge reply, only while the car is
+         * awake and an Infotainment session already exists: it never starts a
+         * session or wakes the car.
+         */
+        private fun requestDriveState() {
+            val awake =
+                _state.value.connections[address]
+                    ?.status
+                    ?.asleep == false
+            if (!awake || !sessions.containsKey(Domain.DOMAIN_INFOTAINMENT)) return
+            sendAuthenticated(
+                domain = Domain.DOMAIN_INFOTAINMENT,
+                payload = TeslaCommands.buildDriveStateRequest(),
+                kind = CommandKind.DRIVE,
+            )
+        }
+
         private fun sendAuthenticated(
             domain: Domain,
             payload: ByteArray,
@@ -1147,6 +1168,7 @@ class TeslaBleController(
                                     "(${charge.chargingState ?: "unknown"})",
                             )
                         }
+                        requestDriveState()
                     } else {
                         val status = runCatching { TeslaCommands.parseActionStatus(plaintext) }.getOrNull()
                         log(
@@ -1155,8 +1177,36 @@ class TeslaBleController(
                         )
                     }
                 }
+
+                CommandKind.DRIVE -> handleDriveResponse(plaintext, acquiredAtMillis)
             }
             return true
+        }
+
+        /**
+         * Hands a DriveState reply to the history store, which logs it
+         * verbatim. Only a shift-state change reaches the debug log: never the
+         * location, route or destination.
+         */
+        private fun handleDriveResponse(
+            plaintext: ByteArray,
+            acquiredAtMillis: Long,
+        ) {
+            val drive = runCatching { TeslaCommands.parseDriveState(plaintext) }.getOrNull()
+            if (drive == null) {
+                val status = runCatching { TeslaCommands.parseActionStatus(plaintext) }.getOrNull()
+                log(
+                    "${name()}: drive response missing data" +
+                        (status?.let { " ($it)" } ?: ""),
+                )
+                return
+            }
+            historyStore.recordDrive(bleName, drive, acquiredAtMillis)
+            val shift = TeslaCommands.shiftStateName(drive.shift_state)
+            if (shift != lastShiftState) {
+                lastShiftState = shift
+                log("${name()}: shift state ${shift ?: "unknown"}")
+            }
         }
 
         fun pairKey() {

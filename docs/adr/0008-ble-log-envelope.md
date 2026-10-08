@@ -20,10 +20,19 @@ identity), `docs/requirements/multi-phone.md`
 - `VCSEC.VehicleStatus` (closures, lock state, sleep status, user presence,
   detailed closures) has no timestamp field, and the reply carries no time
   either, so a raw status record would have no place on the timeline.
-- DriveState is next, and more BLE replies will follow. Handling each as its
-  own exception to ADR-0006 would not scale; one envelope for all of them
+- DriveState came next, and more BLE replies will follow. Handling each as
+  its own exception to ADR-0006 would not scale; one envelope for all of them
   does. The phone's clock at arrival is also worth keeping for the replies the
   car does stamp: it says when the phone read what the car reported.
+- `CarServer.DriveState` carries the shift state, speed, power and odometer
+  next to the car's own timestamp and, while the car navigates, the
+  destination and the route. Local logging stays raw, so all of it is kept.
+  The odometer is what lets the parked-drain projection spot a drive that no
+  phone watched: a rise between two readings means the car moved in the gap.
+- Tesla's protocol document (`pkg/protocol/protocol.md` in vehicle-command)
+  says the app's key role, Charging Manager, can read vehicle data, and
+  Tesla's Go SDK requests one state category per `GetVehicleData`
+  (`pkg/vehicle/state.go`).
 
 ## Decision
 
@@ -31,9 +40,9 @@ identity), `docs/requirements/multi-phone.md`
   (`core/src/main/proto-teslable/ble_record.proto`) holds:
   - `acquired_at`: the phone's clock when the reply arrived;
   - a `payload` oneof with the car's raw reply, verbatim, nothing filtered:
-    `vehicle_status` (field 2) or `charge_state` (field 3). `DriveState`
-    joins as field 4 later. Fields follow a reading's order: time, VCSEC
-    status, charge, drive.
+    `vehicle_status` (field 2), `charge_state` (field 3) or `drive_state`
+    (field 4). Fields follow a reading's order: time, VCSEC status, charge,
+    drive.
 
   Tesla's vendored protos (`core/src/main/proto`, pinned by `TESLA_COMMIT`)
   stay untouched; ours sit in a second Wire source root, so a re-vendor never
@@ -41,17 +50,19 @@ identity), `docs/requirements/multi-phone.md`
 - **Car timestamps are untouched.** Phone time lives only in `acquired_at`:
   it is never written into a car timestamp field and never stands in for a
   missing one. Records the car stamps keep that stamp as their timeline:
-  charge samples stay on `ChargeState.timestamp`.
+  charge samples stay on `ChargeState.timestamp` and drive samples on
+  `DriveState.timestamp`.
 - **Every reply is logged raw** (owner, 2026-10-08: keep all raw). A charge
-  reply without the car's timestamp or without a level stays in the log but
-  off the chart; this replaces ADR-0006's "not logged".
+  reply without the car's timestamp or without a level, or a drive reply
+  without its timestamp, stays in the log but off the read models; this
+  replaces ADR-0006's "not logged".
 - **Status is timed by `acquired_at`**, because VCSEC has no clock. It is the
   one kind whose timeline is the phone's clock.
 - **One file per vehicle per kind**, in `filesDir/battery-history/`, framed by
   the same `ProtoLog` codec with the same 20k-record cap and trim per file:
   - `<vehicleId>.charge.pblog` for charge replies;
   - `<vehicleId>.vcsec.pblog` for VCSEC status replies;
-  - `<vehicleId>.drive.pblog` for DriveState replies, later.
+  - `<vehicleId>.drive.pblog` for DriveState replies.
 
   Each kind has its own suffix and none ends with another, so a reader never
   decodes another kind's file. The backup rules already exclude the
@@ -75,9 +86,20 @@ identity), `docs/requirements/multi-phone.md`
   reading before the phone lost the car, within the 10 s poll, rather than up
   to a heartbeat earlier. If the app is killed instead, the heartbeat still
   bounds that end to 15 minutes.
-- **Read models.** `BatterySample` and `StatusSample` are derived on load from
-  the records (`BleRecord.toBatterySample`, `BleRecord.toStatusSample`);
-  nothing is written back.
+- **DriveState is logged whole, on every reply.** After each successful
+  charge reply the controller sends one `GetDriveState`, only while the car
+  is awake and an Infotainment session exists; it never starts a session or
+  wakes the car. Every reply goes into `<vehicleId>.drive.pblog` verbatim:
+  every field, the navigation destination and route included, nothing
+  stripped or deduplicated. The log stays on the phone (`PRIVACY.md`), and the
+  in-memory debug log shows only a change of shift state, never the location,
+  route or destination.
+- **Read models.** `BatterySample`, `StatusSample` and `DriveSample` are
+  derived on load from the records (`BleRecord.toBatterySample`,
+  `BleRecord.toStatusSample`, `BleRecord.toDriveSample`); nothing is written
+  back. `DriveSample` keeps the car's timestamp, shift state, speed, power and
+  the odometer in hundredths of a mile; the destination and route stay in the
+  log only.
 - **Evolution rules** (repeated at the top of `ble_record.proto`). The logs
   are append-only and long-lived, so the envelope only ever grows additively:
   - New fields and new `oneof` payload kinds only get new field numbers. Old
@@ -105,22 +127,28 @@ identity), `docs/requirements/multi-phone.md`
   models skip a record without their payload, and `ProtoLog` skips a complete
   record that fails to decode, so the records after it still read and nothing
   needs deleting.
-- **Clock skew.** Status samples sit on the phone's clock, charge samples on
-  the car's. The two agree to within seconds, which is fine for this use:
-  status marks stretches of minutes to hours (asleep, parked, someone in the
-  car), and nothing joins the two logs at second precision. Charge records
-  also carry `acquired_at`, so the offset between the clocks can be measured
-  when it matters.
+- **Clock skew.** Status samples sit on the phone's clock, charge and drive
+  samples on the car's. The two agree to within seconds, which is fine for
+  this use: status marks stretches of minutes to hours (asleep, parked,
+  someone in the car), and nothing joins the logs at second precision. Charge
+  and drive records also carry `acquired_at`, so the offset between the
+  clocks can be measured when it matters.
 - **Multi-phone merge** (`docs/requirements/multi-phone.md`): a vehicle's
   history is the union of every phone's records, ordered by the car's
-  timestamp for charge and by `acquired_at` for status, with exact duplicates
-  collapsing. Two phones watching at once only make the timeline denser.
+  timestamp for charge and drive and by `acquired_at` for status, with exact
+  duplicates collapsing. Two phones watching at once only make the timeline
+  denser.
 - **Coverage.** Status readings exist only while a phone is connected; the
   gap between the last reading before a link drop and the first after the
   next connect is unlogged time, not sleep. At four heartbeats
   an hour plus one record per change, the 20k cap holds months of status per
   car.
-- **Drives.** DriveState gets its own file later, as the `payload` oneof's
-  field 4. It carries the car's own timestamp, which stays its timeline, so it
-  needs no exception, and its odometer will separate drives that no phone
-  saw.
+- **Drives.** DriveState has its own file, as the `payload` oneof's field 4.
+  It carries the car's own timestamp, which is its timeline, so it needs no
+  exception, and its odometer separates drives that no phone saw. Detecting
+  drives from it, for the parked-drain projection, is not built yet.
+- **Traffic.** While the car is awake the drive request doubles the
+  Infotainment traffic: one more request per charge poll. The poll cadence
+  is tracked in #112 and #113.
+- **Size.** A drive record grows while a route is active (destination text,
+  route fields), but the 20k cap per file still bounds it.

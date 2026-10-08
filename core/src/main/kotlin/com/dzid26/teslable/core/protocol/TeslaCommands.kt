@@ -3,10 +3,13 @@ package com.dzid26.teslable.core.protocol
 
 import com.tesla.generated.carserver.server.Action
 import com.tesla.generated.carserver.server.GetChargeState
+import com.tesla.generated.carserver.server.GetDriveState
 import com.tesla.generated.carserver.server.GetVehicleData
 import com.tesla.generated.carserver.server.Response
 import com.tesla.generated.carserver.server.VehicleAction
 import com.tesla.generated.carserver.vehicle.ChargeState
+import com.tesla.generated.carserver.vehicle.DriveState
+import com.tesla.generated.carserver.vehicle.ShiftState
 import com.tesla.generated.vcsec.RKEAction_E
 import com.tesla.generated.vcsec.UnsignedMessage
 
@@ -62,6 +65,15 @@ object TeslaCommands {
                 ),
         ).encode()
 
+    /** One state category per `GetVehicleData`, as Tesla's Go SDK requests them (`pkg/vehicle/state.go`). */
+    fun buildDriveStateRequest(): ByteArray =
+        Action(
+            vehicleAction =
+                VehicleAction(
+                    getVehicleData = GetVehicleData(getDriveState = GetDriveState()),
+                ),
+        ).encode()
+
     fun parseChargeState(payload: ByteArray): Charge? {
         val data = Response.ADAPTER.decode(payload).vehicleData ?: return null
         val charge = data.charge_state ?: return null
@@ -85,6 +97,17 @@ object TeslaCommands {
         )
     }
 
+    /**
+     * The car's raw `DriveState` from a vehicle-data reply, or null when the
+     * reply holds none. It is returned whole rather than parsed into fields:
+     * the history logs it verbatim, navigation destination and route included
+     * (ADR-0008).
+     */
+    fun parseDriveState(payload: ByteArray): DriveState? {
+        val data = Response.ADAPTER.decode(payload).vehicleData ?: return null
+        return data.drive_state
+    }
+
     /** The car's charging-state name (`Charging`, `Complete`, ...), or null when unset. */
     internal fun chargingStateName(state: ChargeState.ChargingState?): String? =
         when {
@@ -97,6 +120,19 @@ object TeslaCommands {
             state.Starting != null -> "Starting"
             state.Calibrating != null -> "Calibrating"
             state.Unknown != null -> "Unknown"
+            else -> null
+        }
+
+    /** The car's shift-state name (`P`, `R`, `N`, `D`, `Invalid`, `SNA`), or null when unset. */
+    fun shiftStateName(state: ShiftState?): String? =
+        when {
+            state == null -> null
+            state.P != null -> "P"
+            state.R != null -> "R"
+            state.N != null -> "N"
+            state.D != null -> "D"
+            state.CarServer_Invalid != null -> "Invalid"
+            state.SNA != null -> "SNA"
             else -> null
         }
 

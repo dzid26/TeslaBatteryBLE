@@ -3,8 +3,11 @@
 package com.dzid26.teslable.core.history
 
 import com.squareup.wire.ofEpochSecond
+import com.tesla.generated.carserver.common.LatLong
 import com.tesla.generated.carserver.common.Void
 import com.tesla.generated.carserver.vehicle.ChargeState
+import com.tesla.generated.carserver.vehicle.DriveState
+import com.tesla.generated.carserver.vehicle.ShiftState
 import com.tesla.generated.vcsec.ClosureState_E
 import com.tesla.generated.vcsec.ClosureStatuses
 import com.tesla.generated.vcsec.UserPresence_E
@@ -28,6 +31,25 @@ class BleRecordMappingTest {
             timestamp = ofEpochSecond(1_000, 0),
         )
 
+    /** A drive reply the car stamped at 2000 s on its own clock, with every field set, an active route included. */
+    private val driving =
+        DriveState(
+            shift_state = ShiftState(D = Void()),
+            speed = 42,
+            power = -7,
+            timestamp = ofEpochSecond(2_000, 0),
+            odometer_in_hundredths_of_a_mile = 1_234_567,
+            speed_float = 42.4f,
+            active_route_destination = "Test destination",
+            active_route_minutes_to_arrival = 12.5f,
+            active_route_miles_to_arrival = 6.25f,
+            active_route_traffic_minutes_delay = 1.5f,
+            active_route_energy_at_arrival = 61.5f,
+            last_route_update = 1_790_000_000,
+            last_traffic_update = ofEpochSecond(1_990, 0),
+            active_route_coordinates = LatLong(latitude = 12.5f, longitude = 34.5f),
+        )
+
     private val inUse =
         VehicleStatus(
             closureStatuses = ClosureStatuses(frontDriverDoor = ClosureState_E.CLOSURESTATE_OPEN),
@@ -46,13 +68,16 @@ class BleRecordMappingTest {
     @Test
     fun `envelope fields follow a reading's order on the wire`() {
         // Field numbers are the stored format (ADR-0008): time, VCSEC status,
-        // charge. The first byte of each encoding is the field's tag.
+        // charge, drive. The logs are append-only, so renumbering would orphan
+        // every record already written. The first byte of each encoding is the
+        // field's tag.
         fun tag(record: BleRecord) = record.encode().first().toInt()
 
         val lengthDelimited = 2
         assertEquals(1 shl 3 or lengthDelimited, tag(BleRecord(acquired_at = ofEpochSecond(1, 0))))
         assertEquals(2 shl 3 or lengthDelimited, tag(BleRecord(vehicle_status = asleep)))
         assertEquals(3 shl 3 or lengthDelimited, tag(BleRecord(charge_state = charging)))
+        assertEquals(4 shl 3 or lengthDelimited, tag(BleRecord(drive_state = DriveState())))
     }
 
     @Test
@@ -112,12 +137,57 @@ class BleRecordMappingTest {
     }
 
     @Test
+    fun `a drive record maps onto a sample on the car's own clock`() {
+        // The phone read the reply 90 s after the car stamped it: the sample
+        // stays on the car's clock, and acquired_at does not move it.
+        val record = BleRecord(acquired_at = ofEpochSecond(2_090, 0), drive_state = driving)
+        val expected =
+            DriveSample(
+                timestampMillis = 2_000_000L,
+                vehicleId = VEHICLE,
+                shiftState = "D",
+                speed = 42,
+                power = -7,
+                odometerInHundredthsOfAMile = 1_234_567,
+            )
+        assertEquals(expected, record.toDriveSample(VEHICLE))
+    }
+
+    @Test
+    fun `a drive record maps without acquired_at`() {
+        // The drive timeline is the car's own clock, so the phone's time is not needed to place a sample.
+        assertEquals(2_000_000L, BleRecord(drive_state = driving).toDriveSample(VEHICLE)?.timestampMillis)
+    }
+
+    @Test
+    fun `a parked drive record keeps absent fields absent`() {
+        val parked = DriveState(shift_state = ShiftState(P = Void()), timestamp = ofEpochSecond(5, 0))
+        val sample = BleRecord(drive_state = parked).toDriveSample(VEHICLE)
+        assertEquals(DriveSample(5_000L, VEHICLE, shiftState = "P", speed = null, power = null, odometerInHundredthsOfAMile = null), sample)
+    }
+
+    @Test
+    fun `a drive record without a car timestamp yields no drive sample`() {
+        // acquired_at is never a stand-in for the car's own time (ADR-0006).
+        val record = BleRecord(acquired_at = ofEpochSecond(2_090, 0), drive_state = driving.copy(timestamp = null))
+        assertNull(record.toDriveSample(VEHICLE))
+    }
+
+    @Test
     fun `each payload feeds only its own sample`() {
-        val charge = BleRecord(acquired_at = ofEpochSecond(1_001, 0), charge_state = charging)
-        val status = BleRecord(acquired_at = ofEpochSecond(1_001, 0), vehicle_status = asleep)
+        val acquiredAt = ofEpochSecond(1_001, 0)
+        val charge = BleRecord(acquired_at = acquiredAt, charge_state = charging)
+        val status = BleRecord(acquired_at = acquiredAt, vehicle_status = asleep)
+        val drive = BleRecord(acquired_at = acquiredAt, drive_state = driving)
         assertNull(charge.toStatusSample("car"))
+        assertNull(charge.toDriveSample("car"))
         assertNull(status.toBatterySample("car"))
-        assertNull(BleRecord(acquired_at = ofEpochSecond(1_001, 0)).toBatterySample("car"))
+        assertNull(status.toDriveSample("car"))
+        assertNull(drive.toBatterySample("car"))
+        assertNull(drive.toStatusSample("car"))
+        val empty = BleRecord(acquired_at = acquiredAt)
+        assertNull(empty.toBatterySample("car"))
+        assertNull(empty.toDriveSample("car"))
     }
 
     @Test
@@ -127,18 +197,23 @@ class BleRecordMappingTest {
                 BleRecord(acquired_at = ofEpochSecond(0, 0), vehicle_status = asleep),
                 BleRecord(acquired_at = ofEpochSecond(1_090, 0), charge_state = charging),
                 BleRecord(acquired_at = ofEpochSecond(1_800, 0), vehicle_status = inUse),
+                BleRecord(acquired_at = ofEpochSecond(2_090, 0), drive_state = driving),
             )
-        assertEquals(records, ProtoLog.decode(ProtoLog.encode(records), BleRecord.ADAPTER))
+        val decoded = ProtoLog.decode(ProtoLog.encode(records), BleRecord.ADAPTER)
+        assertEquals(records, decoded)
+        // The drive reply comes back whole: the route fields and the destination survive.
+        assertEquals(driving, decoded.last().drive_state)
     }
 
     @Test
     fun `a payload kind from a newer version reads as a record without a known payload`() {
-        // A newer writer's record: field 4, a payload kind added later, beside acquired_at.
-        val fieldFour = byteArrayOf(0x22, 0x02, 0x08, 0x01)
-        val record = BleRecord.ADAPTER.decode(BleRecord(acquired_at = ofEpochSecond(5, 0)).encode() + fieldFour)
+        // A newer writer's record: field 5, a payload kind added after drive_state, beside acquired_at.
+        val fieldFive = byteArrayOf(0x2A, 0x02, 0x08, 0x01)
+        val record = BleRecord.ADAPTER.decode(BleRecord(acquired_at = ofEpochSecond(5, 0)).encode() + fieldFive)
         assertEquals(ofEpochSecond(5, 0), record.acquired_at)
         assertNull(record.toBatterySample("car"))
         assertNull(record.toStatusSample("car"))
+        assertNull(record.toDriveSample("car"))
     }
 
     private companion object {

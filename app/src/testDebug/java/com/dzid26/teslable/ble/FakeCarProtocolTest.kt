@@ -146,6 +146,46 @@ class FakeCarProtocolTest {
     }
 
     @Test
+    fun `drive decrypts to a parked drive state stamped by the car`() {
+        val session = session(Domain.DOMAIN_INFOTAINMENT)
+        val plaintext =
+            authenticated(
+                session,
+                Domain.DOMAIN_INFOTAINMENT,
+                TeslaCommands.buildDriveStateRequest(),
+            )
+
+        val drive = TeslaCommands.parseDriveState(plaintext)
+        assertNotNull(drive)
+        assertEquals("P", TeslaCommands.shiftStateName(drive!!.shift_state))
+        assertEquals(0, drive.speed)
+        assertEquals(0, drive.power)
+        assertNotNull(drive.odometer_in_hundredths_of_a_mile)
+        // History takes time only from the car's own stamp.
+        assertNotNull(drive.timestamp)
+    }
+
+    @Test
+    fun `the odometer stays put between drive replies`() {
+        val session = session(Domain.DOMAIN_INFOTAINMENT)
+        val request = TeslaCommands.buildDriveStateRequest()
+        val first = TeslaCommands.parseDriveState(authenticated(session, Domain.DOMAIN_INFOTAINMENT, request))
+        val second = TeslaCommands.parseDriveState(authenticated(session, Domain.DOMAIN_INFOTAINMENT, request))
+
+        assertNotNull(first!!.odometer_in_hundredths_of_a_mile)
+        assertEquals(first.odometer_in_hundredths_of_a_mile, second!!.odometer_in_hundredths_of_a_mile)
+    }
+
+    @Test
+    fun `a drive request is not mistaken for a wake command`() {
+        // An Action (field 2 = vehicleAction) can be misread as an RKE action, which would wake the car.
+        val session = session(Domain.DOMAIN_INFOTAINMENT)
+        authenticated(session, Domain.DOMAIN_INFOTAINMENT, TeslaCommands.buildDriveStateRequest())
+
+        assertTrue(protocol.asleep)
+    }
+
+    @Test
     fun `charging stops at the limit`() {
         // The car only charges while awake.
         val session = session(Domain.DOMAIN_VEHICLE_SECURITY)

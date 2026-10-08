@@ -5,13 +5,16 @@ package com.dzid26.teslable.history
 import android.content.Context
 import com.dzid26.teslable.core.history.BatterySample
 import com.dzid26.teslable.core.history.BleRecord
+import com.dzid26.teslable.core.history.DriveSample
 import com.dzid26.teslable.core.history.ProtoLog
 import com.dzid26.teslable.core.history.StatusLogGate
 import com.dzid26.teslable.core.history.StatusSample
 import com.dzid26.teslable.core.history.shouldLogStatus
 import com.dzid26.teslable.core.history.toBatterySample
+import com.dzid26.teslable.core.history.toDriveSample
 import com.dzid26.teslable.core.history.toStatusSample
 import com.dzid26.teslable.core.protocol.TeslaCommands
+import com.tesla.generated.carserver.vehicle.DriveState
 import com.tesla.generated.vcsec.VehicleStatus
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -37,7 +40,9 @@ import java.time.Instant
  *   [shouldLogStatus] says so, plus the last one before the link drops,
  *   timed by `acquired_at` ([statusSamples]);
  * - `<vehicleId>.charge.pblog`: every charge reply, raw; the chart uses the
- *   ones with the car's own `ChargeState.timestamp` and a level ([samples]).
+ *   ones with the car's own `ChargeState.timestamp` and a level ([samples]);
+ * - `<vehicleId>.drive.pblog`: every DriveState reply, raw; [driveSamples]
+ *   holds the ones with the car's own `DriveState.timestamp`.
  *
  * Older raw `<vehicleId>.pblog` charge files and the pre-store CSV history are
  * neither read nor written (pre-1.0 reset).
@@ -50,12 +55,17 @@ class HistoryStore(
     private val mutex = Mutex()
     private val chargeLogs = VehicleLogs(historyDir, CHARGE_LOG_SUFFIX)
     private val statusLogs = VehicleLogs(historyDir, STATUS_LOG_SUFFIX)
+    private val driveLogs = VehicleLogs(historyDir, DRIVE_LOG_SUFFIX)
     private val _samples = MutableStateFlow<List<BatterySample>>(emptyList())
     val samples: StateFlow<List<BatterySample>> = _samples.asStateFlow()
     private val _statusSamples = MutableStateFlow<List<StatusSample>>(emptyList())
 
     /** VCSEC status readings logged for every car, oldest first. */
     val statusSamples: StateFlow<List<StatusSample>> = _statusSamples.asStateFlow()
+    private val _driveSamples = MutableStateFlow<List<DriveSample>>(emptyList())
+
+    /** DriveState readings logged for every car, oldest first. */
+    val driveSamples: StateFlow<List<DriveSample>> = _driveSamples.asStateFlow()
 
     /** Picks the status readings that reach the log (ADR-0008). */
     private val statusGate = StatusLogGate()
@@ -65,6 +75,7 @@ class HistoryStore(
             mutex.withLock {
                 _samples.value = readSamples()
                 _statusSamples.value = readStatusSamples()
+                _driveSamples.value = readDriveSamples()
             }
         }
     }
@@ -115,6 +126,30 @@ class HistoryStore(
     }
 
     /**
+     * Logs one DriveState reply, verbatim: every field the car sent, the
+     * navigation destination and route included. [acquiredAtMillis] is the
+     * phone's clock when it arrived; it goes only into the record's own
+     * `acquired_at`, so the sample stays on the car's `DriveState.timestamp`.
+     */
+    fun recordDrive(
+        vehicleId: String,
+        drive: DriveState,
+        acquiredAtMillis: Long,
+    ) {
+        // Every reply is logged as the car sent it. Drive time comes only from
+        // the car's own timestamp and is never filled in, so a reply without
+        // one stays in the log but out of [driveSamples].
+        val record = BleRecord(acquired_at = Instant.ofEpochMilli(acquiredAtMillis), drive_state = drive)
+        val sample = record.toDriveSample(vehicleId)
+        scope.launch {
+            mutex.withLock {
+                driveLogs.append(vehicleId, record)
+                if (sample != null) _driveSamples.value = (_driveSamples.value + sample).takeLast(MAX_SAMPLES)
+            }
+        }
+    }
+
+    /**
      * The link to [vehicleId] dropped: logs the newest status reading the
      * policy held back, so the status log shows when observation ended
      * (ADR-0008).
@@ -160,6 +195,16 @@ class HistoryStore(
                 .takeLast(MAX_SAMPLES)
         }.getOrDefault(emptyList())
 
+    private fun readDriveSamples(): List<DriveSample> =
+        runCatching {
+            driveLogs
+                .readAll()
+                .flatMap { (vehicleId, records) ->
+                    records.mapNotNull { it.toDriveSample(vehicleId) }
+                }.sortedBy { it.timestampMillis }
+                .takeLast(MAX_SAMPLES)
+        }.getOrDefault(emptyList())
+
     private companion object {
         const val HISTORY_DIR_NAME = "battery-history"
 
@@ -168,15 +213,17 @@ class HistoryStore(
 
         /** `<vehicleId>.vcsec.pblog`: VCSEC status replies in [BleRecord]s, timed by `acquired_at` (ADR-0008). */
         const val STATUS_LOG_SUFFIX = ".vcsec.pblog"
+
+        /** `<vehicleId>.drive.pblog`: DriveState replies in [BleRecord]s, on the car's own timestamp (ADR-0008). */
+        const val DRIVE_LOG_SUFFIX = ".drive.pblog"
         const val MAX_SAMPLES = 20_000
     }
 }
 
 /**
  * One kind of per-vehicle log: `<vehicleId><suffix>` files in [dir], holding
- * [BleRecord]s. Each kind (charge, status, and later drive as
- * `<vehicleId>.drive.pblog`) is one instance, and all share the same cap and
- * trim. Callers hold the store's mutex.
+ * [BleRecord]s. Each kind (charge, VCSEC status, drive) is one instance, and
+ * all share the same cap and trim. Callers hold the store's mutex.
  */
 private class VehicleLogs(
     private val dir: File,
