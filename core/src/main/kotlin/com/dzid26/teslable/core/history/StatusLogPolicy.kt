@@ -2,6 +2,7 @@
 
 package com.dzid26.teslable.core.history
 
+import com.squareup.wire.Instant
 import com.tesla.generated.vcsec.VehicleStatus
 
 /**
@@ -16,18 +17,18 @@ import com.tesla.generated.vcsec.VehicleStatus
  * passed is unknown.
  *
  * @param last the newest record logged for this vehicle, or null when there is none.
- * @param acquiredAtMillis the phone's clock when [status] arrived.
+ * @param acquiredAt the phone's clock when [status] arrived.
  * @param firstAfterConnect true for the first reading since the link became ready.
  */
 fun shouldLogStatus(
     last: BleRecord?,
     status: VehicleStatus,
-    acquiredAtMillis: Long,
+    acquiredAt: Instant,
     firstAfterConnect: Boolean,
 ): Boolean {
     if (last == null || firstAfterConnect || last.vehicle_status != status) return true
     val lastAt = last.acquired_at?.toEpochMilli() ?: return true
-    val elapsed = acquiredAtMillis - lastAt
+    val elapsed = acquiredAt.toEpochMilli() - lastAt
     return elapsed < 0 || elapsed >= STATUS_HEARTBEAT_MILLIS
 }
 

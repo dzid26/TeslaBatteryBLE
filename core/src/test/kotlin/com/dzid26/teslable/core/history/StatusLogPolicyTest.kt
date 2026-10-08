@@ -34,40 +34,43 @@ class StatusLogPolicyTest {
         status: VehicleStatus = asleep,
     ) = BleRecord(acquired_at = ofEpochSecond(minutes * 60, 0), vehicle_status = status)
 
+    /** The phone's clock [millis] after the epoch. */
+    private fun at(millis: Long) = ofEpochSecond(millis / 1_000, millis % 1_000 * 1_000_000)
+
     @Test
     fun `the first reading for a vehicle is logged`() {
-        assertTrue(shouldLogStatus(last = null, status = asleep, acquiredAtMillis = 0L, firstAfterConnect = false))
+        assertTrue(shouldLogStatus(last = null, status = asleep, acquiredAt = at(0), firstAfterConnect = false))
     }
 
     @Test
     fun `the first reading after a reconnect is logged even when nothing changed`() {
-        assertTrue(shouldLogStatus(logged(0), asleep, acquiredAtMillis = MINUTE, firstAfterConnect = true))
-        assertFalse(shouldLogStatus(logged(0), asleep, acquiredAtMillis = MINUTE, firstAfterConnect = false))
+        assertTrue(shouldLogStatus(logged(0), asleep, acquiredAt = at(MINUTE), firstAfterConnect = true))
+        assertFalse(shouldLogStatus(logged(0), asleep, acquiredAt = at(MINUTE), firstAfterConnect = false))
     }
 
     @Test
     fun `a changed status is logged right away`() {
-        assertTrue(shouldLogStatus(logged(0), inUse, acquiredAtMillis = 10_000L, firstAfterConnect = false))
+        assertTrue(shouldLogStatus(logged(0), inUse, acquiredAt = at(10_000), firstAfterConnect = false))
     }
 
     @Test
     fun `any raw difference counts as a change, not just the parsed flags`() {
         // Locked, asleep and away as before; only a closure differs.
         val portOpen = asleep.copy(closureStatuses = ClosureStatuses(chargePort = ClosureState_E.CLOSURESTATE_OPEN))
-        assertTrue(shouldLogStatus(logged(0), portOpen, acquiredAtMillis = 10_000L, firstAfterConnect = false))
+        assertTrue(shouldLogStatus(logged(0), portOpen, acquiredAt = at(10_000), firstAfterConnect = false))
     }
 
     @Test
     fun `an unchanged status waits for the quarter-hour heartbeat`() {
         val last = logged(0)
-        assertFalse(shouldLogStatus(last, asleep, acquiredAtMillis = 15 * MINUTE - 1, firstAfterConnect = false))
-        assertTrue(shouldLogStatus(last, asleep, acquiredAtMillis = 15 * MINUTE, firstAfterConnect = false))
+        assertFalse(shouldLogStatus(last, asleep, acquiredAt = at(15 * MINUTE - 1), firstAfterConnect = false))
+        assertTrue(shouldLogStatus(last, asleep, acquiredAt = at(15 * MINUTE), firstAfterConnect = false))
     }
 
     @Test
     fun `a reading acquired before the last logged one is logged`() {
         // The phone's clock moved back; how much time passed is unknown.
-        assertTrue(shouldLogStatus(logged(60), asleep, acquiredAtMillis = 59 * MINUTE, firstAfterConnect = false))
+        assertTrue(shouldLogStatus(logged(60), asleep, acquiredAt = at(59 * MINUTE), firstAfterConnect = false))
     }
 
     private companion object {
