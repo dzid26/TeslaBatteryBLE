@@ -39,15 +39,13 @@ class TeslaVcsecTest {
 
     @Test
     fun `parses a vehicle status response`() {
-        val vcsecPayload =
-            FromVCSECMessage(
-                vehicleStatus =
-                    VehicleStatus(
-                        vehicleLockState = VehicleLockState_E.VEHICLELOCKSTATE_LOCKED,
-                        vehicleSleepStatus = VehicleSleepStatus_E.VEHICLE_SLEEP_STATUS_ASLEEP,
-                        userPresence = UserPresence_E.VEHICLE_USER_PRESENCE_NOT_PRESENT,
-                    ),
-            ).encode()
+        val vehicleStatus =
+            VehicleStatus(
+                vehicleLockState = VehicleLockState_E.VEHICLELOCKSTATE_LOCKED,
+                vehicleSleepStatus = VehicleSleepStatus_E.VEHICLE_SLEEP_STATUS_ASLEEP,
+                userPresence = UserPresence_E.VEHICLE_USER_PRESENCE_NOT_PRESENT,
+            )
+        val vcsecPayload = FromVCSECMessage(vehicleStatus = vehicleStatus).encode()
         val response =
             RoutableMessage(
                 protobuf_message_as_bytes = vcsecPayload.toByteString(),
@@ -58,6 +56,8 @@ class TeslaVcsecTest {
         assertTrue(status!!.locked)
         assertTrue(status.asleep)
         assertFalse(status.userPresent)
+        // The raw status rides along for the history log.
+        assertEquals(vehicleStatus, status.raw)
     }
 
     @Test

@@ -12,6 +12,7 @@ import com.tesla.generated.vcsec.UnsignedMessage
 import com.tesla.generated.vcsec.UserPresence_E
 import com.tesla.generated.vcsec.VehicleLockState_E
 import com.tesla.generated.vcsec.VehicleSleepStatus_E
+import com.tesla.generated.vcsec.VehicleStatus
 import com.tesla.generated.vcsec.WhitelistEntryInfo
 import com.tesla.generated.vcsec.WhitelistInfo
 import okio.ByteString.Companion.toByteString
@@ -25,6 +26,11 @@ object TeslaVcsec {
         val locked: Boolean,
         val asleep: Boolean,
         val userPresent: Boolean,
+        /**
+         * The raw `VehicleStatus` this was parsed from, logged verbatim by the
+         * history store. Null for hand-built instances (tests).
+         */
+        val raw: VehicleStatus? = null,
     )
 
     fun buildStatusRequest(): ByteArray = buildInformationRequest(InformationRequestType.INFORMATION_REQUEST_TYPE_GET_STATUS)
@@ -41,12 +47,17 @@ object TeslaVcsec {
         val message = RoutableMessage.ADAPTER.decode(bytes)
         val payload = message.protobuf_message_as_bytes ?: return null
         val status = FromVCSECMessage.ADAPTER.decode(payload).vehicleStatus ?: return null
-        return Status(
-            locked = status.vehicleLockState != VehicleLockState_E.VEHICLELOCKSTATE_UNLOCKED,
-            asleep = status.vehicleSleepStatus == VehicleSleepStatus_E.VEHICLE_SLEEP_STATUS_ASLEEP,
-            userPresent = status.userPresence == UserPresence_E.VEHICLE_USER_PRESENCE_PRESENT,
-        )
+        return statusOf(status)
     }
+
+    /** The parsed view of a raw VCSEC status; [Status.raw] keeps the original. */
+    internal fun statusOf(raw: VehicleStatus): Status =
+        Status(
+            locked = raw.vehicleLockState != VehicleLockState_E.VEHICLELOCKSTATE_UNLOCKED,
+            asleep = raw.vehicleSleepStatus == VehicleSleepStatus_E.VEHICLE_SLEEP_STATUS_ASLEEP,
+            userPresent = raw.userPresence == UserPresence_E.VEHICLE_USER_PRESENCE_PRESENT,
+            raw = raw,
+        )
 
     fun parseWhitelistInfoResponse(bytes: ByteArray): WhitelistInfo? {
         val message = RoutableMessage.ADAPTER.decode(bytes)

@@ -142,6 +142,23 @@ class ProtoLogTest {
     }
 
     @Test
+    fun skipsAnUndecodableRecordAndReadsOn() {
+        // A complete frame no message decodes from (an incompatible test
+        // build's record, or a damaged one) must not hide the records after it.
+        val garbled = frame(byteArrayOf(0xFF.toByte(), 0xFF.toByte(), 0xFF.toByte(), 0xFF.toByte()))
+        val bytes = ProtoLog.encodeFrame(record(0)) + garbled + ProtoLog.encodeFrame(record(60))
+        assertEquals(listOf(record(0), record(60)), ProtoLog.decode(bytes, ChargeState.ADAPTER))
+    }
+
+    @Test
+    fun skipsEmptyFrames() {
+        // Zero bytes (a zero-length frame each), as a filesystem can leave
+        // after a power loss, are skipped like empty records.
+        val bytes = ProtoLog.encodeFrame(record(0)) + ByteArray(3) + ProtoLog.encodeFrame(record(60))
+        assertEquals(listOf(record(0), record(60)), ProtoLog.decode(bytes, ChargeState.ADAPTER))
+    }
+
+    @Test
     fun ignoresImpossibleLengths() {
         // Lengths far beyond the buffer, at Int32 max (whose end offset
         // overflows), and negative after overflow: none may throw, none

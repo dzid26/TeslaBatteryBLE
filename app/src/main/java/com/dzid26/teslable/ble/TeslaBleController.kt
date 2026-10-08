@@ -653,6 +653,9 @@ class TeslaBleController(
         private var pairingKeyId: String? = null
         private var pendingPairCheck = false
 
+        /** The next VCSEC status is the first since the link became ready; the status log always keeps it. */
+        private var firstStatusAfterConnect = true
+
         val poll =
             object : Runnable {
                 override fun run() {
@@ -1090,7 +1093,10 @@ class TeslaBleController(
             return sent
         }
 
-        private fun handleEncryptedResponse(bytes: ByteArray): Boolean {
+        private fun handleEncryptedResponse(
+            bytes: ByteArray,
+            acquiredAtMillis: Long,
+        ): Boolean {
             val message =
                 runCatching { RoutableMessage.ADAPTER.decode(bytes) }.getOrNull()
                     ?: return false
@@ -1130,9 +1136,9 @@ class TeslaBleController(
                     if (charge != null) {
                         val previous = _state.value.connections[address]?.charge
                         updateConnection(address) {
-                            it.copy(charge = charge, chargeAtMillis = System.currentTimeMillis())
+                            it.copy(charge = charge, chargeAtMillis = acquiredAtMillis)
                         }
-                        historyStore.record(bleName, charge)
+                        historyStore.record(bleName, charge, acquiredAtMillis)
                         if (previous?.batteryLevel != charge.batteryLevel ||
                             previous?.chargingState != charge.chargingState
                         ) {
@@ -1393,8 +1399,11 @@ class TeslaBleController(
         }
 
         fun onMessage(message: ByteArray) {
+            // The phone's clock when this reply arrived, read once: both BLE
+            // logs keep it beside the car's reply (ADR-0008).
+            val acquiredAtMillis = System.currentTimeMillis()
             if (handleSessionInfo(message)) return
-            if (handleEncryptedResponse(message)) return
+            if (handleEncryptedResponse(message, acquiredAtMillis)) return
             if (handlePairingResponse(message)) return
 
             val whitelist = runCatching { TeslaVcsec.parseWhitelistInfoResponse(message) }.getOrNull()
@@ -1411,6 +1420,17 @@ class TeslaBleController(
 
             val status = runCatching { TeslaVcsec.parseStatusResponse(message) }.getOrNull()
             if (status != null) {
+                // VCSEC replies carry no time: the phone's clock at receipt is
+                // the status log's timeline (ADR-0008).
+                status.raw?.let { raw ->
+                    historyStore.recordStatus(
+                        vehicleId = bleName,
+                        status = raw,
+                        acquiredAtMillis = acquiredAtMillis,
+                        firstAfterConnect = firstStatusAfterConnect,
+                    )
+                }
+                firstStatusAfterConnect = false
                 if (!status.asleep) {
                     handler.removeCallbacks(wakeRefresh)
                 }
@@ -1442,6 +1462,7 @@ class TeslaBleController(
             object : TeslaTransport.Listener {
                 override fun onPhase(phase: ConnectionPhase) {
                     if (phase == ConnectionPhase.FAILED || phase == ConnectionPhase.DISCONNECTED) {
+                        historyStore.onLinkLost(bleName)
                         transport?.close()
                         transport = null
                         handler.removeCallbacks(poll)
@@ -1461,6 +1482,7 @@ class TeslaBleController(
                     if (phase == ConnectionPhase.READY) {
                         reconnectAttempts = 0
                         nextRetryAtMs = 0
+                        firstStatusAfterConnect = true
                         // Additive scans stay under the user's control; the selected
                         // car connecting is the one signal that means "found it".
                         if (_state.value.explicitScan && selectedBleName == bleName) stopScan()
