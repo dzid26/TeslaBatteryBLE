@@ -100,6 +100,4 @@ gh release upload "$TAG" "$ASSET_APK" --clobber
 
 # The release is not done until its APK is actually attached.
 assets="$(gh release view "$TAG" --json assets --jq '.assets[].name')"
-for expected in "$ASSET_APK"; do
-  printf '%s\n' "$assets" | grep -qx "$expected" || { echo "release $TAG is missing $expected" >&2; exit 1; }
-done
+printf '%s\n' "$assets" | grep -qx "$ASSET_APK" || { echo "release $TAG is missing $ASSET_APK" >&2; exit 1; }

@@ -23,6 +23,7 @@ account, nothing leaves the phone."*
 | Distribution | GitHub Releases + Obtainium now; F-Droid + IzzyOnDroid next; Play later | Signed releases are a prerequisite for F-Droid/IzzyOnDroid. |
 | Core library | Internal until v1, then publish (Maven Central vs JitPack TBD) | Library-grade docs and API hygiene from now on. |
 | Platforms | Android-first; KMP (jvm + apple) at library release | Keep JVM-only dependencies out of `core`. |
+| Interop | Decisions weigh TeslaMate export/sync and the KMP path (2026-10-08) | Today's limits (20k-record cap, no INTERNET permission) are current choices, not commitments. The local log stays raw and complete; any filtering happens at export. |
 | UX | Phased product pass: P0 polish → P1 product features → P2 extras | |
 | Website | GitHub Pages landing for the app; library docs TBD at library release | |
 | Money | Donations only (GitHub Sponsors / Ko-fi) | One free FOSS build everywhere; no ads, no telemetry. |
@@ -101,8 +102,10 @@ A trustworthy shell around the existing protocol work. No user-facing features.
 - [ ] **Range backbone** (owner direction 2026-10-05): canonical unit is rated miles; parse `charge_rate_mph` / `charge_rate_mph_float` as the charging slope; stats, charge projection, and drain run in miles; SOC is derived from the learned full-range scale for display only, falling back to the raw int until the scale is pinned. Respects the units setting (display-only conversion from canonical miles). Core landed 2026-10-05: rate parsing, miles-first charge projection, learned full-range scale; stats/drain and display wiring next.
 - [ ] Dual range/SOC display: switchable axes and two value hints (miles + SOC) on the car view and history chart.
 - [x] **History storage decision** (2026-10-06): raw `ChargeState` append-log (ADR-0006) behind `HistoryStore`, one log file per vehicle; additive by construction so new fields never drop old rows; charge-rate plus charger power/voltage/amps fields are logged.
+- [ ] **DriveState log** (owner direction 2026-10-08): log the car's raw `DriveState` in full (shift state, speed, power, odometer, navigation fields), car-timestamped, in its own per-vehicle file. Feeds drive detection for the parked-drain projection (odometer deltas across gaps) and TeslaMate drives.
 - [ ] Notifications: charge complete, SOC thresholds, **vampire-drain alert**.
 - [ ] Widget (Glance), automation intents (Tasker), CSV/JSON export.
+- [ ] **TeslaMate export/sync** (owner direction 2026-10-08): get the phone's BLE history into the owner's self-hosted TeslaMate to fill gaps in its cloud data. Export maps the raw records (ChargeState, DriveState, VCSEC status) onto TeslaMate's vehicle-data shape with the car's timestamps; status readings become asleep/online states. Upstream has no way in for this data yet (its only importer takes data older than the first TeslaMate record); discussion in teslamate-org/teslamate#5496. File export first (share sheet, no new permission); direct sync to the owner's server is opt-in and needs `INTERNET` plus, at targetSdk 37, the runtime `ACCESS_LOCAL_NETWORK` for LAN addresses, with PRIVACY.md and the positioning line updated when it ships. Retention keeps records until they are synced (20k cap, #123).
 - [ ] Multiple cars: storage, per-vehicle links, VIN, per-car notifications and the cars/car UI landed (ADR-0004); share redacted diagnostics open. Requirements: `docs/requirements/multi-vehicle.md`.
 - [ ] Share redacted diagnostics.
 - [ ] Compatibility matrix (car models, vehicle software, Android versions).

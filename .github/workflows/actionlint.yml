@@ -1,0 +1,45 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+name: Workflow lint
+
+# Lint the workflows and their scripts: actionlint on .github/workflows, with
+# shellcheck on every run: step, plus shellcheck on .github/scripts/*.sh. It
+# takes about 20 seconds and never builds the app.
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/**'
+      - '.github/scripts/**'
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/**'
+      - '.github/scripts/**'
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: actionlint and shellcheck
+    runs-on: ubuntu-latest
+    env:
+      # actionlint's official image, pinned by digest. It bundles shellcheck,
+      # so actionlint and the script check use the same pinned copy.
+      IMAGE: rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Pull actionlint
+        run: |
+          docker pull --quiet "$IMAGE"
+          docker run --rm "$IMAGE" -version
+          docker run --rm --entrypoint shellcheck "$IMAGE" --version
+
+      - name: actionlint (with shellcheck)
+        run: docker run --rm -v "$PWD:/repo:ro" -w /repo "$IMAGE" -color -shellcheck=shellcheck
+
+      - name: shellcheck .github/scripts
+        if: ${{ !cancelled() }}
+        run: docker run --rm -v "$PWD:/repo:ro" -w /repo --entrypoint shellcheck "$IMAGE" .github/scripts/*.sh

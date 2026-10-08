@@ -3,6 +3,8 @@ package com.dzid26.teslable.ble
 
 import android.app.backup.BackupManager
 import android.content.Context
+import android.os.Build
+import android.security.KeyStoreException
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyPermanentlyInvalidatedException
 import android.security.keystore.KeyProperties
@@ -214,10 +216,21 @@ class PairingKeyStore(
     /**
      * True for failures that prove this install can never decrypt the stored
      * key: the Keystore key that wrapped it is a different one, unrecoverable,
-     * or permanently invalidated. Anything else may be transient.
+     * or permanently invalidated. Anything else may be transient, and so is an
+     * unrecoverable key whose Keystore cause is marked transient.
      */
     private fun Throwable.isDefiniteKeyLoss(): Boolean =
-        this is AEADBadTagException || this is UnrecoverableKeyException || this is KeyPermanentlyInvalidatedException
+        when (this) {
+            is AEADBadTagException, is KeyPermanentlyInvalidatedException -> true
+            // keystore2 also wraps a failed key lookup (busy, system error) this way.
+            is UnrecoverableKeyException -> !hasTransientKeystoreCause()
+            else -> false
+        }
+
+    /** True on Android 13+, where the Keystore says whether a failure may pass on retry. */
+    private fun Throwable.hasTransientKeystoreCause(): Boolean =
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            (cause as? KeyStoreException)?.isTransientFailure == true
 
     /** The Keystore AES key, or null when this install has none. */
     private fun existingSecretKey(): SecretKey? =
