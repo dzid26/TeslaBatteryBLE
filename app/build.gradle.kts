@@ -8,6 +8,48 @@ plugins {
     alias(libs.plugins.detekt)
 }
 
+// Version identity comes from the nearest `v*` git tag, so tags are the only
+// place a release version is written down:
+//   v0.3.0-beta.3          -> versionName 0.3.0-beta.3
+//   v0.3.0-beta.3 + 12 commits -> versionName 0.3.0-beta.3-12-g6ac4527
+// versionCode is computed from the tag's semver: major * 1_000_000 +
+// minor * 10_000 + patch * 100 + stage, where stage is the pre-release number
+// (beta.3 -> 3, no number -> 0) and a stable release is 99, so it sorts above
+// its own pre-releases. Use one pre-release series per patch version (do not
+// mix alpha/beta/rc). Without git history (a tarball, a shallow clone with no
+// tags) it falls back to 0.0.0-dev / 1.
+val gitDescribe: String =
+    try {
+        providers
+            .exec {
+                commandLine("git", "describe", "--tags", "--match", "v[0-9]*")
+                isIgnoreExitValue = true
+            }.standardOutput.asText
+            .get()
+            .trim()
+    } catch (_: Exception) {
+        ""
+    }
+val tagVersion =
+    Regex("""^v(\d+)[.](\d+)[.](\d+)(?:-([0-9A-Za-z.]+?))?(?:-\d+-g[0-9a-f]+)?$""")
+        .matchEntire(gitDescribe)
+val gitVersionName = if (tagVersion != null) gitDescribe.removePrefix("v") else "0.0.0-dev"
+val gitVersionCode: Int =
+    tagVersion?.let { match ->
+        val (majorText, minorText, patchText, preRelease) = match.destructured
+        val major = majorText.toInt()
+        val minor = minorText.toInt()
+        val patch = patchText.toInt()
+        require(minor < 100 && patch < 100) { "minor and patch must stay below 100: $gitDescribe" }
+        val stage =
+            when {
+                preRelease.isEmpty() -> 99
+                else -> Regex("""\d+$""").find(preRelease)?.value?.toInt() ?: 0
+            }
+        require(preRelease.isEmpty() || stage < 99) { "pre-release number must stay below 99: $gitDescribe" }
+        major * 1_000_000 + minor * 10_000 + patch * 100 + stage
+    } ?: 1
+
 // The owner-held signing identity, shared by local builds and CI (see
 // keystore.properties, gitignored). Without it, debug builds fall back to the
 // standard debug key so contributors can still build.
@@ -35,8 +77,8 @@ android {
         applicationId = "com.dzid26.teslable"
         minSdk = 26
         targetSdk = 37
-        versionCode = 3
-        versionName = "0.2.0-beta.2"
+        versionCode = gitVersionCode
+        versionName = gitVersionName
         buildConfigField(
             "boolean",
             "DEMO_CAR",
