@@ -47,8 +47,7 @@ ticks does not turn a 10 s cadence into 20 s.
 - Readings (SOC, charging, gear) can be up to 11 minutes old while the car is
   awake and idle, and stop while it sleeps (the status log still shows the
   sleep). Charging and driving stay at 10 s.
-- The parked-drain projection already reads the age of the last reading from
-  the raw log; no format change.
+- The raw log format is unchanged; its records are simply sparser while idle.
 - The 660 s and 30 s values are yoziru's, found empirically on their cars. A
   real-car check is part of the change: left idle with the phone in range, the
   car should show asleep in the status log within about 15-25 minutes.
