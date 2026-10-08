@@ -18,7 +18,7 @@
 ## Release
 
 - [ ] Create and push tag `vX.Y.Z` (e.g. `git tag v0.2.0 && git push origin v0.2.0`).
-- [ ] CI builds the APK (replacing the rolling preview's APK when the tag promotes it, and removing that preview), attaches it as `TeslaBatteryBLE-<tag>.apk`, captures screenshots from the simulated car on the emulator, and embeds them (light/dark rows) as user attachments.
+- [ ] CI builds the APK (and removes the rolling preview when the tag promotes it), attaches it as `TeslaBatteryBLE-<tag>.apk`, captures screenshots from the simulated car on the emulator, and embeds them (light/dark rows) as user attachments.
 - [ ] The capture is required: a failed capture or a missing screenshot fails the run, and the release is not published without its screenshots.
 - [ ] CI sets the release title, marks tags containing `-` as prereleases, and writes notes from the commits since the previous tag plus the screenshots.
 - [ ] Verify the release page: correct tag/version, notes, screenshots, and installable APK artifact.
@@ -27,7 +27,7 @@
 ## Current status
 
 - Stable signing: one owner-held keystore signs local builds, preview builds and tagged releases. Gradle reads the gitignored `keystore.properties`; CI writes it from the `SIGNING_*` secrets in the `release` environment (Settings → Environments; limited to `main` and `v*` tags, no required reviewer), and only the tag-release and rolling-preview jobs read them. Pull request builds, like the `build` job on every run, get no secrets and use the default debug key. Keep the keystore and its password backed up - losing them means no further updates to installed apps.
-- The preview channel ships signed debug APKs on the rolling `preview` tag, rebuilt from `main` on every push.
+- The preview channel ships signed debug APKs as a CI artifact linked from the rolling `preview` release, rebuilt from `main` on every push.
 - Switching signing keys (or installing a build signed elsewhere, e.g. F-Droid) requires uninstall + reinstall, which also deletes the car pairing key (re-pair with the NFC card).
 - Screenshots live in `website/images/` — one set shared by the README and the landing page; release notes embed the same CI capture as individual shots.
 
@@ -35,7 +35,7 @@
 
 - [ ] F-Droid: metadata lives in `fastlane/` (this repo). Follow the F-Droid submission process for a new app pointing at this metadata, then keep changelogs (`fastlane/metadata/android/en-US/changelogs/<versionCode>.txt`) current per release.
 - [ ] IzzyOnDroid: submit once a signed stable release exists.
-- [ ] Obtainium: already documented in `README.md` (tracks GitHub releases, include prereleases for the preview channel).
+- [ ] Obtainium: already documented in `README.md` (tracks GitHub releases, include prereleases for tagged betas; the rolling preview has no APK asset).
 - [ ] Signature-change caveat: switching signing keys (e.g. debug/preview to stable, or GitHub to F-Droid) requires users to uninstall and reinstall — Android treats different signatures as different apps, and data does not migrate.
 
 ## Post-release

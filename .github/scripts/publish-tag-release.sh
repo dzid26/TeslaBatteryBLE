@@ -81,12 +81,6 @@ assets="$(gh release view "$TAG" --json assets --jq '.assets[].name')"
 expected="$(basename "$APK")"
 printf '%s\n' "$assets" | grep -qx "$expected" || { echo "release $TAG is missing $expected" >&2; exit 1; }
 
-# Only now that the rebuilt APK is attached, drop the superseded preview APK(s)
-# so a promoted preview ends up with one APK, the one with the tag's version.
-printf '%s\n' "$assets" | grep -E '^TeslaBatteryBLE-preview-.*\.apk$' | while read -r old; do
-  gh release delete-asset "$TAG" "$old" --yes
-done
-
 # A separate rolling `preview` release cut from this same commit is now redundant.
 if [ "$(git rev-parse -q --verify "refs/tags/preview^{commit}" 2>/dev/null || true)" = "$(git rev-parse HEAD)" ]; then
   gh release delete preview --yes --cleanup-tag

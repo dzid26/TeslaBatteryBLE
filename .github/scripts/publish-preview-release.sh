@@ -2,8 +2,9 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # Create or update the rolling "preview" release for the current commit.
 #
-# Run from a checkout with `dist/app-debug.apk` built (see android.yml). The
-# preview carries no screenshots; the tag release captures them.
+# Run from a checkout (see android.yml); APK_ARTIFACT_URL points at the uploaded
+# APK artifact. The preview carries no APK asset and no screenshots; the tag
+# release captures the screenshots.
 set -euo pipefail
 
 REPO="${GITHUB_REPOSITORY:?GITHUB_REPOSITORY is required}"
@@ -11,11 +12,8 @@ SHA="${GITHUB_SHA:-$(git rev-parse HEAD)}"
 TAG="preview"
 TITLE="Preview build"
 SHORT_SHA="${SHA:0:7}"
-APK="dist/app-debug.apk"
-ASSET_APK="TeslaBatteryBLE-preview-${SHORT_SHA}.apk"
+APK_ARTIFACT_URL="${APK_ARTIFACT_URL:?APK_ARTIFACT_URL is required (the CI artifact holding the preview APK)}"
 
-[ -f "$APK" ] || { echo "missing $APK" >&2; exit 1; }
-cp "$APK" "$ASSET_APK"
 
 git fetch --tags origin
 
@@ -45,7 +43,7 @@ git push origin "refs/tags/$TAG" --force
 {
   echo "Rolling preview of \`main\` - rebuilt on every push. The APK is a debug build."
   echo
-  echo "**APK**: [\`$ASSET_APK\`](https://github.com/$REPO/releases/download/$TAG/$ASSET_APK)"
+  echo "**APK**: [CI artifact \`TeslaBatteryBLE-preview-${SHORT_SHA}.apk\` (zip; downloading needs a GitHub login)]($APK_ARTIFACT_URL)"
   echo
   if [ -n "$PREV_TAG" ]; then
     echo "## Changes since [$PREV_TAG](https://github.com/$REPO/releases/tag/$PREV_TAG)"
@@ -71,9 +69,3 @@ if gh release view "$TAG" > /dev/null 2>&1; then
   gh release delete "$TAG" --yes
 fi
 gh release create "$TAG" --title "$TITLE" --prerelease --notes-file preview-notes.md
-
-gh release upload "$TAG" "$ASSET_APK" --clobber
-
-# The release is not done until its APK is actually attached.
-assets="$(gh release view "$TAG" --json assets --jq '.assets[].name')"
-printf '%s\n' "$assets" | grep -qx "$ASSET_APK" || { echo "release $TAG is missing $ASSET_APK" >&2; exit 1; }
