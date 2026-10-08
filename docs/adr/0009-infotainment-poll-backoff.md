@@ -10,17 +10,16 @@ Related: ADR-0001 (battery tracker), ADR-0008 (BLE log envelope), issue #112,
 - While VCSEC said the car was awake and an Infotainment session existed, the
   app sent a charge request and then a drive request every 10 s, whatever the
   car was doing. ADR-0001 only intended that cadence while charging.
-- yoziru/esphome-tesla-ble found that Infotainment polling keeps a car awake
-  (PR #198) and fixed it with a backoff (PR #213): VCSEC every 10 s always,
-  Infotainment every 10 s while active, every 30 s for an idle window of 660 s
-  after the last activity, then one poll every 660 s. Only genuine activity
-  resets the idle timer; "user present" is true whenever a phone key is near,
-  and staying unlocked is not activity.
+- Other BLE projects found the same thing and back off their Infotainment
+  polling: it runs every 10 s only while the car is active, and slows down or
+  stops when it is not. Only genuine activity counts; "user present" is true
+  whenever a phone key is near, and merely staying unlocked is not activity.
+  Evidence and citations: `docs/research/infotainment-polling-and-sleep.md`.
 - Any Infotainment request restarts the car's own sleep countdown (about 10
-  minutes). A 30 s window of 11 minutes would therefore keep the car awake for
-  about 21 minutes instead of 10, and the idle reads would keep it from
-  sleeping at all. This app never wakes the car and rides along on drives and
-  charges, so it adopts yoziru's activity model but not its idle polling.
+  minutes). A slow idle cadence, such as 30 s reads for 11 minutes, would keep
+  the car awake about 21 minutes instead of 10, and periodic idle reads would
+  keep it from sleeping at all. This app never wakes the car and rides along on
+  drives and charges, so it adopts the activity model but not idle polling.
 - VCSEC status does not affect sleep and keeps the BLE link alive (cars drop
   idle links after about 30 s), so it stays at 10 s.
 
@@ -37,8 +36,9 @@ status, whether the charge+drive pair is due. One instance per vehicle link.
 - Not active: single reads on events, each sent at once. Events: a fresh start,
   VCSEC asleep to awake, locked to unlocked, any closure (doors, trunks, charge
   port) changing between open and not open, and an explicit user request
-  (refresh button, notification wake). Any state other than CLOSED and UNKNOWN
-  counts as open, so a door going ajar is an opening.
+  (the refresh button; waking the car is not one itself, but its asleep to
+  awake step is). Any state other than CLOSED and UNKNOWN counts as open, so a
+  door going ajar is an opening.
 - A fresh start is the first READY link since the app process or tracking
   started (app start, auto-start after boot or update, tracking switched on) or
   right after pairing / key enrollment. The controller calls

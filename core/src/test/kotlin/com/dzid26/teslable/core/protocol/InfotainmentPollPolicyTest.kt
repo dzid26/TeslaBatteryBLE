@@ -3,6 +3,9 @@ package com.dzid26.teslable.core.protocol
 
 import com.tesla.generated.vcsec.ClosureState_E
 import com.tesla.generated.vcsec.ClosureStatuses
+import com.tesla.generated.vcsec.UserPresence_E
+import com.tesla.generated.vcsec.VehicleLockState_E
+import com.tesla.generated.vcsec.VehicleSleepStatus_E
 import com.tesla.generated.vcsec.VehicleStatus
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -18,14 +21,21 @@ class InfotainmentPollPolicyTest {
         asleep: Boolean = false,
         userPresent: Boolean = false,
         closures: ClosureStatuses? = null,
-    ) = TeslaVcsec.Status(locked, asleep, userPresent, closures?.let { VehicleStatus(closureStatuses = it) })
+    ) = VehicleStatus(
+        vehicleLockState = if (locked) VehicleLockState_E.VEHICLELOCKSTATE_LOCKED else VehicleLockState_E.VEHICLELOCKSTATE_UNLOCKED,
+        vehicleSleepStatus =
+            if (asleep) VehicleSleepStatus_E.VEHICLE_SLEEP_STATUS_ASLEEP else VehicleSleepStatus_E.VEHICLE_SLEEP_STATUS_AWAKE,
+        userPresence =
+            if (userPresent) UserPresence_E.VEHICLE_USER_PRESENCE_PRESENT else UserPresence_E.VEHICLE_USER_PRESENCE_NOT_PRESENT,
+        closureStatuses = closures,
+    )
 
     private val doorOpen = ClosureStatuses(frontDriverDoor = ClosureState_E.CLOSURESTATE_OPEN)
     private val doorClosed = ClosureStatuses(frontDriverDoor = ClosureState_E.CLOSURESTATE_CLOSED)
 
     /** Advances the clock by one 10 s VCSEC tick and feeds the status; returns whether a read is due. */
     private fun tick(
-        status: TeslaVcsec.Status = status(),
+        status: VehicleStatus = status(),
         sessionReady: Boolean = true,
     ): Boolean {
         now += TICK
@@ -35,7 +45,7 @@ class InfotainmentPollPolicyTest {
     /** Ticks for [ms] and returns the times (ms since the start) at which a read was due. */
     private fun readsOver(
         ms: Long,
-        status: TeslaVcsec.Status = status(),
+        status: VehicleStatus = status(),
     ): List<Long> {
         val start = now
         val reads = mutableListOf<Long>()
@@ -57,7 +67,7 @@ class InfotainmentPollPolicyTest {
     fun chargingReadsEveryTenSeconds() {
         connectAndFirstRead()
         repeat(6) {
-            policy.onChargeReading("Charging")
+            policy.onChargeReading(ChargingStateKind.Charging)
             assertTrue(tick(), "tick $it")
         }
     }
@@ -65,14 +75,14 @@ class InfotainmentPollPolicyTest {
     @Test
     fun startingCountsAsActive() {
         connectAndFirstRead()
-        policy.onChargeReading("Starting")
+        policy.onChargeReading(ChargingStateKind.Starting)
         assertTrue(tick())
         assertTrue(tick())
     }
 
     @Test
     fun drivingInDriveReverseOrNeutralReadsEveryTenSeconds() {
-        for (shift in listOf("D", "R", "N")) {
+        for (shift in listOf(ShiftStateKind.D, ShiftStateKind.R, ShiftStateKind.N)) {
             connectAndFirstRead()
             repeat(3) {
                 policy.onDriveReading(shift)
@@ -83,23 +93,24 @@ class InfotainmentPollPolicyTest {
 
     @Test
     fun parkedAndNonChargingStatesAreNotActive() {
-        for (name in listOf("Complete", "Stopped", "Disconnected", "NoPower", "Calibrating", "Unknown", null)) {
+        for (kind in listOf(null) +
+            ChargingStateKind.entries.filter { it != ChargingStateKind.Charging && it != ChargingStateKind.Starting }) {
             connectAndFirstRead()
-            policy.onChargeReading(name)
-            policy.onDriveReading("P")
-            assertFalse(tick(), "$name")
+            policy.onChargeReading(kind)
+            policy.onDriveReading(ShiftStateKind.P)
+            assertFalse(tick(), "$kind")
         }
         connectAndFirstRead()
-        policy.onDriveReading("Invalid")
+        policy.onDriveReading(ShiftStateKind.Invalid)
         assertFalse(tick())
     }
 
     @Test
     fun readsStopRightAwayWhenActivityEnds() {
         connectAndFirstRead()
-        policy.onChargeReading("Charging")
+        policy.onChargeReading(ChargingStateKind.Charging)
         assertTrue(tick())
-        policy.onChargeReading("Complete")
+        policy.onChargeReading(ChargingStateKind.Complete)
         assertFalse(tick())
         // Only the connect follow-up remains: no window, no idle reads.
         assertEquals(listOf(FOLLOW_UP - 2 * TICK), readsOver(60 * 60_000L))
@@ -109,7 +120,7 @@ class InfotainmentPollPolicyTest {
     fun activeCadenceKeepsGoingForHours() {
         connectAndFirstRead()
         repeat(2_000) {
-            policy.onDriveReading("D")
+            policy.onDriveReading(ShiftStateKind.D)
             assertTrue(tick())
         }
     }
@@ -135,6 +146,15 @@ class InfotainmentPollPolicyTest {
         // The link drops: no statuses for a while, and the car stays as it was. Nothing to read.
         now += 5 * 60_000L
         assertFalse(policy.onStatus(status(), true, now))
+        assertTrue(readsOver(30 * 60_000L).isEmpty())
+    }
+
+    @Test
+    fun onlyTheFirstLinkReadyIsAFreshStart() {
+        policy.onLinkReady(now)
+        assertTrue(policy.onStatus(status(), true, now), "first READY reads")
+        settle()
+        policy.onLinkReady(now) // a reconnect: nothing to read, no follow-up
         assertTrue(readsOver(30 * 60_000L).isEmpty())
     }
 
@@ -188,7 +208,7 @@ class InfotainmentPollPolicyTest {
     @Test
     fun noReadsWhileAsleep() {
         connectAndFirstRead()
-        policy.onChargeReading("Charging")
+        policy.onChargeReading(ChargingStateKind.Charging)
         assertTrue(readsOver(2 * 60 * 60_000L, status(asleep = true)).isEmpty())
     }
 
@@ -225,7 +245,7 @@ class InfotainmentPollPolicyTest {
         settle()
         readsOver(3 * TICK, status(asleep = true))
         assertTrue(tick())
-        policy.onChargeReading("Charging")
+        policy.onChargeReading(ChargingStateKind.Charging)
         assertTrue(tick())
         assertTrue(tick())
     }
@@ -243,7 +263,7 @@ class InfotainmentPollPolicyTest {
     @Test
     fun readingsFromBeforeSleepDoNotCountAsActiveAfterWake() {
         connectAndFirstRead()
-        policy.onChargeReading("Charging")
+        policy.onChargeReading(ChargingStateKind.Charging)
         readsOver(3 * TICK, status(asleep = true))
         assertTrue(tick(), "wake read")
         assertFalse(tick(), "a stale charging reading must not keep the 10 s cadence")
@@ -347,14 +367,14 @@ class InfotainmentPollPolicyTest {
     }
 
     @Test
-    fun aStatusWithoutClosuresIsNotAnEvent() {
+    fun anAllClosedStatusAfterOneWithoutClosuresIsNotAnEvent() {
         connectAndFirstRead()
         settle()
-        assertTrue(readsOver(10 * 60_000L, TeslaVcsec.Status(locked = true, asleep = false, userPresent = false)).isEmpty())
+        assertTrue(readsOver(10 * 60_000L, status(closures = ClosureStatuses())).isEmpty())
     }
 
     /** Lets any pending follow-up pass with a fixed status. */
-    private fun settle2(status: TeslaVcsec.Status) {
+    private fun settle2(status: VehicleStatus) {
         readsOver(10 * 60_000L, status)
     }
 

@@ -3,6 +3,7 @@ package com.dzid26.teslable.core.protocol
 
 import com.tesla.generated.vcsec.ClosureState_E
 import com.tesla.generated.vcsec.ClosureStatuses
+import com.tesla.generated.vcsec.VehicleStatus
 
 /**
  * When to ask the car for its Infotainment state (charge + drive).
@@ -35,6 +36,7 @@ class InfotainmentPollPolicy {
     private var lastReadAtMs: Long? = null
     private var followUpAtMs: Long? = null
     private var readPending = false
+    private var started = false
     private var charging = false
     private var driving = false
     private var previousAsleep: Boolean? = null
@@ -50,6 +52,7 @@ class InfotainmentPollPolicy {
      * first awake status and follows up once. Not for a reconnect after a dropped link.
      */
     fun onFreshStart(nowMillis: Long) {
+        started = true
         lastReadAtMs = null
         charging = false
         driving = false
@@ -57,6 +60,15 @@ class InfotainmentPollPolicy {
         previousLocked = null
         previousOpenClosures = null
         event(nowMillis)
+    }
+
+    /**
+     * A link became READY. The first one since this policy was created (app or tracking start, as
+     * the controller makes one policy per link) is a [fresh start][onFreshStart]; later ones are
+     * plain reconnects and change nothing.
+     */
+    fun onLinkReady(nowMillis: Long) {
+        if (!started) onFreshStart(nowMillis)
     }
 
     /**
@@ -70,13 +82,13 @@ class InfotainmentPollPolicy {
     }
 
     /** The latest charge reading. Charging or Starting is activity. */
-    fun onChargeReading(chargingStateName: String?) {
-        charging = chargingStateName in CHARGING_STATES
+    fun onChargeReading(chargingState: ChargingStateKind?) {
+        charging = chargingState == ChargingStateKind.Charging || chargingState == ChargingStateKind.Starting
     }
 
     /** The latest drive reading. Shift state D, R or N is activity. */
-    fun onDriveReading(shiftStateName: String?) {
-        driving = shiftStateName in DRIVING_SHIFT_STATES
+    fun onDriveReading(shiftState: ShiftStateKind?) {
+        driving = shiftState == ShiftStateKind.D || shiftState == ShiftStateKind.R || shiftState == ShiftStateKind.N
     }
 
     /**
@@ -86,7 +98,7 @@ class InfotainmentPollPolicy {
      * is false, so an event read waits for the session. Asleep drops everything pending.
      */
     fun onStatus(
-        status: TeslaVcsec.Status,
+        status: VehicleStatus,
         sessionReady: Boolean,
         nowMillis: Long,
     ): Boolean {
@@ -115,10 +127,10 @@ class InfotainmentPollPolicy {
     }
 
     private fun observe(
-        status: TeslaVcsec.Status,
+        status: VehicleStatus,
         nowMillis: Long,
     ) {
-        val openClosures = openClosureMask(status.raw?.closureStatuses)
+        val openClosures = openClosureMask(status.closureStatuses)
         val wokeUp = previousAsleep == true && !status.asleep
         val unlocked = previousLocked == true && !status.locked
         val closureChanged = previousOpenClosures?.let { it != openClosures } == true
@@ -160,8 +172,5 @@ class InfotainmentPollPolicy {
          * early rather than slipping a whole tick.
          */
         const val DUE_SLACK_MS = 1_000L
-
-        private val CHARGING_STATES = setOf("Charging", "Starting")
-        private val DRIVING_SHIFT_STATES = setOf("D", "R", "N")
     }
 }
