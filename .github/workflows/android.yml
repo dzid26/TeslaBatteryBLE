@@ -81,11 +81,14 @@ jobs:
       - name: Static analysis (ktlint, detekt)
         run: ./gradlew ktlintCheck detekt
 
-      # The artifact gets its own application ID (.pr) and launcher label, so
-      # it installs next to the release app. The preview and release jobs and
-      # the screenshot captures build without the property.
+      # The artifact gets its own application ID (.pr), launcher label and a
+      # versionName ending in -pr<number>, so it installs next to the release
+      # app. The preview and release jobs and the screenshot captures build
+      # without the property.
       - name: Build debug APK
-        run: ./gradlew :app:assembleDebug -PciDebugBuild=true
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: ./gradlew :app:assembleDebug -PciDebugBuild=true -PciPrNumber="$PR_NUMBER"
 
       - name: Upload debug APK
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
