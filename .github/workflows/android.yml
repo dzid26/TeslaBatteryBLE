@@ -66,7 +66,8 @@ jobs:
           set -euo pipefail
           dir="${ANDROID_USER_HOME:-$HOME/.android}"
           mkdir -p "$dir"
-          printf '%s' "$CI_DEBUG_KEYSTORE_BASE64" | base64 -d > "$dir/debug.keystore"
+          # Values pasted on Windows end in CRLF, and some encoders wrap lines.
+          printf '%s' "$CI_DEBUG_KEYSTORE_BASE64" | tr -d '[:space:]' | base64 -d > "$dir/debug.keystore"
 
       - name: Unit tests (:core)
         run: ./gradlew :core:test
