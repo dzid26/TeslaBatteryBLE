@@ -28,12 +28,12 @@ for rel in "$TAG" preview; do
   # Best effort: the PNGs only feed the committed README/website refresh.
   mkdir -p screenshots
   i=0
-  for url in $(grep -o 'src="[^"]*"' screenshots-section.md | sed 's/^src="//;s/"$//'); do
+  while read -r url; do
     name="${NAMES[$i]:-}"
     i=$((i + 1))
     [ -n "$name" ] || break
     curl -fsSL "$url" -o "screenshots/$name.png" || rm -f "screenshots/$name.png"
-  done
+  done < <(grep -o 'src="[^"]*"' screenshots-section.md | sed 's/^src="//;s/"$//')
   echo "Reusing the screenshots of release '$rel' ($WANT); skipping the emulator capture."
   echo "found=true" >> "$OUT"
   exit 0
