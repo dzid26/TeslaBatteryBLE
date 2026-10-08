@@ -93,6 +93,7 @@ A trustworthy shell around the existing protocol work. No user-facing features.
 
 - [ ] **Pre-1.0 hygiene sweep (owner decision 2026-10-05: remove all)**: delete legacy/migration paths — per-car legacy-key adoption, Keystore-material conversion, format migrations, dead branches. Very old installs re-pair (the key-storage session can restore a device key over adb); coordinate key-file changes with it.
 - [ ] Navigation: cars list → car view landed 2026-10-05 (no tabs; last opened car restored). Settings/Logs + ViewModels later.
+- [x] Tracking restarts after a reboot or an app update (2026-10-08): `BOOT_COMPLETED` / `MY_PACKAGE_REPLACED` receiver starts the service when tracking is on, a car is paired and the permissions are granted; nothing restarts after a force stop until the app is opened.
 - [x] SOC history graph + charge sessions (first cut 2026-10-04: CSV store, 6h/24h/7d/All graph, since-last-charge stats; session list + export later).
 - [x] Discharge projection on the history chart (2026-10-05): parked drain rate over a range-scaled trailing window, dashed line and caption, demo drain; charge projection takes precedence while charging.
 - [x] History graph line styles: constant narrow line with a dot at every measurement (dense samples form a thick band) and a dashed charge-completion projection (2026-10-05).
