@@ -7,6 +7,7 @@ import com.dzid26.teslable.core.history.BatterySample
 import com.dzid26.teslable.core.history.BleRecord
 import com.dzid26.teslable.core.history.DriveSample
 import com.dzid26.teslable.core.history.ProtoLog
+import com.dzid26.teslable.core.history.StatusLogGate
 import com.dzid26.teslable.core.history.StatusSample
 import com.dzid26.teslable.core.history.shouldLogStatus
 import com.dzid26.teslable.core.history.toBatterySample
@@ -35,12 +36,13 @@ import java.time.Instant
  * phone's acquisition time (ADR-0008), so new car fields never drop old rows.
  * One file per vehicle per kind in `filesDir/battery-history/`, cached in
  * memory and exposed as [StateFlow]s:
- * - `<vehicleId>.charge.pblog`: one record per SOC read, on the car's own
- *   `ChargeState.timestamp` ([samples]);
  * - `<vehicleId>.vcsec.pblog`: VCSEC status readings logged when
- *   [shouldLogStatus] says so, timed by `acquired_at` ([statusSamples]);
- * - `<vehicleId>.drive.pblog`: one record per DriveState reply, verbatim, on
- *   the car's own `DriveState.timestamp` ([driveSamples]).
+ *   [shouldLogStatus] says so, plus the last one before the link drops,
+ *   timed by `acquired_at` ([statusSamples]);
+ * - `<vehicleId>.charge.pblog`: every charge reply, raw; the chart uses the
+ *   ones with the car's own `ChargeState.timestamp` and a level ([samples]);
+ * - `<vehicleId>.drive.pblog`: every DriveState reply, raw; [driveSamples]
+ *   holds the ones with the car's own `DriveState.timestamp`.
  *
  * Older raw `<vehicleId>.pblog` charge files and the pre-store CSV history are
  * neither read nor written (pre-1.0 reset).
@@ -65,8 +67,8 @@ class HistoryStore(
     /** DriveState readings logged for every car, oldest first. */
     val driveSamples: StateFlow<List<DriveSample>> = _driveSamples.asStateFlow()
 
-    /** The newest logged status record per vehicle: what [shouldLogStatus] compares against. */
-    private val lastStatus = mutableMapOf<String, BleRecord>()
+    /** Picks the status readings that reach the log (ADR-0008). */
+    private val statusGate = StatusLogGate()
 
     init {
         scope.launch {
@@ -88,16 +90,17 @@ class HistoryStore(
         charge: TeslaCommands.Charge,
         acquiredAtMillis: Long,
     ) {
-        // Only the car's raw response is logged, verbatim; Charge is a parsed
-        // view. Time comes from the car's own timestamp and is never filled
-        // in, so a record without one has no place on the timeline.
+        // Every reply is logged as the car sent it; Charge is a parsed view.
+        // Chart time comes only from the car's own timestamp and is never
+        // filled in, so a reply without one (or without a level) stays in the
+        // log but off the chart.
         val raw = charge.raw ?: return
         val record = BleRecord(acquired_at = Instant.ofEpochMilli(acquiredAtMillis), charge_state = raw)
-        val sample = record.toBatterySample(vehicleId) ?: return
+        val sample = record.toBatterySample(vehicleId)
         scope.launch {
             mutex.withLock {
                 chargeLogs.append(vehicleId, record)
-                _samples.value = (_samples.value + sample).takeLast(MAX_SAMPLES)
+                if (sample != null) _samples.value = (_samples.value + sample).takeLast(MAX_SAMPLES)
             }
         }
     }
@@ -114,14 +117,10 @@ class HistoryStore(
         acquiredAtMillis: Long,
         firstAfterConnect: Boolean,
     ) {
+        val reading = BleRecord(acquired_at = Instant.ofEpochMilli(acquiredAtMillis), vehicle_status = status)
         scope.launch {
             mutex.withLock {
-                if (!shouldLogStatus(lastStatus[vehicleId], status, acquiredAtMillis, firstAfterConnect)) return@withLock
-                val record = BleRecord(acquired_at = Instant.ofEpochMilli(acquiredAtMillis), vehicle_status = status)
-                val sample = record.toStatusSample(vehicleId) ?: return@withLock
-                statusLogs.append(vehicleId, record)
-                lastStatus[vehicleId] = record
-                _statusSamples.value = (_statusSamples.value + sample).takeLast(MAX_SAMPLES)
+                statusGate.admit(vehicleId, reading, firstAfterConnect)?.let { appendStatus(vehicleId, it) }
             }
         }
     }
@@ -137,16 +136,39 @@ class HistoryStore(
         drive: DriveState,
         acquiredAtMillis: Long,
     ) {
-        // As with charge, time comes from the car's own timestamp and is never
-        // filled in, so a reply without one has no place on the timeline.
+        // Every reply is logged as the car sent it. Drive time comes only from
+        // the car's own timestamp and is never filled in, so a reply without
+        // one stays in the log but out of [driveSamples].
         val record = BleRecord(acquired_at = Instant.ofEpochMilli(acquiredAtMillis), drive_state = drive)
-        val sample = record.toDriveSample(vehicleId) ?: return
+        val sample = record.toDriveSample(vehicleId)
         scope.launch {
             mutex.withLock {
                 driveLogs.append(vehicleId, record)
-                _driveSamples.value = (_driveSamples.value + sample).takeLast(MAX_SAMPLES)
+                if (sample != null) _driveSamples.value = (_driveSamples.value + sample).takeLast(MAX_SAMPLES)
             }
         }
+    }
+
+    /**
+     * The link to [vehicleId] dropped: logs the newest status reading the
+     * policy held back, so the status log shows when observation ended
+     * (ADR-0008).
+     */
+    fun onLinkLost(vehicleId: String) {
+        scope.launch {
+            mutex.withLock {
+                statusGate.linkLost(vehicleId)?.let { appendStatus(vehicleId, it) }
+            }
+        }
+    }
+
+    private fun appendStatus(
+        vehicleId: String,
+        record: BleRecord,
+    ) {
+        statusLogs.append(vehicleId, record)
+        val sample = record.toStatusSample(vehicleId) ?: return
+        _statusSamples.value = (_statusSamples.value + sample).takeLast(MAX_SAMPLES)
     }
 
     private fun readSamples(): List<BatterySample> =
@@ -159,12 +181,12 @@ class HistoryStore(
                 .takeLast(MAX_SAMPLES)
         }.getOrDefault(emptyList())
 
-    /** Reads every status log and seeds [lastStatus] with each file's newest record. */
+    /** Reads every status log and seeds [statusGate] with each file's newest status record. */
     private fun readStatusSamples(): List<StatusSample> =
         runCatching {
             val logs = statusLogs.readAll()
             for ((vehicleId, records) in logs) {
-                records.lastOrNull()?.let { lastStatus[vehicleId] = it }
+                records.lastOrNull { it.vehicle_status != null }?.let { statusGate.seed(vehicleId, it) }
             }
             logs
                 .flatMap { (vehicleId, records) ->

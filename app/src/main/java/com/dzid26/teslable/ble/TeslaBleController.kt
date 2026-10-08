@@ -1512,6 +1512,7 @@ class TeslaBleController(
             object : TeslaTransport.Listener {
                 override fun onPhase(phase: ConnectionPhase) {
                     if (phase == ConnectionPhase.FAILED || phase == ConnectionPhase.DISCONNECTED) {
+                        historyStore.onLinkLost(bleName)
                         transport?.close()
                         transport = null
                         handler.removeCallbacks(poll)

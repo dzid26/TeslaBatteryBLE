@@ -66,6 +66,21 @@ class BleRecordMappingTest {
         )
 
     @Test
+    fun `envelope fields follow a reading's order on the wire`() {
+        // Field numbers are the stored format (ADR-0008): time, VCSEC status,
+        // charge, drive. The logs are append-only, so renumbering would orphan
+        // every record already written. The first byte of each encoding is the
+        // field's tag.
+        fun tag(record: BleRecord) = record.encode().first().toInt()
+
+        val lengthDelimited = 2
+        assertEquals(1 shl 3 or lengthDelimited, tag(BleRecord(acquired_at = ofEpochSecond(1, 0))))
+        assertEquals(2 shl 3 or lengthDelimited, tag(BleRecord(vehicle_status = asleep)))
+        assertEquals(3 shl 3 or lengthDelimited, tag(BleRecord(charge_state = charging)))
+        assertEquals(4 shl 3 or lengthDelimited, tag(BleRecord(drive_state = DriveState())))
+    }
+
+    @Test
     fun `a charge record maps onto the sample its raw charge state maps onto`() {
         val sample = BleRecord(acquired_at = ofEpochSecond(1_001, 0), charge_state = charging).toBatterySample(VEHICLE)
         assertEquals(charging.toBatterySample(VEHICLE), sample)
@@ -199,15 +214,6 @@ class BleRecordMappingTest {
         assertNull(record.toBatterySample("car"))
         assertNull(record.toStatusSample("car"))
         assertNull(record.toDriveSample("car"))
-    }
-
-    @Test
-    fun `payload kinds keep their field numbers`() {
-        // The logs are append-only: renumbering a payload would orphan every record already written (ADR-0008).
-        // Each tag byte is (field number shl 3) or 2, then a zero length for the empty message.
-        assertEquals(listOf<Byte>(0x12, 0x00), BleRecord(charge_state = ChargeState()).encode().toList())
-        assertEquals(listOf<Byte>(0x1A, 0x00), BleRecord(vehicle_status = VehicleStatus()).encode().toList())
-        assertEquals(listOf<Byte>(0x22, 0x00), BleRecord(drive_state = DriveState()).encode().toList())
     }
 
     private companion object {

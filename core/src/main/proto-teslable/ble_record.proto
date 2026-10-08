@@ -22,15 +22,16 @@ import "vehicle.proto";
 
 option java_package = "com.dzid26.teslable.core.history";
 
-// One reply the phone acquired over BLE, kept verbatim.
+// One reply the phone acquired over BLE, kept verbatim. Fields follow a
+// reading's order: time, VCSEC status, charge, drive.
 message BleRecord {
     // Phone clock when the reply arrived. A car timestamp inside the payload
     // (ChargeState.timestamp, DriveState.timestamp) is never touched.
     google.protobuf.Timestamp acquired_at = 1;
 
     oneof payload {
-        CarServer.ChargeState charge_state = 2;
-        VCSEC.VehicleStatus vehicle_status = 3;
+        VCSEC.VehicleStatus vehicle_status = 2;
+        CarServer.ChargeState charge_state = 3;
         CarServer.DriveState drive_state = 4;
     }
 }

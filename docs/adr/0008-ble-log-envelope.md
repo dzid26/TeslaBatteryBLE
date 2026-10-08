@@ -40,8 +40,9 @@ identity), `docs/requirements/multi-phone.md`
   (`core/src/main/proto-teslable/ble_record.proto`) holds:
   - `acquired_at`: the phone's clock when the reply arrived;
   - a `payload` oneof with the car's raw reply, verbatim, nothing filtered:
-    `charge_state` (field 2), `vehicle_status` (field 3) or `drive_state`
-    (field 4).
+    `vehicle_status` (field 2), `charge_state` (field 3) or `drive_state`
+    (field 4). Fields follow a reading's order: time, VCSEC status, charge,
+    drive.
 
   Tesla's vendored protos (`core/src/main/proto`, pinned by `TESLA_COMMIT`)
   stay untouched; ours sit in a second Wire source root, so a re-vendor never
@@ -50,9 +51,11 @@ identity), `docs/requirements/multi-phone.md`
   it is never written into a car timestamp field and never stands in for a
   missing one. Records the car stamps keep that stamp as their timeline:
   charge samples stay on `ChargeState.timestamp` and drive samples on
-  `DriveState.timestamp`. A charge record without that timestamp or without a
-  level is not logged (ADR-0006), nor is a drive record without its
-  timestamp.
+  `DriveState.timestamp`.
+- **Every reply is logged raw** (owner, 2026-10-08: keep all raw). A charge
+  reply without the car's timestamp or without a level, or a drive reply
+  without its timestamp, stays in the log but off the read models; this
+  replaces ADR-0006's "not logged".
 - **Status is timed by `acquired_at`**, because VCSEC has no clock. It is the
   one kind whose timeline is the phone's clock.
 - **One file per vehicle per kind**, in `filesDir/battery-history/`, framed by
@@ -77,6 +80,12 @@ identity), `docs/requirements/multi-phone.md`
   every quarter hour, so a longer gap means no phone was connected. A reading
   acquired before the last logged one (the phone's clock moved back) is
   logged too.
+
+  When the link drops, the newest reading the policy held back is logged as
+  well (`StatusLogGate` in `core`), so each observed stretch ends at the last
+  reading before the phone lost the car, within the 10 s poll, rather than up
+  to a heartbeat earlier. If the app is killed instead, the heartbeat still
+  bounds that end to 15 minutes.
 - **DriveState is logged whole, on every reply.** After each successful
   charge reply the controller sends one `GetDriveState`, only while the car
   is awake and an Infotainment session exists; it never starts a session or
@@ -112,7 +121,12 @@ identity), `docs/requirements/multi-phone.md`
   `acquired_at`, so those records could leave it absent. No migration code
   runs. Status logs use the new name `.vcsec.pblog`, so a `.status.pblog`
   left by a pre-merge test build (an earlier record format) is ignored the
-  same way instead of hiding every later record.
+  same way instead of hiding every later record. Pre-merge test builds of
+  this change also numbered the payload the other way round (charge 2,
+  status 3). Those records decode as the wrong kind or not at all: the read
+  models skip a record without their payload, and `ProtoLog` skips a complete
+  record that fails to decode, so the records after it still read and nothing
+  needs deleting.
 - **Clock skew.** Status samples sit on the phone's clock, charge and drive
   samples on the car's. The two agree to within seconds, which is fine for
   this use: status marks stretches of minutes to hours (asleep, parked,
@@ -124,8 +138,9 @@ identity), `docs/requirements/multi-phone.md`
   timestamp for charge and drive and by `acquired_at` for status, with exact
   duplicates collapsing. Two phones watching at once only make the timeline
   denser.
-- **Coverage.** Status readings exist only while a phone is connected; a gap
-  longer than the heartbeat is unlogged time, not sleep. At four heartbeats
+- **Coverage.** Status readings exist only while a phone is connected; the
+  gap between the last reading before a link drop and the first after the
+  next connect is unlogged time, not sleep. At four heartbeats
   an hour plus one record per change, the 20k cap holds months of status per
   car.
 - **Drives.** DriveState has its own file, as the `payload` oneof's field 4.
