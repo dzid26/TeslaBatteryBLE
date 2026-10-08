@@ -44,7 +44,7 @@ class InfotainmentPollPolicyTest {
     }
 
     private fun connectAndFirstRead() {
-        policy.onConnect(now)
+        policy.onFreshStart(now)
         assertTrue(policy.onStatus(status(), true, now), "first awake status after connect reads")
     }
 
@@ -122,10 +122,67 @@ class InfotainmentPollPolicyTest {
 
     @Test
     fun connectWhileAsleepReadsNothingUntilTheWake() {
-        policy.onConnect(now)
+        policy.onFreshStart(now)
         assertTrue(readsOver(30 * 60_000L, status(asleep = true)).isEmpty())
         assertTrue(tick(), "wake read")
         assertEquals(listOf(FOLLOW_UP), readsOver(30 * 60_000L))
+    }
+
+    @Test
+    fun aReconnectIsNotAnEventButKeepsTheTransitionMemory() {
+        connectAndFirstRead()
+        settle()
+        // The link drops: no statuses for a while, and the car stays as it was. Nothing to read.
+        now += 5 * 60_000L
+        assertFalse(policy.onStatus(status(), true, now))
+        assertTrue(readsOver(30 * 60_000L).isEmpty())
+    }
+
+    @Test
+    fun aWakeWhileTheLinkWasDownIsAnEventAfterTheReconnect() {
+        connectAndFirstRead()
+        readsOver(3 * TICK, status(asleep = true))
+        now += 5 * 60_000L // link down; the car woke meanwhile
+        assertTrue(policy.onStatus(status(), true, now))
+    }
+
+    @Test
+    fun anUnlockOrClosureChangeWhileTheLinkWasDownIsAnEventAfterTheReconnect() {
+        connectAndFirstRead()
+        settle()
+        now += 5 * 60_000L
+        assertTrue(policy.onStatus(status(locked = false), true, now))
+        settle2(status(locked = false))
+        now += 5 * 60_000L
+        assertTrue(policy.onStatus(status(locked = false, closures = doorOpen), true, now))
+    }
+
+    @Test
+    fun aFreshStartForgetsTheTransitionMemory() {
+        connectAndFirstRead()
+        settle()
+        now += 5 * 60_000L
+        policy.onFreshStart(now)
+        // Unlocked and a door open since before: the fresh start reads once, those are not events.
+        val changed = status(locked = false, closures = doorOpen)
+        assertTrue(policy.onStatus(changed, true, now))
+        assertEquals(listOf(FOLLOW_UP), readsOver(30 * 60_000L, changed))
+    }
+
+    @Test
+    fun aClosureGoingAjarCountsAsOpening() {
+        connectAndFirstRead()
+        settle()
+        val ajar = status(closures = ClosureStatuses(frontDriverDoor = ClosureState_E.CLOSURESTATE_AJAR))
+        assertTrue(tick(ajar))
+    }
+
+    @Test
+    fun anUnknownClosureIsNotOpen() {
+        connectAndFirstRead()
+        settle()
+        val unknown = status(closures = ClosureStatuses(frontDriverDoor = ClosureState_E.CLOSURESTATE_UNKNOWN))
+        assertFalse(tick(unknown))
     }
 
     @Test
@@ -147,7 +204,7 @@ class InfotainmentPollPolicyTest {
 
     @Test
     fun noReadsWithoutASession() {
-        policy.onConnect(now)
+        policy.onFreshStart(now)
         assertFalse(tick(sessionReady = false))
         assertFalse(tick(sessionReady = false))
         assertTrue(tick(sessionReady = true), "reads as soon as the session exists")
@@ -259,7 +316,7 @@ class InfotainmentPollPolicyTest {
 
     @Test
     fun aClosureAlreadyOpenAtConnectIsNotAnEvent() {
-        policy.onConnect(now)
+        policy.onFreshStart(now)
         assertTrue(policy.onStatus(status(closures = doorOpen), true, now))
         // Only the connect follow-up, nothing for the open door.
         assertEquals(listOf(FOLLOW_UP), readsOver(30 * 60_000L, status(closures = doorOpen)))

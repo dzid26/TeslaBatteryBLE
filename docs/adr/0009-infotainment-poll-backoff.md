@@ -34,10 +34,21 @@ status, whether the charge+drive pair is due. One instance per vehicle link.
 - Active (charging state Charging or Starting; shift state D, R or N): every
   10 s. When activity ends, the reads stop right away. There is no idle window
   and no periodic idle read.
-- Not active: single reads on events, each sent at once. Events: a (re)connect,
+- Not active: single reads on events, each sent at once. Events: a fresh start,
   VCSEC asleep to awake, locked to unlocked, any closure (doors, trunks, charge
-  port) changing state, opening or closing, and an explicit user request
-  (refresh button, notification wake).
+  port) changing between open and not open, and an explicit user request
+  (refresh button, notification wake). Any state other than CLOSED and UNKNOWN
+  counts as open, so a door going ajar is an opening.
+- A fresh start is the first READY link since the app process or tracking
+  started (app start, auto-start after boot or update, tracking switched on) or
+  right after pairing / key enrollment. The controller calls
+  `onFreshStart(nowMillis)` for it. A reconnect after a dropped link (weak
+  signal, car out of range and back) is not an event: no read, no follow-up, and
+  the controller calls nothing.
+- The transition memory (previous asleep, locked and closure state) survives
+  ordinary reconnects and is reset only by a fresh start. A wake, unlock or door
+  change that happened while the link was down is therefore an event on the
+  first status after the reconnect.
 - Each event also schedules one follow-up read 60 s later, to catch a shift
   into D or charging starting just after it. A new event replaces a pending
   follow-up instead of stacking. After that, nothing until the next event. A
