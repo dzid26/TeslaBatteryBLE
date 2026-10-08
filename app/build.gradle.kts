@@ -18,8 +18,9 @@ val keystoreProperties =
     }
 
 // CI debug builds (-PciDebugBuild=true, the Android CI `teslable-debug-apk`
-// artifact) get their own application ID and launcher label, so a PR build
-// installs next to the release app instead of clashing with its signature.
+// artifact) get their own application ID, launcher label and icon background
+// (src/pr/res), so a PR build installs next to the release app instead of
+// clashing with its signature.
 // Preview, release and demo builds never set it and keep the real ID.
 val ciDebugBuild = project.findProperty("ciDebugBuild") == "true"
 
@@ -51,6 +52,10 @@ android {
                 keyPassword = keystoreProperties.getProperty("keyPassword")
             }
         }
+    }
+
+    sourceSets {
+        if (ciDebugBuild) getByName("debug").res.srcDir("src/pr/res")
     }
 
     buildTypes {
