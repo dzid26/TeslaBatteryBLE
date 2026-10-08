@@ -33,7 +33,11 @@ Light and dark themes, side by side.
   reading older than five minutes turns gray, and the car view and the notification
   say how long ago it was read
 - **On-demand wake** — the car is only woken when you ask, never in the background
-- **Background tracking** via a foreground service: SOC timeline and connection state while parked or charging
+- **Background tracking** via a foreground service: SOC timeline and connection state while parked or charging.
+  Tracking resumes by itself after a reboot or an app update (once the phone is unlocked), as long as tracking
+  is on and a car is paired. Some phones (Xiaomi, Huawei, Oppo/Vivo, Samsung "sleeping apps") block this unless
+  you allow autostart for the app or set its battery usage to unrestricted. After a force stop, Android keeps
+  the app stopped until you open it again.
 - **History graph** (6 h / 24 h / 7 d / all) with since-last-charge stats;
   every measurement is a dot (dense samples form a thick band) and the
   projected charge completion is dashed

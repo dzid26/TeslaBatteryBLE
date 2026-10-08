@@ -14,6 +14,7 @@ import android.os.IBinder
 import android.text.SpannableString
 import android.text.Spanned
 import android.text.style.ForegroundColorSpan
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.ServiceCompat
@@ -364,6 +365,7 @@ class BleTrackingService : Service() {
 
         /** Extra carrying a car's advertised name for notification taps/wakes. */
         const val EXTRA_BLE_NAME = "com.dzid26.teslable.extra.BLE_NAME"
+        private const val LOG_TAG = "BleTrackingService"
         private const val CHANNEL_ID = "tracking"
         private const val GROUP_KEY = "com.dzid26.teslable.cars"
         private const val NOTIFICATION_ID = 1
@@ -382,9 +384,10 @@ class BleTrackingService : Service() {
                     context,
                     Intent(context, BleTrackingService::class.java).setAction(ACTION_START),
                 )
-            } catch (_: IllegalStateException) {
+            } catch (e: IllegalStateException) {
                 // ForegroundServiceStartNotAllowedException (API 31+): Android
                 // forbids starting from the background. The UI retries on resume.
+                Log.w(LOG_TAG, "Tracking service start refused: ${e.javaClass.simpleName}")
             }
         }
 
