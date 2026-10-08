@@ -2,9 +2,8 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # Create or update the rolling "preview" release for the current commit.
 #
-# Run from a checkout (see android.yml); APK_ARTIFACT_URL points at the uploaded
-# APK artifact. The preview carries no APK asset and no screenshots; the tag
-# release captures the screenshots.
+# The preview carries no APK and no screenshots, only the changes since the last
+# release; the tag release builds the APK and captures the screenshots.
 set -euo pipefail
 
 REPO="${GITHUB_REPOSITORY:?GITHUB_REPOSITORY is required}"
@@ -12,8 +11,6 @@ SHA="${GITHUB_SHA:-$(git rev-parse HEAD)}"
 TAG="preview"
 TITLE="Preview build"
 SHORT_SHA="${SHA:0:7}"
-APK_ARTIFACT_URL="${APK_ARTIFACT_URL:?APK_ARTIFACT_URL is required (the CI artifact holding the preview APK)}"
-
 
 git fetch --tags origin
 
@@ -41,9 +38,7 @@ git tag -f "$TAG" "$SHA"
 git push origin "refs/tags/$TAG" --force
 
 {
-  echo "Rolling preview of \`main\` - rebuilt on every push. The APK is a debug build."
-  echo
-  echo "**APK**: [CI artifact \`TeslaBatteryBLE-preview-${SHORT_SHA}.apk\` (zip; downloading needs a GitHub login)]($APK_ARTIFACT_URL)"
+  echo "Rolling preview of \`main\` - rebuilt on every push."
   echo
   if [ -n "$PREV_TAG" ]; then
     echo "## Changes since [$PREV_TAG](https://github.com/$REPO/releases/tag/$PREV_TAG)"

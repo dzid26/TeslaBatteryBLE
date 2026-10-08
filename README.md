@@ -52,21 +52,18 @@ OBD path for pack-level data. See:
 
 ## Install
 
-### GitHub Releases (preview channel)
+### GitHub Releases
 
 The rolling [preview release](https://github.com/dzid26/TeslaBatteryBLE/releases/tag/preview)
-is rebuilt from `main` on every push. It carries no APK asset: its notes link to the CI
-artifact (a zip holding the APK; downloading needs a GitHub login). **Preview APKs are
-debug builds**, signed with the same key as releases and sharing their app ID, so a later
-release installs over a preview in place.
+lists the changes on `main` since the last release. It carries no APK; install tagged
+releases, which are signed with the owner key and include prereleases such as betas.
 
 ### Obtainium (auto-updates from GitHub)
 
 1. Open [Obtainium](https://github.com/ImranR98/Obtainium) → **Add App**
 2. URL: `https://github.com/dzid26/TeslaBatteryBLE`
 3. Obtainium tracks stable releases by default. To also follow tagged
-   pre-releases (for example betas), enable **Include prereleases**. The rolling
-   preview has no APK asset, so Obtainium cannot install it.
+   pre-releases (for example betas), enable **Include prereleases**.
 4. Install and let Obtainium keep it updated
 
 No stable release has shipped yet. Signed stable releases and F-Droid are on the
