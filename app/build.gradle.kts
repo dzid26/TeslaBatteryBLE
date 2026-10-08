@@ -69,7 +69,9 @@ android {
             if (ciDebugBuild) {
                 applicationIdSuffix = ".pr"
                 versionNameSuffix = "-pr$ciPrNumber"
-                manifestPlaceholders["appLabel"] = "TeslaBatteryBLE PR"
+                // The number leads so launchers that truncate the label still show it.
+                manifestPlaceholders["appLabel"] =
+                    if (ciPrNumber.isEmpty()) "TeslaBatteryBLE PR" else "PR$ciPrNumber TeslaBatteryBLE"
             }
         }
         release {
