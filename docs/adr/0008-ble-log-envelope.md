@@ -33,16 +33,29 @@ identity), `docs/requirements/multi-phone.md`
   says the app's key role, Charging Manager, can read vehicle data, and
   Tesla's Go SDK requests one state category per `GetVehicleData`
   (`pkg/vehicle/state.go`).
+- The status log only bounds where watching stopped: after its last record,
+  by up to a heartbeat. The first cut of this ADR tightened that bound by
+  logging a held-back status reading when the connection dropped. The owner
+  asked to log the connection state as well, in the envelope next to the RSSI
+  (2026-10-08): connection events say when the phone's connection came and
+  went, which makes the held-back reading redundant, and the signal strength
+  hints at how close the phone was to the car for every record.
 
 ## Decision
 
-- **One envelope for every logged reply.** `BleRecord`
+- **One envelope for every logged reply and connection event.** `BleRecord`
   (`core/src/main/proto-teslable/ble_record.proto`) holds:
-  - `acquired_at`: the phone's clock when the reply arrived;
-  - a `payload` oneof with the car's raw reply, verbatim, nothing filtered:
-    `vehicle_status` (field 2), `charge_state` (field 3) or `drive_state`
-    (field 4). Fields follow a reading's order: time, VCSEC status, charge,
-    drive.
+  - `acquired_at` (field 1): the phone's clock when the record was acquired,
+    that is when the reply arrived or the connection changed;
+  - `rssi` (field 5, `optional sint32`): the phone's latest RSSI reading for
+    the car at that moment, in dBm, absent when the phone had none;
+  - a `payload` oneof with either the car's raw reply, verbatim, nothing
+    filtered: `vehicle_status` (field 2), `charge_state` (field 3) or
+    `drive_state` (field 4); or a `connection_event` (field 6,
+    `ConnectionEvent`). Fields are declared in a reading's order: time,
+    signal strength, connection, VCSEC status, charge, drive. Their numbers
+    are the stored format and stay as assigned; `rssi` and `connection_event`
+    took the next two free ones.
 
   Tesla's vendored protos (`core/src/main/proto`, pinned by `TESLA_COMMIT`)
   stay untouched; ours sit in a second Wire source root, so a re-vendor never
@@ -57,12 +70,33 @@ identity), `docs/requirements/multi-phone.md`
   without its timestamp, stays in the log but off the read models; this
   replaces ADR-0006's "not logged".
 - **Status is timed by `acquired_at`**, because VCSEC has no clock. It is the
-  one kind whose timeline is the phone's clock.
+  one reply kind whose timeline is the phone's clock.
+- **Signal strength on every record.** `rssi` is set on every record the app
+  writes: status, charge, drive and connection. The controller already reads
+  the RSSI on each poll (every 10 s) and faster while the UI shows, and a
+  record takes the newest value it holds for that car. That value can be a
+  few seconds old, and the first records after a connect can carry the one
+  from before the connection came up (the advert's, or the previous
+  connection's last). When the phone has no value yet the field is absent,
+  never zero.
+- **Connection events.** `ConnectionEvent` carries one `State`: `CONNECTED`
+  when a connection becomes ready (where the controller also marks the next
+  status reading as the first after a connect) and `DISCONNECTED` when a
+  connection that had become ready ends. `acquired_at` is the event time and
+  `rssi` the last RSSI before it. Failed connection attempts, which never
+  became ready, are not logged, so a car out of range does not fill the log
+  with retries. DISCONNECTED covers every way a ready connection ends: the
+  car or Android dropping it, and the app closing it (tracking switched off,
+  or the car moving to a new address). A killed app logs nothing, so a
+  CONNECTED that follows a CONNECTED means the stretch before it ended
+  uncleanly, and the status heartbeat bounds where. Connection events are log
+  only: no read model and no UI yet.
 - **One file per vehicle per kind**, in `filesDir/battery-history/`, framed by
   the same `ProtoLog` codec with the same 20k-record cap and trim per file:
   - `<vehicleId>.charge.pblog` for charge replies;
   - `<vehicleId>.vcsec.pblog` for VCSEC status replies;
-  - `<vehicleId>.drive.pblog` for DriveState replies.
+  - `<vehicleId>.drive.pblog` for DriveState replies;
+  - `<vehicleId>.connection.pblog` for connection events.
 
   Each kind has its own suffix and none ends with another, so a reader never
   decodes another kind's file. The backup rules already exclude the
@@ -81,11 +115,16 @@ identity), `docs/requirements/multi-phone.md`
   acquired before the last logged one (the phone's clock moved back) is
   logged too.
 
-  When the link drops, the newest reading the policy held back is logged as
-  well (`StatusLogGate` in `core`), so each observed stretch ends at the last
-  reading before the phone lost the car, within the 10 s poll, rather than up
-  to a heartbeat earlier. If the app is killed instead, the heartbeat still
-  bounds that end to 15 minutes.
+  Every change is logged, so the last logged status holds until the next
+  record or until the connection ends, and the `DISCONNECTED` connection
+  event marks where watching ended. That replaces the held-back flush of this
+  ADR's first cut (`StatusLogGate` and `HistoryStore.onLinkLost`), which
+  logged the newest reading the policy had skipped when the connection
+  dropped. The flushed record only repeated an unchanged status at a later
+  time; DISCONNECTED says when the connection ended itself, and the store
+  needs no gate class, only the last logged record per vehicle, still seeded
+  from the file on load. If the app is killed instead, there is no
+  DISCONNECTED, and the heartbeat still bounds the end to 15 minutes.
 - **DriveState is logged whole, on every reply.** After each successful
   charge reply the controller sends one `GetDriveState`, only while the car
   is awake and an Infotainment session exists; it never starts a session or
@@ -99,7 +138,7 @@ identity), `docs/requirements/multi-phone.md`
   `BleRecord.toStatusSample`, `BleRecord.toDriveSample`); nothing is written
   back. `DriveSample` keeps the car's timestamp, shift state, speed, power and
   the odometer in hundredths of a mile; the destination and route stay in the
-  log only.
+  log only. `rssi` and connection events have no read model yet.
 - **Evolution rules** (repeated at the top of `ble_record.proto`). The logs
   are append-only and long-lived, so the envelope only ever grows additively:
   - New fields and new `oneof` payload kinds only get new field numbers. Old
@@ -110,6 +149,8 @@ identity), `docs/requirements/multi-phone.md`
   - Never move an existing field into or out of the `oneof`.
   - New scalar fields use proto3 `optional`, so absent stays distinguishable
     from zero.
+
+  `rssi` and `connection_event` are the first additions under these rules.
 
 ## Consequences
 
@@ -127,6 +168,11 @@ identity), `docs/requirements/multi-phone.md`
   models skip a record without their payload, and `ProtoLog` skips a complete
   record that fails to decode, so the records after it still read and nothing
   needs deleting.
+- **No reset for the signal strength and connection events.** Records
+  written before them read `rssi` as absent and carry no connection event; an
+  older app version skips both fields as unknown and never opens
+  `.connection.pblog`. The flush that went away held no stored state, so
+  nothing needs deleting.
 - **Clock skew.** Status samples sit on the phone's clock, charge and drive
   samples on the car's. The two agree to within seconds, which is fine for
   this use: status marks stretches of minutes to hours (asleep, parked,
@@ -138,11 +184,17 @@ identity), `docs/requirements/multi-phone.md`
   timestamp for charge and drive and by `acquired_at` for status, with exact
   duplicates collapsing. Two phones watching at once only make the timeline
   denser.
-- **Coverage.** Status readings exist only while a phone is connected; the
-  gap between the last reading before a link drop and the first after the
-  next connect is unlogged time, not sleep. At four heartbeats
-  an hour plus one record per change, the 20k cap holds months of status per
-  car.
+- **Coverage.** Status readings exist only while a phone is connected. The
+  gap between a DISCONNECTED and the next CONNECTED is unlogged time, not
+  sleep, and the connection file now says where each gap starts and ends.
+  After a kill there is no DISCONNECTED, so the gap appears to start at the
+  last status record, up to 15 minutes before the real end. At four
+  heartbeats an hour plus one record per change, the 20k cap holds months of
+  status per car.
+- **Privacy.** The RSSI is a rough distance, and with the connection times it
+  says when the phone was near the car and when it left. Both stay on the
+  phone, outside backups, and `PRIVACY.md` lists them. What leaves the phone
+  is decided at export (master plan: the local log stays raw).
 - **Drives.** DriveState has its own file, as the `payload` oneof's field 4.
   It carries the car's own timestamp, which is its timeline, so it needs no
   exception, and its odometer separates drives that no phone saw. Detecting
@@ -151,4 +203,6 @@ identity), `docs/requirements/multi-phone.md`
   Infotainment traffic: one more request per charge poll. The poll cadence
   is tracked in #112 and #113.
 - **Size.** A drive record grows while a route is active (destination text,
-  route fields), but the 20k cap per file still bounds it.
+  route fields), but the 20k cap per file still bounds it. `rssi` adds two or
+  three bytes to a record, and the connection file gains two records per
+  connection.
