@@ -5,6 +5,7 @@ package com.dzid26.teslable
 import android.content.Context
 import com.dzid26.teslable.ble.DemoMode
 import com.dzid26.teslable.core.TeslaNames
+import com.dzid26.teslable.core.history.BleRecord
 import com.dzid26.teslable.core.history.ProtoLog
 import com.tesla.generated.carserver.common.Void
 import com.tesla.generated.carserver.vehicle.ChargeState
@@ -23,7 +24,7 @@ import kotlin.math.roundToInt
 internal object DemoHistory {
     // Mirrors HistoryStore's log layout; the demo seeds it directly.
     private const val HISTORY_DIR_NAME = "battery-history"
-    private const val LOG_SUFFIX = ".pblog"
+    private const val LOG_SUFFIX = ".charge.pblog"
     private const val CHARGE_LIMIT = 85
     private const val RATED_MILES_PER_PERCENT = 3.0f
     private const val ESTIMATED_MILES_PER_PERCENT = 2.9f
@@ -38,7 +39,7 @@ internal object DemoHistory {
         val file = File(dir, "$vehicleId$LOG_SUFFIX")
         if (file.exists()) return
         dir.mkdirs()
-        file.writeBytes(ProtoLog.encode(samples(System.currentTimeMillis())))
+        file.writeBytes(ProtoLog.encode(records(System.currentTimeMillis())))
     }
 
     /** One reading in the seeded timeline; [chargeStartPercent] marks a session. */
@@ -49,7 +50,7 @@ internal object DemoHistory {
         val chargeStartPercent: Int? = null,
     )
 
-    private fun samples(now: Long): List<ChargeState> {
+    private fun records(now: Long): List<BleRecord> {
         val points =
             buildList {
                 // 48 h ago: parked at 64%, then a morning drive to 55.
@@ -82,7 +83,11 @@ internal object DemoHistory {
             .reversed()
             .distinctBy { it.minutesAgo }
             .reversed()
-            .map { point -> sample(now, point) }
+            .map { point ->
+                val charge = sample(now, point)
+                // The simulated phone acquires each reply the moment the car stamps it.
+                BleRecord(acquired_at = charge.timestamp, charge_state = charge)
+            }
     }
 
     /** Samples a straight run from [fromAgo] to [toAgo], inclusive of the start. */

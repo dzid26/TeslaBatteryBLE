@@ -9,16 +9,16 @@ import com.squareup.wire.ProtoWriter
 import okio.Buffer
 
 /**
- * Length-delimited codec for append-only logs of Tesla messages (ADR-0006).
+ * Length-delimited codec for the append-only history logs (ADR-0006).
  *
  * Each record is a varint byte length (written by Wire's [ProtoWriter],
  * which is the same encoding protobuf itself uses for tags and lengths)
- * followed by one raw Wire message. There is no envelope: the record is
- * exactly what the car reported. Readers ignore unknown fields, so new car
+ * followed by one Wire message. The codec adds nothing of its own: the
+ * history logs frame [BleRecord]s, which wrap the car's raw reply with the
+ * phone's acquisition time (ADR-0008). Readers ignore unknown fields, so new
  * fields never drop old rows. A truncated trailing record (an interrupted
  * append) is ignored on load; records after it are not read. The same codec
- * frames every message type; charge and (later) drive records differ only in
- * the adapter passed to [decode].
+ * frames every message type; the adapter passed to [decode] picks the type.
  */
 object ProtoLog {
     /** Encodes all [messages] into one buffer, for a full rewrite. */

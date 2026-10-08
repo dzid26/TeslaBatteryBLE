@@ -2,6 +2,7 @@
 
 Status: Accepted
 Date: 2026-10-06
+Amended by: ADR-0008 wraps every logged reply in a `BleRecord` envelope with the phone's acquisition time (the car's timestamp stays the charge timeline) and moves charge records to `<vehicleId>.charge.pblog`. Read the "no envelope" and file-name lines below as the first cut.
 
 ## Context
 

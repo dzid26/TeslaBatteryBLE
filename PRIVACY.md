@@ -9,13 +9,15 @@ anywhere.**
 - Your enrolled vehicle keys — stored in app-private storage, device-only by
   default; usable from an Android backup only if you opt in (see below)
 - Known cars (VIN, advertised BLE name) so you can reconnect
-- Battery history (SOC samples, charge sessions) in a local file
+- Battery history (SOC samples, charge sessions) and the car's status readings
+  (asleep or awake, locked, someone in the car, doors and other closures), each
+  with the time your phone received it, in local files
 - App settings
 
 The app never synchronizes, uploads, or shares anything. Android's system backup
 is separate: if you have it enabled, your device may include app data in cloud
-backup or device-to-device transfer, except battery history, which the app
-excludes so it stays on this device. By default each vehicle key is encrypted
+backup or device-to-device transfer, except battery history and status readings,
+which the app excludes so they stay on this device. By default each vehicle key is encrypted
 with an AES key that stays in this device's hardware-backed Keystore. Android 11
 and below keep the encrypted keys out of backups; on Android 12+ a backup may
 include them, but they cannot be decrypted on another phone. Either way, a new

@@ -25,8 +25,14 @@ dependencies {
 }
 
 wire {
+    // Tesla's protos, vendored verbatim and pinned by TESLA_COMMIT.
     sourcePath {
         srcDir("src/main/proto")
+    }
+    // The app's own records (ADR-0008) live in a second root, so a re-vendor
+    // of Tesla's protos never touches them.
+    sourcePath {
+        srcDir("src/main/proto-teslable")
     }
     kotlin {
     }
