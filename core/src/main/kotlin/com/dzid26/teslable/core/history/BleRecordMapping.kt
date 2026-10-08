@@ -2,13 +2,14 @@
 
 package com.dzid26.teslable.core.history
 
+import com.dzid26.teslable.core.protocol.TeslaCommands
 import com.dzid26.teslable.core.protocol.TeslaVcsec
 
 // One-way conversion: BleRecords kept in the history logs become the app's
-// read models (BatterySample, StatusSample). The read models are derived on
-// load; nothing ever writes a record back from parsed fields — the store logs
-// the car's raw reply verbatim, next to the phone's acquisition time
-// (ADR-0008).
+// read models (BatterySample, StatusSample, DriveSample). The read models are
+// derived on load; nothing ever writes a record back from parsed fields — the
+// store logs the car's raw reply verbatim, next to the phone's acquisition
+// time (ADR-0008).
 
 /**
  * The battery sample for a logged charge reply, or null unless the record
@@ -32,5 +33,23 @@ fun BleRecord.toStatusSample(vehicleId: String): StatusSample? {
         asleep = parsed.asleep,
         userPresent = parsed.userPresent,
         locked = parsed.locked,
+    )
+}
+
+/**
+ * The drive sample for a logged DriveState reply, or null unless the record
+ * holds a drive state with the car's own timestamp. The sample sits on that
+ * car timestamp: `acquired_at` never stands in for it (ADR-0006, ADR-0008).
+ */
+fun BleRecord.toDriveSample(vehicleId: String): DriveSample? {
+    val drive = drive_state ?: return null
+    val time = drive.timestamp?.toEpochMilli() ?: return null
+    return DriveSample(
+        timestampMillis = time,
+        vehicleId = vehicleId,
+        shiftState = TeslaCommands.shiftStateName(drive.shift_state),
+        speed = drive.speed,
+        power = drive.power,
+        odometerInHundredthsOfAMile = drive.odometer_in_hundredths_of_a_mile,
     )
 }

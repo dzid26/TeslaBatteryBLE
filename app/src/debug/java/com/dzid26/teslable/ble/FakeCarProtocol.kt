@@ -9,6 +9,8 @@ import com.dzid26.teslable.core.protocol.TeslaSession
 import com.tesla.generated.carserver.common.Void
 import com.tesla.generated.carserver.server.Action
 import com.tesla.generated.carserver.vehicle.ChargeState
+import com.tesla.generated.carserver.vehicle.DriveState
+import com.tesla.generated.carserver.vehicle.ShiftState
 import com.tesla.generated.carserver.vehicle.VehicleData
 import com.tesla.generated.signatures.AES_GCM_Response_Signature_Data
 import com.tesla.generated.signatures.HMAC_Signature_Data
@@ -44,7 +46,7 @@ import com.tesla.generated.carserver.server.Response as CarServerResponse
  *
  * It speaks enough of the protocol for the real controller: plaintext VCSEC
  * status and whitelist replies, the add-key pairing flow with a simulated card
- * tap, session handshakes with the core crypto, and encrypted wake/charge
+ * tap, session handshakes with the core crypto, and encrypted wake/charge/drive
  * responses.
  */
 class FakeCarProtocol(
@@ -306,11 +308,17 @@ class FakeCarProtocol(
             ) ?: return
         val requestTag = gcm.tag.toByteArray()
 
-        // Charge first: Wire matches on field numbers, so an Action (field 2 =
-        // vehicleAction) can otherwise be misread as an UnsignedMessage RKE action.
+        // Vehicle data first: Wire matches on field numbers, so an Action (field
+        // 2 = vehicleAction) can otherwise be misread as an UnsignedMessage RKE
+        // action.
         val action = runCatching { Action.ADAPTER.decode(plaintext) }.getOrNull()
-        if (action?.vehicleAction?.getVehicleData?.getChargeState != null) {
+        val vehicleData = action?.vehicleAction?.getVehicleData
+        if (vehicleData?.getChargeState != null) {
             out += authenticated(domain, uuid, requestTag, chargeResponse())
+            return
+        }
+        if (vehicleData?.getDriveState != null) {
+            out += authenticated(domain, uuid, requestTag, driveResponse())
             return
         }
 
@@ -361,6 +369,23 @@ class FakeCarProtocol(
                                 } else {
                                     ChargeState.ChargingState(Disconnected = Void())
                                 },
+                            // Like the real car, stamp every sample: history takes its time from here.
+                            timestamp = Instant.ofEpochMilli(System.currentTimeMillis()),
+                        ),
+                ),
+        ).encode()
+
+    /** Parked in P with the odometer standing still, stamped by the car like the charge reply. */
+    private fun driveResponse(): ByteArray =
+        CarServerResponse(
+            vehicleData =
+                VehicleData(
+                    drive_state =
+                        DriveState(
+                            shift_state = ShiftState(P = Void()),
+                            speed = 0,
+                            power = 0,
+                            odometer_in_hundredths_of_a_mile = ODOMETER_HUNDREDTHS_OF_A_MILE,
                             // Like the real car, stamp every sample: history takes its time from here.
                             timestamp = Instant.ofEpochMilli(System.currentTimeMillis()),
                         ),
@@ -458,5 +483,8 @@ class FakeCarProtocol(
         const val RATED_MILES_PER_PERCENT = 3.0f
         const val ESTIMATED_MILES_PER_PERCENT = 2.9f
         const val KWH_PER_PERCENT = 0.75f
+
+        /** 12,345.67 miles: constant, because the simulated car never drives. */
+        const val ODOMETER_HUNDREDTHS_OF_A_MILE = 1_234_567
     }
 }
