@@ -218,6 +218,8 @@ jobs:
       # a PNG actually changed; website/** is ignored by Android CI, so the
       # commit does not rebuild the app or the rolling preview.
       - name: Refresh the committed screenshots
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           git fetch origin main
@@ -241,7 +243,7 @@ jobs:
           git push origin HEAD:main
           # A push made with GITHUB_TOKEN does not trigger other workflows, so
           # pages.yml never sees this commit; dispatch it explicitly.
-          GH_TOKEN="${{ github.token }}" gh workflow run pages.yml --ref main
+          gh workflow run pages.yml --ref main
 
   preview:
     name: Rolling preview release
