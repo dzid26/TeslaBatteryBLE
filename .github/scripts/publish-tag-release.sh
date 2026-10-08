@@ -17,6 +17,9 @@ if [ "$TAG" != "${TAG%-*}" ]; then PRE_FLAG="--prerelease"; else PRE_FLAG=""; fi
 
 [ -f "$APK" ] || { echo "missing $APK (the release job stages it)" >&2; exit 1; }
 
+# A promoted preview brings its screenshots section (find-preview-screenshots.sh).
+REUSED="screenshots-section.md"
+if [ ! -f "$REUSED" ]; then
 for name in $SHOTS; do
   [ -f "$SHOTS_DIR/$name" ] || { echo "missing $SHOTS_DIR/$name (the capture step must succeed)" >&2; exit 1; }
 done
@@ -27,6 +30,7 @@ SETTINGS_URL="$(bash .github/scripts/upload-screenshot.sh "$SHOTS_DIR/05-setting
 SCAN_DARK_URL="$(bash .github/scripts/upload-screenshot.sh "$SHOTS_DIR/02-scanning-dark.png" "02-scanning-dark-${TAG}.png")"
 CAR_DARK_URL="$(bash .github/scripts/upload-screenshot.sh "$SHOTS_DIR/03-car-dark.png" "03-car-dark-${TAG}.png")"
 SETTINGS_DARK_URL="$(bash .github/scripts/upload-screenshot.sh "$SHOTS_DIR/05-settings-dark.png" "05-settings-dark-${TAG}.png")"
+fi
 
 # Notes come from the commits since the previous tag; there is no
 # hand-edited changelog, so pull requests never collide on one.
@@ -48,6 +52,9 @@ PREV_TAG="$(git describe --tags --abbrev=0 --match 'v*' "$TAG^" 2>/dev/null || t
   echo
 
   echo
+  if [ -f "$REUSED" ]; then
+    cat "$REUSED"
+  else
   echo "## Screenshots"
   echo
   echo "**Light**"
@@ -57,6 +64,7 @@ PREV_TAG="$(git describe --tags --abbrev=0 --match 'v*' "$TAG^" 2>/dev/null || t
   echo "**Dark**"
   echo
   echo "<p><img src=\"$SCAN_DARK_URL\" alt=\"Scanning for nearby cars (dark)\" width=\"32%\"><img src=\"$CAR_DARK_URL\" alt=\"Car detail with the battery reading (dark)\" width=\"32%\"><img src=\"$SETTINGS_DARK_URL\" alt=\"Settings (dark)\" width=\"32%\"></p>"
+  fi
 } > "$NOTES"
 
 if [ ! -s "$NOTES" ]; then
@@ -69,9 +77,26 @@ else
   gh release create "$TAG" --title "$TAG" --notes-file "$NOTES" $PRE_FLAG
 fi
 
-gh release upload "$TAG" "$APK" --clobber
+# Uploads are flaky; retry before failing the release.
+for attempt in 1 2 3; do
+  gh release upload "$TAG" "$APK" --clobber && break
+  [ "$attempt" -lt 3 ] || { echo "uploading $APK failed after $attempt attempts" >&2; exit 1; }
+  sleep $((attempt * 5))
+done
 
 # The release is not done until its APK is actually attached.
 assets="$(gh release view "$TAG" --json assets --jq '.assets[].name')"
 expected="$(basename "$APK")"
 printf '%s\n' "$assets" | grep -qx "$expected" || { echo "release $TAG is missing $expected" >&2; exit 1; }
+
+# Only now that the rebuilt APK is attached, drop the superseded preview APK(s)
+# so a promoted preview ends up with one APK, the one with the tag's version.
+printf '%s\n' "$assets" | grep -E '^TeslaBatteryBLE-preview-.*\.apk$' | while read -r old; do
+  gh release delete-asset "$TAG" "$old" --yes
+done
+
+# A separate rolling `preview` release cut from this same commit is now redundant.
+SHORT_SHA="$(git rev-parse --short=7 HEAD)"
+if gh release view preview --json assets --jq '.assets[].name' 2>/dev/null | grep -qx "TeslaBatteryBLE-preview-${SHORT_SHA}.apk"; then
+  gh release delete preview --yes --cleanup-tag
+fi

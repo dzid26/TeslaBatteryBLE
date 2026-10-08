@@ -161,16 +161,27 @@ jobs:
       - name: Build the signed debug APK
         run: ./gradlew :app:assembleDebug
 
-      # Tag releases capture their own screenshots from the simulated car.
       - name: Stage the release APK
         run: |
           mkdir -p dist
           cp app/build/outputs/apk/debug/app-debug.apk "dist/TeslaBatteryBLE-${GITHUB_REF_NAME}.apk"
 
+      # A preview promoted to a release (same commit) already has screenshots:
+      # reuse them and skip the emulator capture. Only the APK is rebuilt, since
+      # versionName/versionCode derive from the tag.
+      - name: Reuse the preview screenshots
+        id: reuse
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/find-preview-screenshots.sh
+
+      # Otherwise the release captures its own screenshots from the simulated car.
       - name: Build the demo APK for screenshots
+        if: steps.reuse.outputs.found != 'true'
         run: ./gradlew :app:assembleDebug -PdemoCar=true
 
       - name: Enable KVM
+        if: steps.reuse.outputs.found != 'true'
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
@@ -178,6 +189,7 @@ jobs:
 
       - name: Capture screenshots
         id: capture
+        if: steps.reuse.outputs.found != 'true'
         continue-on-error: true
         uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
         with:
@@ -194,7 +206,7 @@ jobs:
       # still fails the job when no complete set is produced, so a release is
       # never published without its screenshots.
       - name: Retry the capture once
-        if: steps.capture.outcome == 'failure'
+        if: steps.reuse.outputs.found != 'true' && steps.capture.outcome == 'failure'
         continue-on-error: true
         uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
         with:
