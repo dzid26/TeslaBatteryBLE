@@ -115,7 +115,7 @@ class BleTrackingService : Service() {
                 rssi = display.rssi,
                 percent = reading?.value,
                 percentStale = reading?.stale == true,
-                percentAgeLabel = reading?.readAtMillis?.let { ageLabel(now - it) },
+                percentAgeLabel = reading?.readAtMillis?.let { readingAgeText(now - it) },
                 showWake =
                     connection.status?.asleep == true &&
                         connection.sessions.contains("DOMAIN_VEHICLE_SECURITY"),
@@ -285,8 +285,7 @@ class BleTrackingService : Service() {
         val at = text.indexOf(percentText)
         if (ageLabel != null && at >= 0) {
             val insertAt = at + percentText.length
-            val suffix = if (ageLabel == NOW_LABEL) " · just now" else " · $ageLabel ago"
-            text = text.substring(0, insertAt) + suffix + text.substring(insertAt)
+            text = text.substring(0, insertAt) + " · $ageLabel" + text.substring(insertAt)
         }
         if (!model.percentStale) return text
         val start = text.indexOf(percentText)
@@ -298,17 +297,6 @@ class BleTrackingService : Service() {
                 start + percentText.length,
                 Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
             )
-        }
-    }
-
-    /** Coarse age buckets, so the notification re-posts at most every 10 min. */
-    private fun ageLabel(ageMillis: Long): String {
-        val minutes = ageMillis / 60_000
-        return when {
-            minutes < 5 -> NOW_LABEL
-            minutes < 60 -> "${(minutes / AGE_BUCKET_MINUTES).coerceAtLeast(1) * AGE_BUCKET_MINUTES}m"
-            minutes < 24 * 60 -> "${minutes / 60}h"
-            else -> "${minutes / (24 * 60)}d"
         }
     }
 
@@ -382,15 +370,6 @@ class BleTrackingService : Service() {
         private const val CAR_NOTIFICATION_BASE = 1000
         private const val REQUEST_OPEN_APP = 0
         private const val RSSI_NOTIFICATION_STEP = 5
-
-        /** How often notification text is re-evaluated as readings age. */
-        private const val STALENESS_TICK_MS = 60_000L
-
-        /** Age bucket for a reading under five minutes old. */
-        private const val NOW_LABEL = "now"
-
-        /** Minute granularity for the age shown next to a stale percentage. */
-        private const val AGE_BUCKET_MINUTES = 10
         private const val STALE_TEXT_COLOR = 0xFF9E9E9E.toInt()
 
         /** True while the foreground service is running (same process). */
