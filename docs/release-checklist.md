@@ -4,7 +4,7 @@
 
 - Semantic versioning (`MAJOR.MINOR.PATCH`).
 - `versionCode` (integer, always increments) and `versionName` (semver string) live in `app/build.gradle.kts` (`defaultConfig`).
-- Git tags are `vX.Y.Z` and must match `versionName` (e.g. tag `v0.2.0` = `versionName "0.2.0"` with a bumped `versionCode`).
+- Git tags are `vX.Y.Z` and must match `versionName` (e.g. tag `v0.2.0` = `versionName "0.2.0"` with a bumped `versionCode`). The tag-release job fails when they differ.
 
 ## Pre-release
 

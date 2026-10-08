@@ -116,6 +116,18 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x gradlew
 
+      # The About screen and update tools read versionName, so a tag built from
+      # a commit that still carries an older version would publish a mislabelled APK.
+      - name: Check versionName matches the tag
+        run: |
+          set -euo pipefail
+          declared="$(sed -nE 's/^[[:space:]]*versionName = "([^"]+)".*/\1/p' app/build.gradle.kts | head -n1)"
+          expected="${GITHUB_REF_NAME#v}"
+          if [ "$declared" != "$expected" ]; then
+            echo "::error file=app/build.gradle.kts::versionName is '$declared' but tag $GITHUB_REF_NAME expects '$expected'; bump versionName and versionCode before tagging"
+            exit 1
+          fi
+
       - name: Set up signing
         env:
           SIGNING_KEYSTORE_BASE64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
