@@ -69,9 +69,25 @@ else
   gh release create "$TAG" --title "$TAG" --notes-file "$NOTES" $PRE_FLAG
 fi
 
-gh release upload "$TAG" "$APK" --clobber
+# Uploads are flaky; retry before failing the release.
+for attempt in 1 2 3; do
+  gh release upload "$TAG" "$APK" --clobber && break
+  [ "$attempt" -lt 3 ] || { echo "uploading $APK failed after $attempt attempts" >&2; exit 1; }
+  sleep $((attempt * 5))
+done
 
 # The release is not done until its APK is actually attached.
 assets="$(gh release view "$TAG" --json assets --jq '.assets[].name')"
 expected="$(basename "$APK")"
 printf '%s\n' "$assets" | grep -qx "$expected" || { echo "release $TAG is missing $expected" >&2; exit 1; }
+
+# Only now that the rebuilt APK is attached, drop the superseded preview APK(s)
+# so a promoted preview ends up with one APK, the one with the tag's version.
+printf '%s\n' "$assets" | grep -E '^TeslaBatteryBLE-preview-.*\.apk$' | while read -r old; do
+  gh release delete-asset "$TAG" "$old" --yes
+done
+
+# A separate rolling `preview` release cut from this same commit is now redundant.
+if [ "$(git rev-parse -q --verify "refs/tags/preview^{commit}" 2>/dev/null || true)" = "$(git rev-parse HEAD)" ]; then
+  gh release delete preview --yes --cleanup-tag
+fi

@@ -25,8 +25,8 @@ permissions:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  # Main runs are never cancelled: the preview capture needs ~15 minutes and
-  # rapid pushes would otherwise kill it before it can publish. Only PR runs
+  # Main runs are never cancelled: a preview publish is not
+  # worth killing halfway when rapid pushes arrive. Only PR runs
   # are superseded; queued previews collapse in the preview job below.
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
@@ -303,50 +303,9 @@ jobs:
           mkdir -p dist
           cp app/build/outputs/apk/debug/app-debug.apk dist/app-debug.apk
 
-      # The preview captures its own screenshots from the simulated car.
-      - name: Build the demo APK for screenshots
-        run: ./gradlew :app:assembleDebug -PdemoCar=true
-
-      - name: Enable KVM
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
-
-      - name: Capture screenshots
-        id: capture
-        continue-on-error: true
-        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
-        with:
-          api-level: 34
-          target: google_apis
-          arch: x86_64
-          profile: pixel_6
-          emulator-boot-timeout: 420
-          disable-animations: true
-          script: bash .github/scripts/capture-screenshots.sh app/build/outputs/apk/debug/app-debug.apk screenshots
-
-      # Emulator flakes (GL context preemption, adb daemon) are common on CI
-      # runners; give the capture one fresh attempt. The publish script below
-      # still fails the job when no complete set is produced, so a release is
-      # never published without its screenshots.
-      - name: Retry the capture once
-        if: steps.capture.outcome == 'failure'
-        continue-on-error: true
-        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
-        with:
-          api-level: 34
-          target: google_apis
-          arch: x86_64
-          profile: pixel_6
-          emulator-boot-timeout: 420
-          disable-animations: true
-          script: rm -rf screenshots && bash .github/scripts/capture-screenshots.sh app/build/outputs/apk/debug/app-debug.apk screenshots
-
       - name: Publish preview release
         env:
           GH_TOKEN: ${{ github.token }}
-          ATTACHMENTS_TOKEN: ${{ secrets.ATTACHMENTS_TOKEN }}
         run: bash .github/scripts/publish-preview-release.sh
 
   go-vectors:

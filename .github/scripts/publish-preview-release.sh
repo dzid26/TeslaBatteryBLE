@@ -2,8 +2,8 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # Create or update the rolling "preview" release for the current commit.
 #
-# Run from a checkout with `dist/app-debug.apk` built and the emulator
-# screenshots captured into `screenshots/` (see android.yml).
+# Run from a checkout with `dist/app-debug.apk` built (see android.yml). The
+# preview carries no screenshots; the tag release captures them.
 set -euo pipefail
 
 REPO="${GITHUB_REPOSITORY:?GITHUB_REPOSITORY is required}"
@@ -13,9 +13,6 @@ TITLE="Preview build"
 SHORT_SHA="${SHA:0:7}"
 APK="dist/app-debug.apk"
 ASSET_APK="TeslaBatteryBLE-preview-${SHORT_SHA}.apk"
-SHOTS_DIR="screenshots"
-# README-table-style columns: the scan, the car detail, Settings; light row + dark row.
-SHOTS="02-scanning.png 03-car.png 05-settings.png 02-scanning-dark.png 03-car-dark.png 05-settings-dark.png"
 
 [ -f "$APK" ] || { echo "missing $APK" >&2; exit 1; }
 cp "$APK" "$ASSET_APK"
@@ -45,17 +42,6 @@ fi
 git tag -f "$TAG" "$SHA"
 git push origin "refs/tags/$TAG" --force
 
-for name in $SHOTS; do
-  [ -f "$SHOTS_DIR/$name" ] || { echo "missing $SHOTS_DIR/$name (the capture step must succeed)" >&2; exit 1; }
-done
-# Host the shots as user attachments so the release page keeps only the APK.
-SCAN_URL="$(bash .github/scripts/upload-screenshot.sh "$SHOTS_DIR/02-scanning.png" "02-scanning-${SHORT_SHA}.png")"
-CAR_URL="$(bash .github/scripts/upload-screenshot.sh "$SHOTS_DIR/03-car.png" "03-car-${SHORT_SHA}.png")"
-SETTINGS_URL="$(bash .github/scripts/upload-screenshot.sh "$SHOTS_DIR/05-settings.png" "05-settings-${SHORT_SHA}.png")"
-SCAN_DARK_URL="$(bash .github/scripts/upload-screenshot.sh "$SHOTS_DIR/02-scanning-dark.png" "02-scanning-dark-${SHORT_SHA}.png")"
-CAR_DARK_URL="$(bash .github/scripts/upload-screenshot.sh "$SHOTS_DIR/03-car-dark.png" "03-car-dark-${SHORT_SHA}.png")"
-SETTINGS_DARK_URL="$(bash .github/scripts/upload-screenshot.sh "$SHOTS_DIR/05-settings-dark.png" "05-settings-dark-${SHORT_SHA}.png")"
-
 {
   echo "Rolling preview of \`main\` - rebuilt on every push. The APK is a debug build."
   echo
@@ -77,16 +63,6 @@ SETTINGS_DARK_URL="$(bash .github/scripts/upload-screenshot.sh "$SHOTS_DIR/05-se
     echo
     echo "**Full diff**: https://github.com/$REPO/compare/$PREV_TAG...$TAG"
   fi
-  echo
-  echo "## Screenshots"
-  echo
-  echo "**Light**"
-  echo
-  echo "<p><img src=\"$SCAN_URL\" alt=\"Scanning for nearby cars (light)\" width=\"32%\"><img src=\"$CAR_URL\" alt=\"Car detail with the battery reading (light)\" width=\"32%\"><img src=\"$SETTINGS_URL\" alt=\"Settings (light)\" width=\"32%\"></p>"
-  echo
-  echo "**Dark**"
-  echo
-  echo "<p><img src=\"$SCAN_DARK_URL\" alt=\"Scanning for nearby cars (dark)\" width=\"32%\"><img src=\"$CAR_DARK_URL\" alt=\"Car detail with the battery reading (dark)\" width=\"32%\"><img src=\"$SETTINGS_DARK_URL\" alt=\"Settings (dark)\" width=\"32%\"></p>"
 } > preview-notes.md
 
 # Recreate the release on every build so the "released" time matches the

@@ -18,7 +18,7 @@
 ## Release
 
 - [ ] Create and push tag `vX.Y.Z` (e.g. `git tag v0.2.0 && git push origin v0.2.0`).
-- [ ] CI builds the APK, attaches it as `TeslaBatteryBLE-<tag>.apk`, captures screenshots from the simulated car on the emulator, and embeds them (light/dark rows) as user attachments.
+- [ ] CI builds the APK (replacing the rolling preview's APK when the tag promotes it, and removing that preview), attaches it as `TeslaBatteryBLE-<tag>.apk`, captures screenshots from the simulated car on the emulator, and embeds them (light/dark rows) as user attachments.
 - [ ] The capture is required: a failed capture or a missing screenshot fails the run, and the release is not published without its screenshots.
 - [ ] CI sets the release title, marks tags containing `-` as prereleases, and writes notes from the commits since the previous tag plus the screenshots.
 - [ ] Verify the release page: correct tag/version, notes, screenshots, and installable APK artifact.
