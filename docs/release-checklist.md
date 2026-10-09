@@ -17,12 +17,12 @@
 
 ## Release
 
-- [ ] Create and push tag `vX.Y.Z` (e.g. `git tag v0.2.0 && git push origin v0.2.0`).
+- [ ] Release from the Actions tab: on the draft "Next release (draft)" type the tag (e.g. `v0.2.0`) into its **Tag** field and untick **Pre-release** (new drafts start ticked) for a stable release, save it as a draft, then run **Android CI** on `main` with `release` ticked (`gh workflow run android.yml --ref main -f release=true`). A tag and pre-release flag can instead be passed as inputs (`-f tag=v0.2.0 -f prerelease=false`). CI tags the head of `main`, builds, captures screenshots and publishes the draft only when complete. Pushing a `vX.Y.Z` tag by hand (`git tag v0.2.0 && git push origin v0.2.0`) still works and publishes the same way.
 - [ ] CI builds the APK, publishes the draft "Next release" under the tag (its pre-release checkbox is left as you set it), attaches it as `TeslaBatteryBLE-<tag>.apk`, captures screenshots from the simulated car on the emulator, and embeds them (light/dark rows) as user attachments.
 - [ ] The capture is required: a failed capture or a missing screenshot fails the run, and the release is not published without its screenshots.
 - [ ] CI sets the release title, marks tags containing `-` as prereleases, and writes notes from the commits since the previous tag plus the screenshots.
 - [ ] Verify the release page: correct tag/version, notes, screenshots, and installable APK artifact.
-- [ ] Set the draft's pre-release checkbox before tagging if the release should be a pre-release; CI never changes it on a draft. Without a draft, CI marks tags containing `-` as prereleases.
+- [ ] Pre-release flag: a manual run uses the `prerelease` input, else the draft's checkbox. For a hand-pushed tag, set the draft's checkbox beforehand; CI leaves it alone on a draft, and without a draft marks tags containing `-` as prereleases.
 
 ## Current status
 

@@ -5,7 +5,7 @@
 # built and the emulator screenshots captured into `screenshots/`.
 set -euo pipefail
 
-TAG="${GITHUB_REF_NAME:?GITHUB_REF_NAME is required}"
+TAG="${RELEASE_TAG:-${GITHUB_REF_NAME:?GITHUB_REF_NAME or RELEASE_TAG is required}}"
 REPO="${GITHUB_REPOSITORY:?GITHUB_REPOSITORY is required}"
 APK="dist/TeslaBatteryBLE-${TAG}.apk"
 NOTES="release-notes.md"
@@ -13,7 +13,14 @@ SHOTS_DIR="screenshots"
 # README-table-style columns: the scan, the car detail, Settings; light row + dark row.
 SHOTS="02-scanning.png 03-car.png 05-settings.png 02-scanning-dark.png 03-car-dark.png 05-settings-dark.png"
 
-if [ "$TAG" != "${TAG%-*}" ]; then PRE_FLAG="--prerelease"; else PRE_FLAG=""; fi
+# A manual release states the flag outright; a pushed tag derives it from the name.
+if [ -n "${RELEASE_PRERELEASE:-}" ]; then
+  PRE_FLAG=("--prerelease=$RELEASE_PRERELEASE")
+elif [ "$TAG" != "${TAG%-*}" ]; then
+  PRE_FLAG=(--prerelease)
+else
+  PRE_FLAG=()
+fi
 
 [ -f "$APK" ] || { echo "missing $APK (the release job stages it)" >&2; exit 1; }
 
@@ -41,9 +48,9 @@ PREV_TAG="$(git describe --tags --abbrev=0 --match 'v*' "$TAG^" 2>/dev/null || t
   fi
   echo
   if [ -n "$PREV_TAG" ]; then
-    git log --no-merges --pretty=format:'- %s ([%h](https://github.com/'"$REPO"'/commit/%H))' "$PREV_TAG..$TAG"
+    bash .github/scripts/changelog.sh "$REPO" "$PREV_TAG..$TAG"
   else
-    git log --no-merges --pretty=format:'- %s ([%h](https://github.com/'"$REPO"'/commit/%H))' "$TAG"
+    bash .github/scripts/changelog.sh "$REPO" "$TAG"
   fi
   echo
 
@@ -67,16 +74,20 @@ fi
 # this tag. Its pre-release checkbox is left as the owner set it.
 DRAFT_ID="$(gh api --paginate "repos/$REPO/releases" \
   --jq '.[] | select(.draft and .name == "Next release (draft)") | .id' | sed -n 1p)"
-if [ -n "$DRAFT_ID" ]; then
+# Skipped when a release for the tag already exists (the draft was published from
+# the GitHub UI, which created the tag and triggered this run): that release is
+# just edited below.
+if [ -n "$DRAFT_ID" ] && ! gh release view "$TAG" > /dev/null 2>&1; then
   gh api -X PATCH "repos/$REPO/releases/$DRAFT_ID" \
     -f tag_name="$TAG" -f name="$TAG" -F draft=false > /dev/null
-  PRE_FLAG=""
+  # A pushed tag leaves the draft's pre-release checkbox as the owner set it.
+  if [ -z "${RELEASE_PRERELEASE:-}" ]; then PRE_FLAG=(); fi
 fi
 
 if gh release view "$TAG" > /dev/null 2>&1; then
-  gh release edit "$TAG" --title "$TAG" --notes-file "$NOTES" $PRE_FLAG
+  gh release edit "$TAG" --title "$TAG" --notes-file "$NOTES" "${PRE_FLAG[@]}"
 else
-  gh release create "$TAG" --title "$TAG" --notes-file "$NOTES" $PRE_FLAG
+  gh release create "$TAG" --title "$TAG" --notes-file "$NOTES" "${PRE_FLAG[@]}"
 fi
 
 # Uploads are flaky; retry before failing the release.

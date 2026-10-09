@@ -40,9 +40,9 @@ fi
   fi
   echo
   if [ -n "$PREV_TAG" ]; then
-    git log --no-merges --pretty=format:'- %s ([%h](https://github.com/'"$REPO"'/commit/%H))' "$PREV_TAG..$SHA" || true
+    bash .github/scripts/changelog.sh "$REPO" "$PREV_TAG..$SHA"
   else
-    git log --no-merges --pretty=format:'- %s ([%h](https://github.com/'"$REPO"'/commit/%H))' "$SHA" || true
+    bash .github/scripts/changelog.sh "$REPO" "$SHA"
   fi
   echo
   if [ -n "$PREV_TAG" ]; then
@@ -56,7 +56,8 @@ if [ -n "$DRAFT_ID" ]; then
     -f target_commitish="$SHA" -F body=@draft-notes.md > /dev/null
 else
   # A draft has no git tag until it is published; this name is only a placeholder.
+  # New drafts start as pre-release; untick it on the draft for a stable release.
   gh api -X POST "repos/$REPO/releases" \
     -f tag_name=next-release -f name="$DRAFT_NAME" -f target_commitish="$SHA" \
-    -F draft=true -F body=@draft-notes.md > /dev/null
+    -F draft=true -F prerelease=true -F body=@draft-notes.md > /dev/null
 fi
