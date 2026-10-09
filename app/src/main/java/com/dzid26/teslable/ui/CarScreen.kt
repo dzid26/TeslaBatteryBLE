@@ -70,11 +70,11 @@ import com.dzid26.teslable.ble.vehicleStatusText
 import com.dzid26.teslable.core.history.BatterySample
 import com.dzid26.teslable.core.history.ChargeProjection
 import com.dzid26.teslable.core.history.DischargeProjection
+import com.dzid26.teslable.core.history.DriveSample
 import com.dzid26.teslable.core.history.HistoryRange
 import com.dzid26.teslable.core.history.chargeProjection
 import com.dzid26.teslable.core.history.chargeStats
 import com.dzid26.teslable.core.history.dischargeProjection
-import com.dzid26.teslable.core.history.projectionWindowMillis
 import com.dzid26.teslable.core.history.within
 import com.dzid26.teslable.core.protocol.asleep
 import com.dzid26.teslable.core.protocol.chargingStateKind
@@ -97,6 +97,7 @@ internal fun CarScreen(
     advert: TeslaAdvert?,
     address: String,
     history: List<BatterySample>,
+    driveHistory: List<DriveSample>,
     onBack: () -> Unit,
     onPair: () -> Unit,
     onRefresh: () -> Unit,
@@ -110,6 +111,12 @@ internal fun CarScreen(
             emptyList()
         } else {
             history.filter { it.vehicleId == vehicle.bleName }
+        }
+    val vehicleDrives =
+        if (vehicle == null) {
+            emptyList()
+        } else {
+            driveHistory.filter { it.vehicleId == vehicle.bleName }
         }
     val paired = isPaired(connection, vehicle)
     val health = remember(vehicleHistory) { healthSummary(vehicleHistory) }
@@ -203,7 +210,7 @@ internal fun CarScreen(
                 if (!paired) {
                     KeyCard(connection, vehicle, onPair)
                 }
-                BatteryHistoryCard(vehicleHistory)
+                BatteryHistoryCard(vehicleHistory, vehicleDrives)
                 BatteryHealthCard(health)
             }
         }
@@ -501,7 +508,10 @@ private fun pairingDetailText(pairing: PairingPhase): String? =
 // ---------------------------------------------------------------- battery card
 
 @Composable
-private fun BatteryHistoryCard(samples: List<BatterySample>) {
+private fun BatteryHistoryCard(
+    samples: List<BatterySample>,
+    drives: List<DriveSample>,
+) {
     var range by rememberSaveable { mutableStateOf(HistoryRange.DAY) }
     val now = System.currentTimeMillis()
     val visible = samples.within(range, now)
@@ -531,12 +541,25 @@ private fun BatteryHistoryCard(samples: List<BatterySample>) {
                 // Projections are derived from every sample, not just the
                 // visible window, so a run that started before the selected
                 // range still projects.
+                val baseMillis =
+                    range.durationMillis
+                        ?: (visible.last().timestampMillis - visible.first().timestampMillis)
+                            .coerceAtLeast(1L)
                 val charge = chargeProjection(samples)
                 val discharge =
                     if (charge == null) {
-                        dischargeProjection(samples, range.projectionWindowMillis(), now)
+                        // Parked drain only: the drive samples' odometer marks
+                        // the stretches the car moved.
+                        dischargeProjection(samples, drives, baseMillis, now)
                     } else {
                         null
+                    }
+                // The projection gets room on the x-axis: half the range ahead.
+                val windowEnd =
+                    if (charge != null || discharge != null) {
+                        now + baseMillis / 2
+                    } else {
+                        now
                     }
                 BatteryChart(
                     samples = visible,
@@ -545,7 +568,7 @@ private fun BatteryHistoryCard(samples: List<BatterySample>) {
                     windowStart =
                         range.durationMillis?.let { now - it }
                             ?: visible.first().timestampMillis,
-                    windowEnd = now,
+                    windowEnd = windowEnd,
                     showDate = range != HistoryRange.SIX_HOURS,
                     modifier =
                         Modifier

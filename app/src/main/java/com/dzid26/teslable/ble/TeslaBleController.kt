@@ -7,6 +7,7 @@ import android.os.Looper
 import com.dzid26.teslable.core.TeslaNames
 import com.dzid26.teslable.core.history.BatterySample
 import com.dzid26.teslable.core.history.ConnectionEvent
+import com.dzid26.teslable.core.history.DriveSample
 import com.dzid26.teslable.core.protocol.AntiReplayWindow
 import com.dzid26.teslable.core.protocol.InfotainmentPollPolicy
 import com.dzid26.teslable.core.protocol.InfotainmentSessionGate
@@ -52,6 +53,9 @@ class TeslaBleController(
 
     /** Battery readings recorded from every charge response, oldest first. */
     val batteryHistory: StateFlow<List<BatterySample>> get() = historyStore.samples
+
+    /** Drive readings recorded from every DriveState response, oldest first. */
+    val driveHistory: StateFlow<List<DriveSample>> get() = historyStore.driveSamples
 
     private val links = mutableMapOf<String, VehicleLink>()
     private val handler = Handler(Looper.getMainLooper())

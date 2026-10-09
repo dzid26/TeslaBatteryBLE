@@ -29,6 +29,7 @@ import com.dzid26.teslable.ble.BleTrackingService
 import com.dzid26.teslable.ble.PairingKeyStore
 import com.dzid26.teslable.ble.TeslaBleController
 import com.dzid26.teslable.ble.shouldTrack
+import com.dzid26.teslable.history.HistorySamples
 import com.dzid26.teslable.ui.AboutScreen
 import com.dzid26.teslable.ui.MainScreen
 import com.dzid26.teslable.ui.PermissionWizardHost
@@ -66,6 +67,8 @@ class MainActivity : ComponentActivity() {
 
                 val state by controller.state.collectAsState()
                 val batteryHistory by controller.batteryHistory.collectAsState()
+                val driveHistory by controller.driveHistory.collectAsState()
+                val history = remember(batteryHistory, driveHistory) { HistorySamples(batteryHistory, driveHistory) }
                 var screen by rememberSaveable { mutableStateOf(AppScreen.MAIN) }
                 // MainScreen leaves the composition while Settings is open; keep its
                 // saved state (list vs. car view) so Back returns where the user was
@@ -118,7 +121,7 @@ class MainActivity : ComponentActivity() {
                             screenStates.SaveableStateProvider(AppScreen.MAIN.name) {
                                 MainScreen(
                                     state = state,
-                                    history = batteryHistory,
+                                    history = history,
                                     permissionsGranted = permissionsGranted,
                                     locationServicesEnabled = locationEnabled,
                                     onRequestPermissions = requestPermissions,
