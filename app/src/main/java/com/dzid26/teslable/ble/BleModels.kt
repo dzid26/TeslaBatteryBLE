@@ -3,7 +3,6 @@ package com.dzid26.teslable.ble
 
 import com.dzid26.teslable.core.history.BatterySample
 import com.dzid26.teslable.core.protocol.ChargingStateKind
-import com.dzid26.teslable.core.protocol.InfotainmentPollPolicy
 import com.dzid26.teslable.core.protocol.asleep
 import com.dzid26.teslable.core.protocol.locked
 import com.dzid26.teslable.core.protocol.userPresent
@@ -106,18 +105,15 @@ fun BleUiState.shouldTrack(): Boolean =
                 )
         }
 
-/** Slack on top of two read intervals for a late read (BLE retries, a busy main thread). */
-const val FRESH_SLACK_MS = 5_000L
-
 /**
- * How recent a reading must be to count as fresh: still being read. This
- * follows the poll policy's read rate: two [InfotainmentPollPolicy.READ_INTERVAL_MS]
- * plus [FRESH_SLACK_MS], so one missed or late read does not flip it, yet a
- * reading turns stale within seconds of the policy no longer reading. If the
- * policy's interval becomes adaptive, this should follow the interval in force
- * instead of the constant. Everything older is stale (gray, with its age).
+ * How recent a live reading must be to count as fresh (blue), while the link is
+ * READY and the car is not asleep. An awake, idle car's charge does not move, and
+ * charging or driving keeps reads coming every few seconds, so a reading stays
+ * fresh for this long after it was read, and goes stale at once when the link
+ * drops or the car's latest VCSEC status says asleep, whichever comes first. The
+ * stored fallback is always stale.
  */
-const val FRESH_READING_MS = 2 * InfotainmentPollPolicy.READ_INTERVAL_MS + FRESH_SLACK_MS
+const val FRESH_READING_MS = 5 * 60_000L
 
 /**
  * How often a screen or the notification re-checks reading ages when no
@@ -155,8 +151,9 @@ fun BatteryPercent.ageLabel(nowMillis: Long): String? = readAtMillis?.takeIf { s
 
 /**
  * The percentage to show for a car: the live charge when there is one,
- * otherwise the newest stored sample. [BatteryPercent.stale] marks anything
- * not read within [FRESH_READING_MS], including every stored fallback.
+ * otherwise the newest stored sample. [BatteryPercent.stale] marks a live
+ * reading that is [FRESH_READING_MS] old or older, whose connection is not READY,
+ * or whose car's latest status says asleep, and every stored fallback.
  */
 fun batteryPercent(
     connection: TeslaConnection?,
@@ -168,7 +165,11 @@ fun batteryPercent(
         val readAt = connection.chargeAtMillis
         return BatteryPercent(
             value = live,
-            stale = readAt == null || nowMillis - readAt >= FRESH_READING_MS,
+            stale =
+                readAt == null ||
+                    nowMillis - readAt >= FRESH_READING_MS ||
+                    connection.phase != ConnectionPhase.READY ||
+                    connection.status?.asleep == true,
             readAtMillis = readAt,
         )
     }
@@ -180,15 +181,14 @@ fun batteryPercent(
 
 /**
  * How long ago a reading was taken, worded the same on the notification and the
- * car view: "now" while the reading is fresh ([FRESH_READING_MS]), "<1m ago"
- * up to a minute, then whole minutes ("7m ago") up to an hour, then whole hours
- * ("2h ago") and days ("3d ago"). A stale reading always gets one of the ages.
+ * car view: "now" under a minute, then whole minutes ("7m ago") up to an hour,
+ * then whole hours ("2h ago") and days ("3d ago"). It does not depend on
+ * freshness: a reading greyed by sleep 3 minutes after it was read says "3m ago".
  */
 fun readingAgeText(ageMillis: Long): String {
     val minutes = ageMillis / 60_000
     return when {
-        ageMillis < FRESH_READING_MS -> "now"
-        minutes < 1 -> "<1m ago"
+        minutes < 1 -> "now"
         minutes < 60 -> "${minutes}m ago"
         minutes < 24 * 60 -> "${minutes / 60}h ago"
         else -> "${minutes / (24 * 60)}d ago"

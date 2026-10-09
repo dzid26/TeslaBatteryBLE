@@ -2,13 +2,13 @@
 package com.dzid26.teslable.ble
 
 import com.dzid26.teslable.core.history.BatterySample
-import com.dzid26.teslable.core.protocol.InfotainmentPollPolicy
-import com.tesla.generated.carserver.common.Void
 import com.tesla.generated.carserver.vehicle.ChargeState
+import com.tesla.generated.vcsec.UserPresence_E
+import com.tesla.generated.vcsec.VehicleLockState_E
+import com.tesla.generated.vcsec.VehicleSleepStatus_E
+import com.tesla.generated.vcsec.VehicleStatus
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ReadingAgeTest {
@@ -17,9 +17,9 @@ class ReadingAgeTest {
     private val day = 24 * hour
 
     @Test
-    fun `a reading inside the fresh window reads now`() {
+    fun `a reading under a minute old reads now`() {
         assertEquals("now", readingAgeText(0))
-        assertEquals("now", readingAgeText(FRESH_READING_MS - 1))
+        assertEquals("now", readingAgeText(minute - 1))
     }
 
     @Test
@@ -28,10 +28,9 @@ class ReadingAgeTest {
     }
 
     @Test
-    fun `the first label opens at the stale boundary and minutes read whole`() {
-        assertEquals("<1m ago", readingAgeText(FRESH_READING_MS))
-        assertEquals("<1m ago", readingAgeText(minute - 1))
+    fun `minutes read whole from the first minute`() {
         assertEquals("1m ago", readingAgeText(minute))
+        assertEquals("3m ago", readingAgeText(3 * minute))
         assertEquals("5m ago", readingAgeText(6 * minute - 1))
         assertEquals("12m ago", readingAgeText(12 * minute))
         assertEquals("59m ago", readingAgeText(hour - 1))
@@ -52,51 +51,66 @@ class ReadingAgeTest {
         assertEquals("40d ago", readingAgeText(40 * day))
     }
 
-    @Test
-    fun `a live reading is never now once batteryPercent calls it stale`() {
-        val readAt = 1_000L
-        val connection =
-            TeslaConnection(
-                address = "18:04:ED:84:79:80",
-                name = "Se1f0941734830fe7C",
-                charge =
-                    ChargeState(
-                        battery_level = 62,
-                        charge_limit_soc = 80,
-                        charging_state = ChargeState.ChargingState(Disconnected = Void()),
-                    ),
-                chargeAtMillis = readAt,
-            )
-        val nowMillis = readAt + FRESH_READING_MS
-        val reading = batteryPercent(connection, lastKnown = null, nowMillis = nowMillis)
-        assertTrue(reading?.stale == true)
-        assertNotEquals("now", readingAgeText(nowMillis - readAt))
-    }
+    private fun liveConnection(
+        readAt: Long?,
+        phase: ConnectionPhase = ConnectionPhase.READY,
+        status: VehicleStatus? = awake,
+    ) = TeslaConnection(
+        address = "18:04:ED:84:79:80",
+        name = "Se1f0941734830fe7C",
+        phase = phase,
+        status = status,
+        charge = ChargeState(battery_level = 62, charge_limit_soc = 80),
+        chargeAtMillis = readAt,
+    )
 
-    private fun liveConnection(readAt: Long?) =
-        TeslaConnection(
-            address = "18:04:ED:84:79:80",
-            name = "Se1f0941734830fe7C",
-            charge = ChargeState(battery_level = 62, charge_limit_soc = 80),
-            chargeAtMillis = readAt,
+    private val awake =
+        VehicleStatus(
+            vehicleLockState = VehicleLockState_E.VEHICLELOCKSTATE_LOCKED,
+            vehicleSleepStatus = VehicleSleepStatus_E.VEHICLE_SLEEP_STATUS_AWAKE,
+            userPresence = UserPresence_E.VEHICLE_USER_PRESENCE_NOT_PRESENT,
         )
 
+    private val asleep = awake.copy(vehicleSleepStatus = VehicleSleepStatus_E.VEHICLE_SLEEP_STATUS_ASLEEP)
+
     @Test
-    fun `a reading is fresh only while it is younger than the fresh window`() {
+    fun `an awake connected reading is fresh until it is five minutes old`() {
         val readAt = 1_000_000L
         val connection = liveConnection(readAt)
+        assertEquals(false, batteryPercent(connection, null, readAt + 4 * minute)?.stale)
         assertEquals(false, batteryPercent(connection, null, readAt + FRESH_READING_MS - 1)?.stale)
         assertEquals(true, batteryPercent(connection, null, readAt + FRESH_READING_MS)?.stale)
         assertEquals(true, batteryPercent(connection, null, readAt + 6 * minute)?.stale)
     }
 
     @Test
-    fun `fresh window follows the poll policy's read interval`() {
-        assertEquals(2 * InfotainmentPollPolicy.READ_INTERVAL_MS + FRESH_SLACK_MS, FRESH_READING_MS)
-        // One missed read (twice the interval) must not flip a reading to stale.
-        assertTrue(FRESH_READING_MS > 2 * InfotainmentPollPolicy.READ_INTERVAL_MS)
-        // And it greys well before a minute of silence.
-        assertTrue(FRESH_READING_MS < 60_000L)
+    fun `the same reading with an asleep status is stale and says how old it is`() {
+        val readAt = 1_000_000L
+        val now = readAt + 4 * minute
+        val reading = batteryPercent(liveConnection(readAt, status = asleep), null, now)
+        assertEquals(true, reading?.stale)
+        assertEquals("4m ago", reading?.ageLabel(now))
+    }
+
+    @Test
+    fun `a reading greyed by sleep soon after it was read is not called just read`() {
+        val readAt = 1_000_000L
+        val now = readAt + 3 * minute
+        assertEquals("3m ago", batteryPercent(liveConnection(readAt, status = asleep), null, now)?.ageLabel(now))
+    }
+
+    @Test
+    fun `a reading on a connection that is not ready is stale`() {
+        val readAt = 1_000_000L
+        for (phase in listOf(ConnectionPhase.DISCONNECTED, ConnectionPhase.CONNECTING, ConnectionPhase.FAILED)) {
+            assertEquals(true, batteryPercent(liveConnection(readAt, phase = phase), null, readAt + minute)?.stale)
+        }
+    }
+
+    @Test
+    fun `a reading with no status yet is not stale because of sleep`() {
+        val readAt = 1_000_000L
+        assertEquals(false, batteryPercent(liveConnection(readAt, status = null), null, readAt + minute)?.stale)
     }
 
     @Test
@@ -107,7 +121,7 @@ class ReadingAgeTest {
     @Test
     fun `the clock ticks at the moment a fresh reading turns stale, then every minute`() {
         val readAt = 1_000_000L
-        assertEquals(FRESH_READING_MS + 1, stalenessTickDelayMs(readAt, readAt))
+        assertEquals(STALENESS_TICK_MS, stalenessTickDelayMs(readAt, readAt))
         assertEquals(10_001L, stalenessTickDelayMs(readAt, readAt + FRESH_READING_MS - 10_000))
         assertEquals(STALENESS_TICK_MS, stalenessTickDelayMs(readAt, readAt + FRESH_READING_MS))
         assertEquals(STALENESS_TICK_MS, stalenessTickDelayMs(readAt, readAt + hour))
@@ -146,8 +160,8 @@ class ReadingAgeTest {
     fun `only a stale reading shows its age`() {
         val readAt = 1_000_000L
         val connection = liveConnection(readAt)
-        assertNull(batteryPercent(connection, null, readAt + 1_000)?.ageLabel(readAt + 1_000))
-        assertEquals("<1m ago", batteryPercent(connection, null, readAt + FRESH_READING_MS)?.ageLabel(readAt + FRESH_READING_MS))
+        assertNull(batteryPercent(connection, null, readAt + 4 * minute)?.ageLabel(readAt + 4 * minute))
+        assertEquals("5m ago", batteryPercent(connection, null, readAt + FRESH_READING_MS)?.ageLabel(readAt + FRESH_READING_MS))
         assertEquals("2h ago", batteryPercent(connection, null, readAt + 2 * hour)?.ageLabel(readAt + 2 * hour))
     }
 }
