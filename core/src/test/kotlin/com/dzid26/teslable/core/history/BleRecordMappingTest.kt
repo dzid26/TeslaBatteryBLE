@@ -292,7 +292,7 @@ class BleRecordMappingTest {
     @Test
     fun `a charge record maps onto the sample its raw charge state maps onto`() {
         val sample = BleRecord(device_timestamp = ofEpochSecond(1_001, 0), charge_state = charging).toBatterySample(VEHICLE)
-        assertEquals(charging.toBatterySample(VEHICLE), sample)
+        assertEquals(charging.toBatterySample(VEHICLE)?.copy(readAtMillis = 1_001_000L), sample)
         assertEquals(77, sample?.batteryLevel)
         assertEquals(ChargingStateKind.Charging, sample?.chargingState)
     }
@@ -306,9 +306,19 @@ class BleRecordMappingTest {
     }
 
     @Test
+    fun `a charge sample carries the phone read time apart from the car's timestamp`() {
+        // The car stamped the reply at 1_000 s; the phone read it at 1_090 s.
+        val sample = BleRecord(device_timestamp = ofEpochSecond(1_090, 0), charge_state = charging).toBatterySample(VEHICLE)
+        assertEquals(1_000_000L, sample?.timestampMillis)
+        assertEquals(1_090_000L, sample?.readAtMillis)
+    }
+
+    @Test
     fun `a charge record maps without device_timestamp`() {
         // The charge timeline is the car's own clock, so the phone's time is not needed to place a sample.
-        assertEquals(charging.toBatterySample(VEHICLE), BleRecord(charge_state = charging).toBatterySample(VEHICLE))
+        val sample = BleRecord(charge_state = charging).toBatterySample(VEHICLE)
+        assertEquals(charging.toBatterySample(VEHICLE), sample)
+        assertNull(sample?.readAtMillis)
     }
 
     @Test

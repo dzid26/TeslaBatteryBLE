@@ -676,7 +676,17 @@ class TeslaBleController(
         val window: AntiReplayWindow = AntiReplayWindow(),
     )
 
-    private enum class CommandKind { WAKE, CHARGE, DRIVE, CLOSURES, CLIMATE }
+    private enum class CommandKind {
+        WAKE,
+        CHARGE,
+        DRIVE,
+        CLOSURES,
+        CLIMATE,
+        ;
+
+        /** Part of an Infotainment read (charge, drive, closures, climate). */
+        val isRead: Boolean get() = this != WAKE
+    }
 
     /**
      * Everything that belongs to one car: the transport, sessions, pending
@@ -719,6 +729,9 @@ class TeslaBleController(
         /** Keeps the command log: every request goes out through [transmit], which logs it with its reason (ADR-0008). */
         val commands = CommandRecorder(bleName, historyStore, rssi = { latestRssi(address) })
 
+        /** Whether an Infotainment read is in flight, for the spinner; every exit clears it. */
+        private val readInFlight = ReadInFlight { active -> updateConnection(address) { it.copy(readInFlight = active) } }
+
         /** The reason of the read that is waiting for the Infotainment handshake. */
         private var waitingReadReason = Command.Reason.REASON_UNSPECIFIED
 
@@ -739,6 +752,7 @@ class TeslaBleController(
                     transport?.readRssi()
                     requestStatus()
                     commands.logUnanswered()
+                    readInFlight.expire(System.currentTimeMillis())
                     handler.postDelayed(this, POLL_MS)
                 }
             }
@@ -877,6 +891,7 @@ class TeslaBleController(
             pendingCommands.clear()
             keySlotQueue = emptyList()
             infotainmentGate.onLinkDropped()
+            readInFlight.onLinkDropped()
             wakeAfterSession = false
             pendingPairCheck = false
             updateConnection(address) {
@@ -889,6 +904,7 @@ class TeslaBleController(
             sessions.clear()
             pendingSessions.clear()
             pendingCommands.clear()
+            readInFlight.onLinkDropped()
             keySlotQueue = emptyList()
             pendingPairCheck = false
             wakeAfterSession = false
@@ -1148,7 +1164,10 @@ class TeslaBleController(
         fun requestChargeState(reason: Command.Reason = CommandRecords.reasonOf(infotainmentPolicy.lastReadReason)) {
             if (reason == Command.Reason.USER_REFRESH) infotainmentPolicy.onUserRequest(System.currentTimeMillis())
             when (infotainmentGate.onReadDue(isAwake(), sessions.containsKey(Domain.DOMAIN_INFOTAINMENT))) {
-                InfotainmentSessionGate.Action.SKIP -> log("${name()}: car is asleep; wake it first")
+                InfotainmentSessionGate.Action.SKIP -> {
+                    log("${name()}: car is asleep; wake it first")
+                    readInFlight.onSkipped()
+                }
 
                 InfotainmentSessionGate.Action.SEND_READ ->
                     sendAuthenticated(
@@ -1211,6 +1230,7 @@ class TeslaBleController(
             pendingCommands[uuid.toHex()] = PendingCommand(domain, requestId, kind, reason)
             val sent = transmit(encrypted.encode(), CommandRecords.authenticated(reason, domain, payload), uuid.toHex())
             if (!sent) log("${name()}: failed to send ${kind.name.lowercase()} request")
+            if (sent && kind.isRead) readInFlight.onSent(System.currentTimeMillis())
             return sent
         }
 
@@ -1228,6 +1248,8 @@ class TeslaBleController(
             val key = message.request_uuid.toByteArray().toHex()
             val pending = pendingCommands.remove(key) ?: return false
             commands.replied(key, fault, deviceTimestamp)
+            // A reply ends the read unless it sends the next request, which turns it back on.
+            if (pending.kind.isRead) readInFlight.onReply()
             if (!encrypted) {
                 log("${name()}: ${pending.kind.name.lowercase()} rejected (${fault?.signed_message_fault?.name})")
                 return true
@@ -1608,6 +1630,7 @@ class TeslaBleController(
                         handler.removeCallbacks(poll)
                         handler.removeCallbacks(rssiPoll)
                         infotainmentGate.onLinkDropped()
+                        readInFlight.onLinkDropped()
                         pendingSessions.clear()
                         val hadData =
                             _state.value.connections[address]?.let {

@@ -30,6 +30,8 @@ data class TeslaConnection(
     val charge: ChargeState? = null,
     /** When [charge] was last read; null until the first charge response. */
     val chargeAtMillis: Long? = null,
+    /** An Infotainment read (charge, drive, closures, climate) is in flight; the VCSEC status poll does not count. */
+    val readInFlight: Boolean = false,
     /** Pairing flow state for this car; idle unless a Pair is in flight. */
     val pairing: PairingPhase = PairingPhase.IDLE,
     val pairingKeyId: String? = null,
@@ -105,27 +107,79 @@ fun BleUiState.shouldTrack(): Boolean =
                 )
         }
 
-/** How old a reading may be before the UI treats it as last known, not live. */
-const val STALE_READING_MS = 5 * 60_000L
+/**
+ * How recent a live reading must be to count as fresh (blue), while the link is
+ * READY and the car is not asleep. An awake, idle car's charge does not move, and
+ * charging or driving keeps reads coming every few seconds, so a reading stays
+ * fresh for this long after it was read, and goes stale at once when the link
+ * drops or the car's latest VCSEC status says asleep, whichever comes first. The
+ * stored fallback is always stale.
+ */
+const val FRESH_READING_MS = 5 * 60_000L
 
 /**
- * How often a screen or the notification re-checks reading ages, so a reading
- * can turn stale while it is on display instead of waiting for new data.
+ * How often a screen or the notification re-checks reading ages when no
+ * reading is about to turn stale, so ages ("12m ago") stay current on a quiet screen.
  */
 const val STALENESS_TICK_MS = 60_000L
+
+/**
+ * How long to wait before the clock is read again: until the newest reading
+ * turns stale while it is still fresh (so it greys right at [FRESH_READING_MS],
+ * not at the next minute), otherwise [STALENESS_TICK_MS].
+ */
+fun stalenessTickDelayMs(
+    readAtMillis: Long?,
+    nowMillis: Long,
+): Long {
+    if (readAtMillis == null) return STALENESS_TICK_MS
+    val untilStale = readAtMillis + FRESH_READING_MS - nowMillis
+    return if (untilStale > 0) minOf(untilStale + 1, STALENESS_TICK_MS) else STALENESS_TICK_MS
+}
+
+/** A read spinner, once shown, stays visible at least this long so a sub-second read does not flicker. */
+const val READ_SPINNER_MIN_VISIBLE_MS = 600L
+
+/** How much longer a spinner shown at [shownAtMillis] must stay visible at [nowMillis]; 0 once the minimum has passed. */
+fun spinnerHoldMs(
+    shownAtMillis: Long,
+    nowMillis: Long,
+): Long = (READ_SPINNER_MIN_VISIBLE_MS - (nowMillis - shownAtMillis)).coerceIn(0, READ_SPINNER_MIN_VISIBLE_MS)
 
 /** A battery percentage with its freshness: live, or the last stored sample. */
 data class BatteryPercent(
     val value: Int,
     val stale: Boolean,
-    /** When the reading was taken, when known. */
+    /** The phone's clock when the reading was read, when known; never the car's clock. */
     val readAtMillis: Long?,
 )
 
 /**
+ * The age shown in the status card's top-right corner for a stale percentage
+ * ("12m ago"); null for a fresh reading (still being read) and for one whose
+ * read time is unknown. When the car is not connected ([connection] null or not
+ * READY) an age under a minute reads "<1m ago", never "now", which would look
+ * like a live reading; "now" stays for a connected car whose reading greyed
+ * because it fell asleep.
+ */
+fun BatteryPercent.ageLabel(
+    nowMillis: Long,
+    connection: TeslaConnection?,
+): String? {
+    val readAt = readAtMillis?.takeIf { stale } ?: return null
+    val age = readingAgeText(nowMillis - readAt)
+    val connected = connection?.phase == ConnectionPhase.READY
+    return if (!connected && age == READING_NOW_TEXT) READING_UNDER_A_MINUTE_TEXT else age
+}
+
+private const val READING_NOW_TEXT = "now"
+private const val READING_UNDER_A_MINUTE_TEXT = "<1m ago"
+
+/**
  * The percentage to show for a car: the live charge when there is one,
- * otherwise the newest stored sample. [BatteryPercent.stale] marks anything
- * not read within [STALE_READING_MS], including every stored fallback.
+ * otherwise the newest stored sample. [BatteryPercent.stale] marks a live
+ * reading that is [FRESH_READING_MS] old or older, whose connection is not READY,
+ * or whose car's latest status says asleep, and every stored fallback.
  */
 fun batteryPercent(
     connection: TeslaConnection?,
@@ -137,24 +191,30 @@ fun batteryPercent(
         val readAt = connection.chargeAtMillis
         return BatteryPercent(
             value = live,
-            stale = readAt == null || nowMillis - readAt > STALE_READING_MS,
+            stale =
+                readAt == null ||
+                    nowMillis - readAt >= FRESH_READING_MS ||
+                    connection.phase != ConnectionPhase.READY ||
+                    connection.status?.asleep == true,
             readAtMillis = readAt,
         )
     }
     return lastKnown?.let {
-        BatteryPercent(value = it.percent, stale = true, readAtMillis = it.timestampMillis)
+        // The age is the phone's read time; the sample's own timestamp is the car's clock.
+        BatteryPercent(value = it.percent, stale = true, readAtMillis = it.readAtMillis)
     }
 }
 
 /**
  * How long ago a reading was taken, worded the same on the notification and the
- * car view: "just now" while it is under [STALE_READING_MS] old, then whole
- * minutes ("7m ago") up to an hour, then whole hours ("2h ago") and days ("3d ago").
+ * car view: "now" under a minute, then whole minutes ("7m ago") up to an hour,
+ * then whole hours ("2h ago") and days ("3d ago"). It does not depend on
+ * freshness: a reading greyed by sleep 3 minutes after it was read says "3m ago".
  */
 fun readingAgeText(ageMillis: Long): String {
     val minutes = ageMillis / 60_000
     return when {
-        ageMillis < STALE_READING_MS -> "just now"
+        minutes < 1 -> READING_NOW_TEXT
         minutes < 60 -> "${minutes}m ago"
         minutes < 24 * 60 -> "${minutes / 60}h ago"
         else -> "${minutes / (24 * 60)}d ago"

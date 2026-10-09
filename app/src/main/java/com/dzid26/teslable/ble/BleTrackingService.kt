@@ -33,7 +33,10 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 /**
@@ -94,13 +97,24 @@ class BleTrackingService : Service() {
                 publish(modelsFor(state, history))
             }
         }
-        // The charge reading ages between state changes; re-evaluate every
-        // minute so the percentage can turn gray at the staleness boundary.
+        // The charge reading ages between state changes; re-evaluate when the
+        // newest one is due to turn gray (sooner than the minute tick while it
+        // is fresh) and every minute after, so ages and durations stay current.
+        // publish() posts only what changed, so this is at most one post a minute.
         scope.launch {
-            while (true) {
-                delay(STALENESS_TICK_MS)
-                publish(modelsFor(controller.state.value, controller.batteryHistory.value))
-            }
+            controller.state
+                .map { state ->
+                    state.connections.values
+                        .mapNotNull { it.chargeAtMillis }
+                        .maxOrNull()
+                }.distinctUntilChanged()
+                .collectLatest { newestRead ->
+                    // A newer read restarts this loop, so the timing follows the latest reading.
+                    while (true) {
+                        delay(stalenessTickDelayMs(newestRead, System.currentTimeMillis()))
+                        publish(modelsFor(controller.state.value, controller.batteryHistory.value))
+                    }
+                }
         }
     }
 
@@ -159,7 +173,9 @@ class BleTrackingService : Service() {
                 rssi = display.rssi,
                 percent = reading?.value,
                 percentStale = reading?.stale == true,
-                percentAgeLabel = reading?.readAtMillis?.let { readingAgeText(now - it) },
+                // Only a stale reading shows its age; a fresh one stays null so the
+                // notification is not re-posted while reads keep arriving.
+                percentAgeLabel = reading?.ageLabel(now, connection),
                 showWake =
                     connection.status?.asleep == true &&
                         connection.sessions.contains("DOMAIN_VEHICLE_SECURITY"),

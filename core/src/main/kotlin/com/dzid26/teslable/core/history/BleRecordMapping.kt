@@ -18,8 +18,11 @@ import com.dzid26.teslable.core.protocol.userPresent
  * The battery sample for a logged charge reply, or null unless the record
  * holds a charge state with a level and the car's own timestamp. The sample
  * sits on that car timestamp: `device_timestamp` never stands in for it (ADR-0006).
+ * It also carries `device_timestamp` as [BatterySample.readAtMillis], the phone
+ * time the reply was read, for showing a reading's age.
  */
-fun BleRecord.toBatterySample(vehicleId: String): BatterySample? = charge_state?.toBatterySample(vehicleId)
+fun BleRecord.toBatterySample(vehicleId: String): BatterySample? =
+    charge_state?.toBatterySample(vehicleId)?.copy(readAtMillis = device_timestamp?.toEpochMilli())
 
 /**
  * The status sample for a logged VCSEC reply, or null unless the record holds

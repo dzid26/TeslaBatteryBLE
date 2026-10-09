@@ -5,6 +5,7 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -62,10 +63,10 @@ import com.dzid26.teslable.ble.PairingPhase
 import com.dzid26.teslable.ble.TeslaAdvert
 import com.dzid26.teslable.ble.TeslaConnection
 import com.dzid26.teslable.ble.Vehicle
+import com.dzid26.teslable.ble.ageLabel
 import com.dzid26.teslable.ble.batteryPercent
 import com.dzid26.teslable.ble.chargingStateText
 import com.dzid26.teslable.ble.connectionDisplay
-import com.dzid26.teslable.ble.readingAgeText
 import com.dzid26.teslable.ble.vehicleStatusText
 import com.dzid26.teslable.core.history.BatterySample
 import com.dzid26.teslable.core.history.ChargeProjection
@@ -230,7 +231,7 @@ private fun HeroCard(
     // With no live reading, the newest stored sample still answers "how full
     // is the car?" at a glance; the caption makes its age explicit.
     val lastKnown = history.lastOrNull()
-    val nowMillis = rememberNowMillis()
+    val nowMillis = rememberNowMillis(connection?.chargeAtMillis)
     val reading = batteryPercent(connection, lastKnown, nowMillis)
     val keySlot = connection?.keySlot ?: vehicle?.keySlot
     val pairing = connection?.pairing ?: PairingPhase.IDLE
@@ -239,56 +240,73 @@ private fun HeroCard(
             Modifier
                 .fillMaxWidth(),
     ) {
-        Column(Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(display.title, style = MaterialTheme.typography.titleMedium)
-                    // The app key state sits above the connection state: it is
-                    // what unlocks authenticated reads.
-                    if (keySlot != null || pairing == PairingPhase.OK) {
+        Box {
+            Column(Modifier.padding(16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(display.title, style = MaterialTheme.typography.titleMedium)
+                        // The app key state sits above the connection state: it is
+                        // what unlocks authenticated reads.
+                        if (keySlot != null || pairing == PairingPhase.OK) {
+                            Text(
+                                text = keySlot?.let { "App key paired · slot $it" } ?: "App key paired",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                         Text(
-                            text = keySlot?.let { "App key paired · slot $it" } ?: "App key paired",
+                            text = display.status,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                        if (pairing == PairingPhase.OK) {
+                            // Only shown for the pairing that just succeeded; the
+                            // Tesla screen calls the key Phone Key, so this hint does.
+                            Text(
+                                text = "Rename the Phone Key in Controls > Locks on the Tesla screen.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
                     }
+                    StatusPill(
+                        connection = connection,
+                        onAsleepClick = {
+                            Toast
+                                .makeText(context, "Swipe down to wake the car", Toast.LENGTH_SHORT)
+                                .show()
+                        },
+                    )
+                }
+                Spacer(Modifier.height(12.dp))
+                SocBlock(
+                    reading = reading,
+                    live = charge?.battery_level != null,
+                    lastKnown = lastKnown,
+                    stateText = display.stateText,
+                )
+                Spacer(Modifier.height(8.dp))
+                connection?.status?.let { status ->
+                    Text(vehicleStatusText(status), style = MaterialTheme.typography.bodySmall)
+                }
+                ChargeDetails(charge)
+            }
+            // The card's top-right corner, clear of the title and the pill: a spinner while a
+            // read is in flight, and how old a stale reading is.
+            Row(
+                modifier = Modifier.align(Alignment.TopEnd).padding(top = 6.dp, end = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                ReadingSpinner(connection)
+                reading?.ageLabel(nowMillis, connection)?.let { age ->
                     Text(
-                        text = display.status,
+                        text = age,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    if (pairing == PairingPhase.OK) {
-                        // Only shown for the pairing that just succeeded; the
-                        // Tesla screen calls the key Phone Key, so this hint does.
-                        Text(
-                            text = "Rename the Phone Key in Controls > Locks on the Tesla screen.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                    }
                 }
-                StatusPill(
-                    connection = connection,
-                    onAsleepClick = {
-                        Toast
-                            .makeText(context, "Swipe down to wake the car", Toast.LENGTH_SHORT)
-                            .show()
-                    },
-                )
             }
-            Spacer(Modifier.height(12.dp))
-            SocBlock(
-                reading = reading,
-                live = charge?.battery_level != null,
-                lastKnown = lastKnown,
-                stateText = display.stateText,
-                nowMillis = nowMillis,
-            )
-            Spacer(Modifier.height(8.dp))
-            connection?.status?.let { status ->
-                Text(vehicleStatusText(status), style = MaterialTheme.typography.bodySmall)
-            }
-            ChargeDetails(charge)
         }
     }
 }
@@ -314,8 +332,8 @@ private fun ChargeDetails(charge: ChargeState?) {
 
 /**
  * The big battery reading, colored like the cars list: primary while fresh,
- * outline once stale, with how old it is under the number. With no reading at
- * all, the connection state shows instead.
+ * outline once stale. With no reading at all, the connection state shows
+ * instead. How old a stale reading is shows in the card's top-right corner.
  */
 @Composable
 private fun SocBlock(
@@ -323,34 +341,26 @@ private fun SocBlock(
     live: Boolean,
     lastKnown: BatterySample?,
     stateText: String,
-    nowMillis: Long,
 ) {
     if (reading == null) {
         Text(text = stateText, style = MaterialTheme.typography.headlineSmall)
         return
     }
     val color = if (reading.stale) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.primary
-    Row(verticalAlignment = Alignment.Bottom) {
+    // The number and the "%" share one text baseline.
+    Row {
         Text(
             text = "${reading.value}",
             style = MaterialTheme.typography.displayLarge,
             fontWeight = FontWeight.SemiBold,
             color = color,
+            modifier = Modifier.alignByBaseline(),
         )
         Text(
             text = "%",
             style = MaterialTheme.typography.headlineSmall,
             color = color,
-            modifier = Modifier.padding(bottom = 6.dp),
-        )
-    }
-    val readAtMillis = reading.readAtMillis
-    if (reading.stale && readAtMillis != null) {
-        Spacer(Modifier.height(4.dp))
-        Text(
-            text = "Last known · ${readingAgeText(nowMillis - readAtMillis)}",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.alignByBaseline(),
         )
     }
     if (live) {

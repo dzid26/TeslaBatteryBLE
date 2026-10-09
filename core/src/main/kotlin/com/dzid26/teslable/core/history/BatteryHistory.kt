@@ -29,6 +29,14 @@ data class BatterySample(
     val chargeEnergyAdded: Float? = null,
     /** `charge_miles_added_rated`: rated miles added so far this session. */
     val chargeMilesAddedRated: Float? = null,
+    /**
+     * The phone's clock when the reply was read (the record's `device_timestamp`),
+     * or null when the record has none. This is what "last read" means, and it
+     * is the only time the app shows as a reading's age: [timestampMillis] is
+     * the car's own clock, which places the sample on the chart but says
+     * nothing reliable about when the phone last heard from the car.
+     */
+    val readAtMillis: Long? = null,
 ) {
     /** The displayed level, derived for the chart, stats, and car view. */
     val percent: Int get() = batteryLevel
