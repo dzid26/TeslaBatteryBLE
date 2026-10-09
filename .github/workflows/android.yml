@@ -11,6 +11,11 @@ on:
       - 'website/**'
       - 'fastlane/**'
       - 'LICENSE'
+      # CI plumbing that cannot change the app: scripts and the PR/website
+      # screenshot workflows (android.yml itself still runs the CI).
+      - '.github/scripts/**'
+      - '.github/workflows/pr-*.yml'
+      - '.github/workflows/website-*.yml'
   pull_request:
     paths-ignore:
       - '**.md'
@@ -18,6 +23,11 @@ on:
       - 'website/**'
       - 'fastlane/**'
       - 'LICENSE'
+      # CI plumbing that cannot change the app: scripts and the PR/website
+      # screenshot workflows (android.yml itself still runs the CI).
+      - '.github/scripts/**'
+      - '.github/workflows/pr-*.yml'
+      - '.github/workflows/website-*.yml'
   # Run on main with `release` ticked to cut a release from the branch head: CI
   # tags it, builds, captures screenshots and publishes the draft release, so
   # nothing is public until it is complete. The tag and pre-release flag come
