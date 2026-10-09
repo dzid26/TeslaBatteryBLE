@@ -12,6 +12,8 @@ plugins {
 // place a release version is written down:
 //   v0.3.0-beta.3          -> versionName 0.3.0-beta.3
 //   v0.3.0-beta.3 + 12 commits -> versionName 0.3.0-beta.3-12-g6ac4527
+// CI pull request builds (env PR_NUMBER, plus HEAD_SHA or GITHUB_SHA) name the PR
+// and its head commit instead: 0.3.0-beta.3-pr85-6ac4527 (see ciVersionName).
 // versionCode is computed from the tag's semver: major * 1_000_000 +
 // minor * 10_000 + patch * 100 + stage, where stage is the pre-release number
 // (beta.3 -> 3, no number -> 0) and a stable release is 99, so it sorts above
@@ -33,7 +35,26 @@ val gitDescribe: String =
 val tagVersion =
     Regex("""^v(\d+)[.](\d+)[.](\d+)(?:-([0-9A-Za-z.]+?))?(?:-\d+-g[0-9a-f]+)?$""")
         .matchEntire(gitDescribe)
-val gitVersionName = if (tagVersion != null) gitDescribe.removePrefix("v") else "0.0.0-dev"
+val describedVersionName = if (tagVersion != null) gitDescribe.removePrefix("v") else "0.0.0-dev"
+
+// Pull request number and head commit, set by CI. GITHUB_SHA on a pull_request
+// event is a synthetic merge commit, so CI passes the real head as HEAD_SHA.
+val ciPrNumber = providers.environmentVariable("PR_NUMBER").orNull.orEmpty()
+val ciHeadSha =
+    (providers.environmentVariable("HEAD_SHA").orNull ?: providers.environmentVariable("GITHUB_SHA").orNull).orEmpty()
+
+fun ciVersionName(
+    described: String,
+    prNumber: String,
+    headSha: String,
+): String =
+    if (prNumber.isBlank() || headSha.isBlank()) {
+        described
+    } else {
+        "${described.replace(Regex("-\\d+-g[0-9a-f]+$"), "")}-pr$prNumber-${headSha.take(7)}"
+    }
+
+val gitVersionName = ciVersionName(describedVersionName, ciPrNumber, ciHeadSha)
 val gitVersionCode: Int =
     tagVersion?.let { match ->
         val (majorText, minorText, patchText, preRelease) = match.destructured
@@ -65,9 +86,6 @@ val keystoreProperties =
 // clashing with its signature.
 // Preview, release and demo builds never set it and keep the real ID.
 val ciDebugBuild = project.findProperty("ciDebugBuild") == "true"
-
-// Pull request number (-PciPrNumber=<n>), shown in the PR build's versionName.
-val ciPrNumber = (project.findProperty("ciPrNumber") as String?).orEmpty()
 
 android {
     namespace = "com.dzid26.teslable"
@@ -110,7 +128,6 @@ android {
             signingConfigs.findByName("release")?.let { signingConfig = it }
             if (ciDebugBuild) {
                 applicationIdSuffix = ".pr"
-                versionNameSuffix = "-pr$ciPrNumber"
                 manifestPlaceholders["appLabel"] = "TeslaBatteryBLE PR$ciPrNumber"
             }
         }
