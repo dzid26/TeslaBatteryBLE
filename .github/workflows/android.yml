@@ -117,7 +117,7 @@ jobs:
         run: ./gradlew ktlintCheck detekt
 
       # The artifact gets its own application ID (.pr), launcher label and a
-      # versionName like 0.4.1-beta.1-pr85-a47c909 (PR number and head sha from the
+      # versionName like 0.4.1-beta.1+pr85@a47c909 (PR number and head sha from the
       # env below), so it installs next to the release app and says which commit it
       # is. The release job builds without them.
       - name: Build debug APK
