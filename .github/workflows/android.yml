@@ -67,6 +67,11 @@ concurrency:
 # environment and builds the signed APK itself. `draft` (main) needs no secrets.
 jobs:
   build:
+    # Release runs skip this job: the release job verifies, builds and signs
+    # the app itself, so the app is not built twice.
+    if: |
+      !(startsWith(github.ref, 'refs/tags/') ||
+        (github.event_name == 'workflow_dispatch' && (inputs.release || inputs.tag != '')))
     permissions:
       contents: read
     outputs:
@@ -104,17 +109,8 @@ jobs:
           # Values pasted on Windows end in CRLF, and some encoders wrap lines.
           printf '%s' "$CI_DEBUG_KEYSTORE_BASE64" | tr -d '[:space:]' | base64 -d > "$dir/debug.keystore"
 
-      - name: Unit tests (:core)
-        run: ./gradlew :core:test
-
-      - name: App unit tests
-        run: ./gradlew :app:testDebugUnitTest
-
-      - name: Android lint
-        run: ./gradlew :app:lintDebug
-
-      - name: Static analysis (ktlint, detekt)
-        run: ./gradlew ktlintCheck detekt
+      - name: Verify (tests, lint, static analysis)
+        run: bash .github/scripts/verify.sh
 
       # The artifact gets its own application ID (.pr), launcher label and a
       # versionName like 0.4.1-beta.1+pr85@a47c909 (PR number and head sha from the
@@ -146,7 +142,6 @@ jobs:
 
   release:
     name: Tag release
-    needs: build
     if: |
       startsWith(github.ref, 'refs/tags/') ||
       (github.event_name == 'workflow_dispatch' && (inputs.release || inputs.tag != ''))
@@ -219,6 +214,10 @@ jobs:
           # Created locally first, because versionName and versionCode derive
           # from it; it is pushed only when publishing.
           git tag "$tag"
+
+      # The CI build job is skipped on release runs, so verify here.
+      - name: Verify (tests, lint, static analysis)
+        run: bash .github/scripts/verify.sh
 
       - name: Set up signing
         env:
