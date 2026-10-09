@@ -7,13 +7,28 @@ import com.dzid26.teslable.core.protocol.ShiftStateKind
 import com.squareup.wire.ofEpochSecond
 import com.tesla.generated.carserver.common.LatLong
 import com.tesla.generated.carserver.common.Void
+import com.tesla.generated.carserver.server.Action
+import com.tesla.generated.carserver.server.ActionStatus
+import com.tesla.generated.carserver.server.GetChargeState
+import com.tesla.generated.carserver.server.GetVehicleData
+import com.tesla.generated.carserver.server.ResultReason
+import com.tesla.generated.carserver.server.VehicleAction
 import com.tesla.generated.carserver.vehicle.ChargeState
 import com.tesla.generated.carserver.vehicle.ClimateState
 import com.tesla.generated.carserver.vehicle.ClosuresState
 import com.tesla.generated.carserver.vehicle.DriveState
 import com.tesla.generated.carserver.vehicle.ShiftState
+import com.tesla.generated.universalmessage.Destination
+import com.tesla.generated.universalmessage.Domain
+import com.tesla.generated.universalmessage.MessageFault_E
+import com.tesla.generated.universalmessage.MessageStatus
+import com.tesla.generated.universalmessage.RoutableMessage
+import com.tesla.generated.universalmessage.SessionInfoRequest
 import com.tesla.generated.vcsec.ClosureState_E
 import com.tesla.generated.vcsec.ClosureStatuses
+import com.tesla.generated.vcsec.CommandStatus
+import com.tesla.generated.vcsec.RKEAction_E
+import com.tesla.generated.vcsec.UnsignedMessage
 import com.tesla.generated.vcsec.UserPresence_E
 import com.tesla.generated.vcsec.VehicleLockState_E
 import com.tesla.generated.vcsec.VehicleSleepStatus_E
@@ -22,6 +37,8 @@ import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import com.tesla.generated.carserver.server.OperationStatus_E as CarServerStatus
+import com.tesla.generated.vcsec.OperationStatus_E as VcsecStatus
 
 class BleRecordMappingTest {
     /** A charge reply the car stamped at 1000 s on its own clock. */
@@ -93,6 +110,176 @@ class BleRecordMappingTest {
         assertEquals(6 shl 3 or lengthDelimited, tag(BleRecord(connection_event = connected)))
         assertEquals(7 shl 3 or lengthDelimited, tag(BleRecord(closures_state = ClosuresState())))
         assertEquals(8 shl 3 or lengthDelimited, tag(BleRecord(climate_state = ClimateState())))
+        // The command log's kinds took the next free numbers.
+        assertEquals(9 shl 3 or lengthDelimited, tag(BleRecord(command = Command(reason = Command.Reason.USER_WAKE))))
+        assertEquals(10 shl 3 or lengthDelimited, tag(BleRecord(command_result = CommandResult(timed_out = true))))
+        assertEquals(11 shl 3 or lengthDelimited, tag(BleRecord(app_state = AppState(event = AppState.Event.SCREEN_ON))))
+    }
+
+    @Test
+    fun `command, result and app state fields keep their numbers on the wire`() {
+        val varint = 0
+        val lengthDelimited = 2
+
+        fun tag(
+            field: Int,
+            wireType: Int,
+        ) = (field shl 3 or wireType).toByte()
+        // Command: reason 1, then the request oneof 2 to 4.
+        assertContentEquals(byteArrayOf(tag(1, varint), 1), Command(reason = Command.Reason.USER_WAKE).encode())
+        assertEquals(tag(2, lengthDelimited), Command(vcsec = UnsignedMessage()).encode().first())
+        assertEquals(tag(3, lengthDelimited), Command(infotainment = Action()).encode().first())
+        assertEquals(tag(4, lengthDelimited), Command(session_info = RoutableMessage()).encode().first())
+        // CommandResult: reason 1, domain 2, the status oneof 3 to 5, timed_out 6.
+        assertEquals(tag(1, varint), CommandResult(reason = Command.Reason.USER_WAKE).encode().first())
+        assertEquals(tag(2, varint), CommandResult(domain = Domain.DOMAIN_INFOTAINMENT).encode().first())
+        assertEquals(tag(3, lengthDelimited), CommandResult(action_status = ActionStatus()).encode().first())
+        assertEquals(tag(4, lengthDelimited), CommandResult(command_status = CommandStatus()).encode().first())
+        assertEquals(tag(5, lengthDelimited), CommandResult(message_status = MessageStatus()).encode().first())
+        assertContentEquals(byteArrayOf(tag(6, varint), 1), CommandResult(timed_out = true).encode())
+        // AppState: event 1, start_reason 2.
+        assertContentEquals(byteArrayOf(tag(1, varint), 2), AppState(event = AppState.Event.SCREEN_OFF).encode())
+        assertContentEquals(
+            byteArrayOf(tag(2, varint), 2),
+            AppState(start_reason = AppState.StartReason.BOOT).encode(),
+        )
+    }
+
+    @Test
+    fun `reasons and app events keep their numbers on the wire`() {
+        // Stored format: the enum numbers are part of every record already written.
+        assertEquals(
+            listOf(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10),
+            Command.Reason.entries.map { it.value },
+        )
+        assertEquals(1, Command.Reason.USER_WAKE.value)
+        assertEquals(2, Command.Reason.USER_REFRESH.value)
+        assertEquals(3, Command.Reason.POLICY_ACTIVE.value)
+        assertEquals(4, Command.Reason.POLICY_HOLD.value)
+        assertEquals(5, Command.Reason.POLICY_SAFETY.value)
+        assertEquals(6, Command.Reason.FRESH_START.value)
+        assertEquals(7, Command.Reason.SESSION_HANDSHAKE.value)
+        assertEquals(8, Command.Reason.FOLLOW_UP.value)
+        assertEquals(9, Command.Reason.PAIRING.value)
+        assertEquals(10, Command.Reason.KEY_LOOKUP.value)
+        assertEquals(
+            listOf(0, 1, 2, 3, 4, 5, 6),
+            AppState.Event.entries.map { it.value },
+        )
+        assertEquals(
+            listOf(0, 1, 2, 3, 4),
+            AppState.StartReason.entries.map { it.value },
+        )
+    }
+
+    @Test
+    fun `command records round-trip through the log codec whole`() {
+        val wake = UnsignedMessage(RKEAction = RKEAction_E.RKE_ACTION_WAKE_VEHICLE)
+        val read =
+            Action(
+                vehicleAction = VehicleAction(getVehicleData = GetVehicleData(getChargeState = GetChargeState())),
+            )
+        val handshake =
+            RoutableMessage(
+                to_destination = Destination(domain = Domain.DOMAIN_INFOTAINMENT),
+                session_info_request = SessionInfoRequest(),
+            )
+        val records =
+            listOf(
+                BleRecord(
+                    device_timestamp = ofEpochSecond(20, 0),
+                    rssi = -55,
+                    command = Command(reason = Command.Reason.USER_WAKE, vcsec = wake),
+                ),
+                BleRecord(
+                    device_timestamp = ofEpochSecond(21, 0),
+                    rssi = -56,
+                    command = Command(reason = Command.Reason.POLICY_HOLD, infotainment = read),
+                ),
+                BleRecord(
+                    device_timestamp = ofEpochSecond(22, 0),
+                    command = Command(reason = Command.Reason.SESSION_HANDSHAKE, session_info = handshake),
+                ),
+            )
+        val decoded = ProtoLog.decode(ProtoLog.encode(records), BleRecord.ADAPTER)
+        assertEquals(records, decoded)
+        assertEquals(wake, decoded[0].command?.vcsec)
+        assertEquals(read, decoded[1].command?.infotainment)
+        assertEquals(handshake, decoded[2].command?.session_info)
+        assertNull(decoded[2].rssi)
+        // Not a reading: no read model picks a command up.
+        decoded.forEach {
+            assertNull(it.toBatterySample("car"))
+            assertNull(it.toStatusSample("car"))
+            assertNull(it.toDriveSample("car"))
+        }
+    }
+
+    @Test
+    fun `command results round-trip through the log codec whole`() {
+        val refusedRead =
+            CommandResult(
+                reason = Command.Reason.POLICY_ACTIVE,
+                domain = Domain.DOMAIN_INFOTAINMENT,
+                action_status =
+                    ActionStatus(
+                        result = CarServerStatus.OPERATIONSTATUS_ERROR,
+                        result_reason = ResultReason(plain_text = "unavailable"),
+                    ),
+            )
+        val refusedWake =
+            CommandResult(
+                reason = Command.Reason.USER_WAKE,
+                domain = Domain.DOMAIN_VEHICLE_SECURITY,
+                command_status = CommandStatus(operationStatus = VcsecStatus.OPERATIONSTATUS_ERROR),
+            )
+        val fault =
+            CommandResult(
+                reason = Command.Reason.FOLLOW_UP,
+                domain = Domain.DOMAIN_INFOTAINMENT,
+                message_status = MessageStatus(signed_message_fault = MessageFault_E.MESSAGEFAULT_ERROR_BUSY),
+            )
+        val silence =
+            CommandResult(reason = Command.Reason.USER_REFRESH, domain = Domain.DOMAIN_INFOTAINMENT, timed_out = true)
+        val records =
+            listOf(refusedRead, refusedWake, fault, silence).mapIndexed { index, result ->
+                BleRecord(device_timestamp = ofEpochSecond(30L + index, 0), rssi = -60, command_result = result)
+            }
+        val decoded = ProtoLog.decode(ProtoLog.encode(records), BleRecord.ADAPTER)
+        assertEquals(records, decoded)
+        assertEquals(
+            "unavailable",
+            decoded[0]
+                .command_result
+                ?.action_status
+                ?.result_reason
+                ?.plain_text,
+        )
+        assertEquals(true, decoded[3].command_result?.timed_out)
+        // A reply with a status carries no timed_out flag: absent, not false.
+        assertNull(decoded[0].command_result?.timed_out)
+    }
+
+    @Test
+    fun `app state records round-trip through the log codec whole`() {
+        val records =
+            listOf(
+                BleRecord(
+                    device_timestamp = ofEpochSecond(40, 0),
+                    app_state =
+                        AppState(
+                            event = AppState.Event.TRACKING_STARTED,
+                            start_reason = AppState.StartReason.PACKAGE_REPLACED,
+                        ),
+                ),
+                BleRecord(device_timestamp = ofEpochSecond(41, 0), app_state = AppState(event = AppState.Event.SCREEN_OFF)),
+                BleRecord(device_timestamp = ofEpochSecond(42, 0), app_state = AppState(event = AppState.Event.APP_BACKGROUND)),
+            )
+        val decoded = ProtoLog.decode(ProtoLog.encode(records), BleRecord.ADAPTER)
+        assertEquals(records, decoded)
+        assertEquals(AppState.StartReason.PACKAGE_REPLACED, decoded[0].app_state?.start_reason)
+        // Only a start has a reason.
+        assertNull(decoded[1].app_state?.start_reason)
     }
 
     @Test
@@ -300,9 +487,9 @@ class BleRecordMappingTest {
 
     @Test
     fun `a payload kind from a newer version reads as a record without a known payload`() {
-        // A newer writer's record: field 9, a payload kind added after climate_state, beside device_timestamp.
-        val fieldNine = byteArrayOf(0x4A, 0x02, 0x08, 0x01)
-        val record = BleRecord.ADAPTER.decode(BleRecord(device_timestamp = ofEpochSecond(5, 0)).encode() + fieldNine)
+        // A newer writer's record: field 12, a payload kind added after app_state, beside device_timestamp.
+        val fieldTwelve = byteArrayOf(0x62, 0x02, 0x08, 0x01)
+        val record = BleRecord.ADAPTER.decode(BleRecord(device_timestamp = ofEpochSecond(5, 0)).encode() + fieldTwelve)
         assertEquals(ofEpochSecond(5, 0), record.device_timestamp)
         assertNull(record.toBatterySample("car"))
         assertNull(record.toStatusSample("car"))

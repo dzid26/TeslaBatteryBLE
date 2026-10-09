@@ -5,10 +5,13 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import com.dzid26.teslable.core.TeslaNames
+import com.dzid26.teslable.core.history.AppState
 import com.dzid26.teslable.core.history.BatterySample
+import com.dzid26.teslable.core.history.Command
 import com.dzid26.teslable.core.history.ConnectionEvent
 import com.dzid26.teslable.core.history.DriveSample
 import com.dzid26.teslable.core.protocol.AntiReplayWindow
+import com.dzid26.teslable.core.protocol.CommandRecords
 import com.dzid26.teslable.core.protocol.InfotainmentPollPolicy
 import com.dzid26.teslable.core.protocol.InfotainmentSessionGate
 import com.dzid26.teslable.core.protocol.TeslaCommands
@@ -20,6 +23,7 @@ import com.dzid26.teslable.core.protocol.TeslaSessionRequests
 import com.dzid26.teslable.core.protocol.TeslaVcsec
 import com.dzid26.teslable.core.protocol.asleep
 import com.dzid26.teslable.core.protocol.chargingStateKind
+import com.dzid26.teslable.core.protocol.isRefusal
 import com.dzid26.teslable.core.protocol.locked
 import com.dzid26.teslable.core.protocol.userPresent
 import com.dzid26.teslable.history.HistoryStore
@@ -62,6 +66,7 @@ class TeslaBleController(
     private val clientAddress = TeslaCrypto.randomBytes(16)
     private var selectedBleName: String? = null
     private var uiVisible = false
+    private var lastVisibilityEvent: AppState.Event? = null
 
     private val scanner =
         TeslaScanner(
@@ -337,7 +342,25 @@ class TeslaBleController(
 
     fun requestChargeState(bleName: String? = null) {
         val link = (bleName ?: selectedBleName)?.let(links::get) ?: return
-        link.requestChargeState(userRequested = true)
+        link.requestChargeState(Command.Reason.USER_REFRESH)
+    }
+
+    /**
+     * Logs a change in the app's own state (ADR-0008); [startReason] goes with a tracking start. A
+     * foreground or background event that repeats the last one (a rotation restarts the activity) is dropped.
+     */
+    fun recordAppState(
+        event: AppState.Event,
+        startReason: AppState.StartReason? = null,
+    ) {
+        if (event == AppState.Event.APP_FOREGROUND || event == AppState.Event.APP_BACKGROUND) {
+            if (event == lastVisibilityEvent) return
+            lastVisibilityEvent = event
+        }
+        historyStore.recordAppState(
+            AppState(event = event, start_reason = startReason),
+            Instant.ofEpochMilli(System.currentTimeMillis()),
+        )
     }
 
     /** The UI polls RSSI fast only while it is on screen. */
@@ -624,6 +647,8 @@ class TeslaBleController(
         if (link.phase != ConnectionPhase.READY) return
         val deviceTimestamp = Instant.ofEpochMilli(System.currentTimeMillis())
         historyStore.recordConnection(link.bleName, state, deviceTimestamp, latestRssi(link.address))
+        // Whatever the car has not answered by now, it will not answer.
+        if (state == ConnectionEvent.State.DISCONNECTED) link.commands.logUnanswered(linkEnded = true)
     }
 
     private fun log(message: String) {
@@ -647,6 +672,7 @@ class TeslaBleController(
         val domain: Domain,
         val requestId: ByteArray,
         val kind: CommandKind,
+        val reason: Command.Reason,
         val window: AntiReplayWindow = AntiReplayWindow(),
     )
 
@@ -690,6 +716,12 @@ class TeslaBleController(
         /** Whether a due read is waiting for the Infotainment handshake; never left set once it is over. */
         private val infotainmentGate = InfotainmentSessionGate()
 
+        /** Keeps the command log: every request goes out through [transmit], which logs it with its reason (ADR-0008). */
+        val commands = CommandRecorder(bleName, historyStore, rssi = { latestRssi(address) })
+
+        /** The reason of the read that is waiting for the Infotainment handshake. */
+        private var waitingReadReason = Command.Reason.REASON_UNSPECIFIED
+
         /** Logs and feeds the policy with the drive, closures and climate replies (ADR-0008, ADR-0009). */
         private val stateReplies =
             InfotainmentStateReplies(
@@ -706,6 +738,7 @@ class TeslaBleController(
                     if (phase != ConnectionPhase.READY) return
                     transport?.readRssi()
                     requestStatus()
+                    commands.logUnanswered()
                     handler.postDelayed(this, POLL_MS)
                 }
             }
@@ -794,7 +827,7 @@ class TeslaBleController(
                         log("${name()}: the car did not confirm the key; pair again when ready")
                         return
                     }
-                    transport?.send(TeslaVcsec.buildWhitelistInfoRequest())
+                    transmitVcsec(TeslaVcsec.buildWhitelistInfoRequest(), Command.Reason.PAIRING)
                     handler.postDelayed(this, WHITELIST_POLL_MS)
                 }
             }
@@ -928,11 +961,28 @@ class TeslaBleController(
 
         // ------------------------------------------------------------ protocol
 
+        /** The routine VCSEC status poll: the one request the command log leaves out, the status records imply it. */
         fun requestStatus() {
-            if (transport?.send(TeslaVcsec.buildStatusRequest()) != true) {
+            if (!transmit(TeslaVcsec.buildStatusRequest(), command = null)) {
                 log("${name()}: failed to send VCSEC status request")
             }
         }
+
+        /**
+         * The one place every request to the car goes out. [command] is what the command log keeps, with
+         * its reason; null only for the routine status poll. It is logged once the transport took it.
+         */
+        private fun transmit(
+            bytes: ByteArray,
+            command: Command?,
+            awaitingKey: String? = null,
+        ): Boolean = (transport?.send(bytes) == true).also { if (it && command != null) commands.sent(command, awaitingKey) }
+
+        /** A VCSEC information request (whitelist or key slot), [bytes] as `TeslaVcsec` builds it. */
+        private fun transmitVcsec(
+            bytes: ByteArray,
+            reason: Command.Reason,
+        ) = transmit(bytes, CommandRecords.vcsecRoutable(reason, bytes))
 
         private fun isAwake(): Boolean =
             _state.value.connections[address]
@@ -993,7 +1043,7 @@ class TeslaBleController(
                         uuid = uuid,
                     )
                 log("${name()}: session request ${domain.name}")
-                if (transport?.send(request) != true) {
+                if (!transmit(request, CommandRecords.sessionInfo(Command.Reason.SESSION_HANDSHAKE, request))) {
                     log("${name()}: failed to send session request")
                 }
             }
@@ -1048,7 +1098,7 @@ class TeslaBleController(
                 handler.removeCallbacks(sessionRetry)
             }
             if (pending.domain == Domain.DOMAIN_INFOTAINMENT && infotainmentGate.onSessionEstablished()) {
-                requestChargeState()
+                requestChargeState(waitingReadReason)
             }
             if (pending.domain == Domain.DOMAIN_VEHICLE_SECURITY && wakeAfterSession) {
                 wakeAfterSession = false
@@ -1086,21 +1136,17 @@ class TeslaBleController(
                 log("${name()}: no VCSEC session to wake with")
                 return
             }
-            if (!sendAuthenticated(
-                    domain = Domain.DOMAIN_VEHICLE_SECURITY,
-                    payload = TeslaCommands.buildWakeRequest(),
-                    kind = CommandKind.WAKE,
-                )
-            ) {
-                log("${name()}: failed to send wake request")
-            } else {
-                log("${name()}: wake requested")
-            }
+            val request = TeslaCommands.buildWakeRequest()
+            val sent = sendAuthenticated(Domain.DOMAIN_VEHICLE_SECURITY, request, CommandKind.WAKE, Command.Reason.USER_WAKE)
+            log("${name()}: " + if (sent) "wake requested" else "failed to send wake request")
         }
 
-        /** [userRequested]: the refresh button, sent at once and counted by the policy. */
-        fun requestChargeState(userRequested: Boolean = false) {
-            if (userRequested) infotainmentPolicy.onUserRequest(System.currentTimeMillis())
+        /**
+         * Reads the charge state, the first of a read's four requests. [reason] says why; the refresh
+         * button ([Command.Reason.USER_REFRESH]) is sent at once and counted by the policy.
+         */
+        fun requestChargeState(reason: Command.Reason = CommandRecords.reasonOf(infotainmentPolicy.lastReadReason)) {
+            if (reason == Command.Reason.USER_REFRESH) infotainmentPolicy.onUserRequest(System.currentTimeMillis())
             when (infotainmentGate.onReadDue(isAwake(), sessions.containsKey(Domain.DOMAIN_INFOTAINMENT))) {
                 InfotainmentSessionGate.Action.SKIP -> log("${name()}: car is asleep; wake it first")
 
@@ -1109,12 +1155,14 @@ class TeslaBleController(
                         domain = Domain.DOMAIN_INFOTAINMENT,
                         payload = TeslaCommands.buildChargeStateRequest(),
                         kind = CommandKind.CHARGE,
+                        reason = reason,
                     )
 
                 // The retry loop is already running; the read goes out when the session arrives.
-                InfotainmentSessionGate.Action.WAIT_FOR_HANDSHAKE -> Unit
+                InfotainmentSessionGate.Action.WAIT_FOR_HANDSHAKE -> waitingReadReason = reason
 
                 InfotainmentSessionGate.Action.START_HANDSHAKE -> {
+                    waitingReadReason = reason
                     log("${name()}: requesting Infotainment session for SOC")
                     if (!startSession()) infotainmentGate.onNotStartable()
                 }
@@ -1139,6 +1187,7 @@ class TeslaBleController(
             domain: Domain,
             payload: ByteArray,
             kind: CommandKind,
+            reason: Command.Reason = Command.Reason.FOLLOW_UP,
         ): Boolean {
             val session =
                 sessions[domain] ?: run {
@@ -1159,8 +1208,8 @@ class TeslaBleController(
                     return false
                 }
             val requestId = session.requestId(encrypted) ?: return false
-            pendingCommands[uuid.toHex()] = PendingCommand(domain, requestId, kind)
-            val sent = transport?.send(encrypted.encode()) == true
+            pendingCommands[uuid.toHex()] = PendingCommand(domain, requestId, kind, reason)
+            val sent = transmit(encrypted.encode(), CommandRecords.authenticated(reason, domain, payload), uuid.toHex())
             if (!sent) log("${name()}: failed to send ${kind.name.lowercase()} request")
             return sent
         }
@@ -1172,10 +1221,17 @@ class TeslaBleController(
             val message =
                 runCatching { RoutableMessage.ADAPTER.decode(bytes) }.getOrNull()
                     ?: return false
-            if (message.signature_data?.AES_GCM_Response_data == null) return false
-            val pending =
-                pendingCommands.remove(message.request_uuid.toByteArray().toHex())
-                    ?: return false
+            // A rejected message may carry a fault and no payload at all (busy, bad signature, ...).
+            val fault = message.signedMessageStatus?.takeIf { it.isRefusal }
+            val encrypted = message.signature_data?.AES_GCM_Response_data != null
+            if (!encrypted && fault == null) return false
+            val key = message.request_uuid.toByteArray().toHex()
+            val pending = pendingCommands.remove(key) ?: return false
+            commands.replied(key, fault, deviceTimestamp)
+            if (!encrypted) {
+                log("${name()}: ${pending.kind.name.lowercase()} rejected (${fault?.signed_message_fault?.name})")
+                return true
+            }
             val session = sessions[pending.domain] ?: return true
             val plaintext = session.decrypt(message, pending.requestId, pending.window)
             if (plaintext == null) {
@@ -1197,6 +1253,7 @@ class TeslaBleController(
                 return true
             }
             decryptFailures = 0
+            CommandRecords.refusalIn(pending.reason, pending.domain, plaintext)?.let { commands.result(it, deviceTimestamp) }
             when (pending.kind) {
                 CommandKind.WAKE -> {
                     val status = runCatching { TeslaVcsec.parseCommandStatus(plaintext) }.getOrNull()
@@ -1261,7 +1318,7 @@ class TeslaBleController(
             pairingKeyId = storedKeyId.toHex()
             setPairing(PairingPhase.CHECKING)
             log("${name()}: checking whether the key is already enrolled")
-            transport?.send(TeslaVcsec.buildWhitelistInfoRequest())
+            transmitVcsec(TeslaVcsec.buildWhitelistInfoRequest(), Command.Reason.PAIRING)
             handler.removeCallbacks(pairingTimeout)
             handler.postDelayed(pairingTimeout, PAIRING_TIMEOUT_MS)
         }
@@ -1292,7 +1349,7 @@ class TeslaBleController(
             setPairing(PairingPhase.SENDING, keyId)
             log("${name()}: pairing key $keyId")
             val request = TeslaPairing.buildAddKeyRequest(keyPair.publicKeyRaw)
-            if (transport?.send(request) != true) {
+            if (!transmit(request, CommandRecords.addKey(Command.Reason.PAIRING, request))) {
                 setPairing(PairingPhase.ERROR)
                 log("${name()}: failed to send pairing request")
             } else {
@@ -1332,7 +1389,7 @@ class TeslaBleController(
         fun requestKeySlot() {
             if (_state.value.connections[address]?.keySlot != null) return
             if (!keyStore.hasKey(bleName)) return
-            transport?.send(TeslaVcsec.buildWhitelistInfoRequest())
+            transmitVcsec(TeslaVcsec.buildWhitelistInfoRequest(), Command.Reason.KEY_LOOKUP)
         }
 
         private fun requestNextKeySlot() {
@@ -1342,7 +1399,7 @@ class TeslaBleController(
                 return
             }
             keySlotQueue = keySlotQueue.drop(1)
-            transport?.send(TeslaVcsec.buildWhitelistEntryRequest(slot))
+            transmitVcsec(TeslaVcsec.buildWhitelistEntryRequest(slot), Command.Reason.KEY_LOOKUP)
         }
 
         private fun handlePairingResponse(message: ByteArray): Boolean {

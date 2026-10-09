@@ -41,6 +41,12 @@ identity), `docs/requirements/multi-phone.md`
   went, which makes the held-back reading redundant, and the signal strength
   hints at how close the phone was to the car for every record.
 
+- Real-car logs could not tell whether a wake or a request came from the app
+  or from the owner, nor whether the app was in the background. The owner
+  asked to log the app's own commands, raw, with a small reason, and the app's
+  own state (2026-10-09). Design constraint: stay simple and easy to move into
+  a Room table later, one row per record, raw bytes plus a few columns.
+
 ## Decision
 
 - **One envelope for every logged reply and connection event.** `BleRecord`
@@ -56,11 +62,14 @@ identity), `docs/requirements/multi-phone.md`
   - a `payload` oneof with either the car's raw reply, verbatim, nothing
     filtered: `vehicle_status` (field 2), `charge_state` (field 3),
     `drive_state` (field 4), `closures_state` (field 7) or `climate_state`
-    (field 8); or a `connection_event` (field 6, `ConnectionEvent`). Fields
-    are declared in a reading's order: time, signal strength, connection, VCSEC
-    status, charge, drive, closures, climate. Their numbers are the stored
-    format and stay as assigned; `rssi`, `connection_event`, `closures_state`
-    and `climate_state` took the next free ones.
+    (field 8); or a `connection_event` (field 6, `ConnectionEvent`); or one
+    of the app's own records (see "Commands and app state" below):
+    `command` (field 9), `command_result` (field 10) or `app_state`
+    (field 11). Fields are declared in a reading's order: time, signal
+    strength, connection, VCSEC status, charge, drive, closures, climate,
+    command, command result, app state. Their numbers are the stored format
+    and stay as assigned; `rssi`, `connection_event`, `closures_state`,
+    `climate_state` and the three app kinds took the next free ones.
 
   Tesla's vendored protos (`core/src/main/proto`, pinned by `TESLA_COMMIT`)
   stay untouched; ours sit in a second Wire source root, so a re-vendor never
@@ -103,7 +112,12 @@ identity), `docs/requirements/multi-phone.md`
   - `<vehicleId>.drive.pblog` for DriveState replies;
   - `<vehicleId>.closures.pblog` for ClosuresState replies;
   - `<vehicleId>.climate.pblog` for ClimateState replies;
-  - `<vehicleId>.connection.pblog` for connection events.
+  - `<vehicleId>.connection.pblog` for connection events;
+  - `<vehicleId>.command.pblog` for the app's commands and the car's refusals
+    of them;
+  - `app.pblog`, one file for the whole app, for the app's own state. Its name
+    is not `<id><suffix>` of any vehicle kind, so no vehicle reader opens it,
+    and a test pins that. It has the same cap and trim.
 
   Each kind has its own suffix and none ends with another, so a reader never
   decodes another kind's file. The backup rules already exclude the
@@ -154,6 +168,44 @@ identity), `docs/requirements/multi-phone.md`
   model yet; the derived flags `ClosuresState.sentryOn` and
   `ClimateState.climateOn` in `StateViews.kt` only feed the poll policy and
   the debug log (a change of either).
+- **Commands and app state** (owner, 2026-10-09). Three more payload kinds
+  tell the app's own actions from the owner's and from the car's:
+  - `Command` (field 9): one row per request the app sent to the car, raw as
+    built, before encryption, with a `Reason`. `oneof request` holds the VCSEC
+    `UnsignedMessage` (wake, whitelist and key-slot lookups, add key), the
+    CarServer `Action` (the charge, drive, closures and climate reads) or the
+    session info request as a `RoutableMessage` (only the domain it is
+    addressed to: the public key, routing address and request id are left
+    out, and so is the key in an add-key request, though keys are public).
+    Reasons come from the call sites: `USER_WAKE`, `USER_REFRESH`,
+    `POLICY_ACTIVE`, `POLICY_HOLD`, `POLICY_SAFETY` and `FRESH_START` (the
+    poll policy says why a read is due, `InfotainmentPollPolicy.lastReadReason`),
+    `SESSION_HANDSHAKE`, `FOLLOW_UP` (drive, closures, climate after the
+    previous reply), `PAIRING` and `KEY_LOOKUP`. A read that waits for its
+    Infotainment handshake keeps the reason it was made for.
+  - `CommandResult` (field 10): logged only when the car refuses a command or
+    never answers it, holding the reason, the domain and the raw status:
+    `ActionStatus` (an Infotainment reply with an error result),
+    `CommandStatus` (a VCSEC reply with an error) or `MessageStatus` (a
+    message-level fault such as busy or invalid signature, which the car can
+    send without any payload), or `timed_out` when no reply came within 15 s
+    or the connection ended first. Successes are not logged twice: they are
+    already data records. Pairing replies are not logged as results.
+  - `AppState` (field 11): an `Event` (screen on and off, app foreground and
+    background, tracking service started and stopped) and, with a start, the
+    `StartReason` (user, boot, package replaced, or a restart by Android after
+    a kill). A killed process logs no stop.
+
+  The routine 10 s VCSEC status poll is left out of the command log: the
+  status records imply it and it would flood the file. Every other request
+  goes through one method in the controller (`VehicleLink.transmit`), which
+  hands the `Command` to `CommandRecorder`; a request is logged once the
+  transport accepted it. Records carry `device_timestamp`, plus `rssi` where a
+  car is involved (not in `app.pblog`). Foreground and background come from
+  the activity's start and stop (a rotation is skipped), because
+  `ProcessLifecycleOwner` would need a new dependency; screen on and off from
+  a receiver the tracking service registers, so they are logged only while it
+  runs. Nothing reads these records back yet.
 - **Read models.** `BatterySample`, `StatusSample` and `DriveSample` are
   derived on load from the records (`BleRecord.toBatterySample`,
   `BleRecord.toStatusSample`, `BleRecord.toDriveSample`); nothing is written
@@ -181,7 +233,8 @@ identity), `docs/requirements/multi-phone.md`
   - New scalar fields use proto3 `optional`, so absent stays distinguishable
     from zero.
 
-  `rssi` and `connection_event` are the first additions under these rules.
+  `rssi` and `connection_event` are the first additions under these rules;
+  the command, command result and app state kinds are the latest.
 
 ## Consequences
 
@@ -222,6 +275,9 @@ identity), `docs/requirements/multi-phone.md`
   last status record, up to 15 minutes before the real end. At four
   heartbeats an hour plus one record per change, the 20k cap holds months of
   status per car.
+- **No reset for the command and app-state kinds.** Older records and older
+  app versions skip them as unknown fields; `.command.pblog` and `app.pblog`
+  are new files.
 - **Privacy.** The RSSI is a rough distance, and with the connection times it
   says when the phone was near the car and when it left. Both stay on the
   phone, outside backups, and `PRIVACY.md` lists them. What leaves the phone

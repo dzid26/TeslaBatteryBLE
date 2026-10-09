@@ -3,11 +3,13 @@
 package com.dzid26.teslable.history
 
 import android.content.Context
+import com.dzid26.teslable.core.history.AppState
 import com.dzid26.teslable.core.history.BatterySample
 import com.dzid26.teslable.core.history.BleRecord
+import com.dzid26.teslable.core.history.Command
+import com.dzid26.teslable.core.history.CommandResult
 import com.dzid26.teslable.core.history.ConnectionEvent
 import com.dzid26.teslable.core.history.DriveSample
-import com.dzid26.teslable.core.history.ProtoLog
 import com.dzid26.teslable.core.history.StatusSample
 import com.dzid26.teslable.core.history.shouldLogStatus
 import com.dzid26.teslable.core.history.toBatterySample
@@ -28,8 +30,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.io.File
-import java.nio.file.Files
-import java.nio.file.StandardCopyOption
 import java.time.Instant
 
 /**
@@ -48,10 +48,15 @@ import java.time.Instant
  *   sentry mode state), raw; log only, nothing reads it back yet;
  * - `<vehicleId>.climate.pblog`: every ClimateState reply, raw; log only;
  * - `<vehicleId>.connection.pblog`: when the connection to the car became
- *   ready or an established one ended. Log only: nothing reads it back yet.
+ *   ready or an established one ended. Log only: nothing reads it back yet;
+ * - `<vehicleId>.command.pblog`: the requests the app sent to the car, raw and
+ *   with the reason, and the car's refusals of them (not the routine VCSEC
+ *   status poll). Log only;
+ * - `app.pblog`: the app's own state (screen, foreground, tracking service),
+ *   one file for the whole app. Log only.
  *
- * Every record also carries the phone's latest RSSI for the car, when it had
- * one (`rssi`).
+ * Every record about a car also carries the phone's latest RSSI for it, when it
+ * had one (`rssi`).
  *
  * Older raw `<vehicleId>.pblog` charge files and the pre-store CSV history are
  * neither read nor written (pre-1.0 reset).
@@ -68,6 +73,8 @@ class HistoryStore(
     private val closuresLogs = VehicleLogs(historyDir, CLOSURES_LOG_SUFFIX)
     private val climateLogs = VehicleLogs(historyDir, CLIMATE_LOG_SUFFIX)
     private val connectionLogs = VehicleLogs(historyDir, CONNECTION_LOG_SUFFIX)
+    private val commandLogs = VehicleLogs(historyDir, COMMAND_LOG_SUFFIX)
+    private val appLog = AppLog(historyDir)
     private val _samples = MutableStateFlow<List<BatterySample>>(emptyList())
     val samples: StateFlow<List<BatterySample>> = _samples.asStateFlow()
     private val _statusSamples = MutableStateFlow<List<StatusSample>>(emptyList())
@@ -94,6 +101,8 @@ class HistoryStore(
                 runCatching { closuresLogs.readAll() }
                 runCatching { climateLogs.readAll() }
                 runCatching { connectionLogs.readAll() }
+                runCatching { commandLogs.readAll() }
+                runCatching { appLog.readAll() }
             }
         }
     }
@@ -231,6 +240,45 @@ class HistoryStore(
         }
     }
 
+    /**
+     * Logs a request the app sent to [vehicleId]'s car, with its reason (ADR-0008). [command] holds the
+     * plaintext request as built; the caller leaves out the routine VCSEC status poll. [deviceTimestamp]
+     * is when it was sent and [rssi] the phone's latest RSSI for the car, or null when it has none.
+     */
+    fun recordCommand(
+        vehicleId: String,
+        command: Command,
+        deviceTimestamp: Instant,
+        rssi: Int?,
+    ) {
+        val record = BleRecord(device_timestamp = deviceTimestamp, rssi = rssi, command = command)
+        scope.launch { mutex.withLock { commandLogs.append(vehicleId, record) } }
+    }
+
+    /**
+     * Logs that the car refused a command or never answered it (ADR-0008). Replies that went fine are
+     * already visible as data records. [deviceTimestamp] is when the reply arrived, or when the
+     * wait ended.
+     */
+    fun recordCommandResult(
+        vehicleId: String,
+        result: CommandResult,
+        deviceTimestamp: Instant,
+        rssi: Int?,
+    ) {
+        val record = BleRecord(device_timestamp = deviceTimestamp, rssi = rssi, command_result = result)
+        scope.launch { mutex.withLock { commandLogs.append(vehicleId, record) } }
+    }
+
+    /** Logs a change in the app's own state (ADR-0008) to `app.pblog`; it belongs to no car, so it has no RSSI. */
+    fun recordAppState(
+        state: AppState,
+        deviceTimestamp: Instant,
+    ) {
+        val record = BleRecord(device_timestamp = deviceTimestamp, app_state = state)
+        scope.launch { mutex.withLock { appLog.append(record) } }
+    }
+
     private fun appendStatus(
         vehicleId: String,
         record: BleRecord,
@@ -295,6 +343,9 @@ class HistoryStore(
 
         /** `<vehicleId>.connection.pblog`: connection events in [BleRecord]s, timed by `device_timestamp` (ADR-0008). */
         const val CONNECTION_LOG_SUFFIX = ".connection.pblog"
+
+        /** `<vehicleId>.command.pblog`: commands sent and refused in [BleRecord]s, timed by `device_timestamp` (ADR-0008). */
+        const val COMMAND_LOG_SUFFIX = ".command.pblog"
         const val MAX_SAMPLES = 20_000
     }
 }
@@ -304,84 +355,3 @@ data class HistorySamples(
     val battery: List<BatterySample>,
     val drive: List<DriveSample>,
 )
-
-/**
- * One kind of per-vehicle log: `<vehicleId><suffix>` files in [dir], holding
- * [BleRecord]s. Each kind (charge, VCSEC status, drive, closures, climate, connection) is one
- * instance, and all share the same cap and trim. Callers hold the store's mutex.
- */
-private class VehicleLogs(
-    private val dir: File,
-    private val suffix: String,
-) {
-    /** Records per vehicle file, so appends know when a file needs trimming. */
-    private val recordCounts = mutableMapOf<String, Int>()
-
-    fun append(
-        vehicleId: String,
-        record: BleRecord,
-    ) {
-        dir.mkdirs()
-        val file = fileFor(vehicleId)
-        val count = (recordCounts[vehicleId] ?: 0) + 1
-        if (count > MAX_RECORDS_PER_FILE) {
-            val kept =
-                (ProtoLog.decode(file.readBytes(), BleRecord.ADAPTER) + record)
-                    .takeLast(MAX_RECORDS_PER_FILE - TRIM_SLACK)
-            writeAtomically(file, ProtoLog.encode(kept))
-            recordCounts[vehicleId] = kept.size
-        } else {
-            file.appendBytes(ProtoLog.encodeFrame(record))
-            recordCounts[vehicleId] = count
-        }
-    }
-
-    /** Decodes every vehicle file of this kind and refreshes the record counts. */
-    fun readAll(): Map<String, List<BleRecord>> {
-        val files = dir.listFiles() ?: return emptyMap()
-        val recordsByVehicle = mutableMapOf<String, List<BleRecord>>()
-        for (file in files) {
-            val vehicleId = vehicleIdOf(file) ?: continue
-            val records = ProtoLog.decode(file.readBytes(), BleRecord.ADAPTER)
-            recordCounts[vehicleId] = records.size
-            recordsByVehicle[vehicleId] = records
-        }
-        return recordsByVehicle
-    }
-
-    private fun fileFor(vehicleId: String): File = File(dir, "${vehicleId.ifEmpty { LEGACY_VEHICLE_STEM }}$suffix")
-
-    /**
-     * The vehicle a file of this kind belongs to, or null for any other file.
-     * Each kind has its own suffix and none ends with another's, so a reader
-     * never picks up another kind's file, nor an older raw `<vehicleId>.pblog`
-     * charge file, which stays on disk unread.
-     */
-    private fun vehicleIdOf(file: File): String? {
-        if (!file.isFile || !file.name.endsWith(suffix)) return null
-        val stem = file.name.removeSuffix(suffix)
-        if (stem.isEmpty()) return null
-        return if (stem == LEGACY_VEHICLE_STEM) "" else stem
-    }
-
-    private fun writeAtomically(
-        file: File,
-        bytes: ByteArray,
-    ) {
-        val tmp = File(file.parentFile, "${file.name}.tmp")
-        tmp.writeBytes(bytes)
-        Files.move(tmp.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING)
-    }
-
-    private companion object {
-        /** File stem for rows with a pre-ADR-0004 empty vehicle id. */
-        const val LEGACY_VEHICLE_STEM = "legacy"
-        const val MAX_RECORDS_PER_FILE = 20_000
-
-        /**
-         * Records dropped below the cap on each trim, so a full file costs
-         * one rewrite per thousand appends instead of one per append.
-         */
-        const val TRIM_SLACK = 1_000
-    }
-}

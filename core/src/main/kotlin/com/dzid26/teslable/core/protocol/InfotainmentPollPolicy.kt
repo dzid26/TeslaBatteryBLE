@@ -39,6 +39,25 @@ import com.tesla.generated.vcsec.VehicleStatus
  * per vehicle link, not thread-safe.
  */
 class InfotainmentPollPolicy {
+    /** Why a read is due; the command log keeps it with the request (ADR-0008). */
+    enum class Reason {
+        /** The first read since the app or tracking started, or since pairing. */
+        FRESH_START,
+
+        /** The car is charging, driving, in Sentry or running its climate. */
+        ACTIVE,
+
+        /** Within the hold after a status change. */
+        HOLD,
+
+        /** The idle safety read. */
+        SAFETY,
+    }
+
+    /** The reason of the read the latest [onStatus] answered true for, or null before the first one. */
+    var lastReadReason: Reason? = null
+        private set
+
     private var lastReadAtMs: Long? = null
     private var lastChangeAtMs: Long? = null
     private var userPresent = false
@@ -136,10 +155,17 @@ class InfotainmentPollPolicy {
             return false
         }
         if (!sessionReady) return false
-        val interval = if (isActive() || holding(nowMillis)) READ_INTERVAL_MS else IDLE_SAFETY_INTERVAL_MS
+        val reason =
+            when {
+                isActive() -> Reason.ACTIVE
+                holding(nowMillis) -> Reason.HOLD
+                else -> Reason.SAFETY
+            }
+        val interval = if (reason == Reason.SAFETY) IDLE_SAFETY_INTERVAL_MS else READ_INTERVAL_MS
         val last = lastReadAtMs
         if (last != null && nowMillis - last < interval - DUE_SLACK_MS) return false
         lastReadAtMs = nowMillis
+        lastReadReason = if (last == null) Reason.FRESH_START else reason
         return true
     }
 
