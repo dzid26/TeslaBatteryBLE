@@ -8,6 +8,7 @@ import com.dzid26.teslable.core.TeslaNames
 import com.dzid26.teslable.core.history.BatterySample
 import com.dzid26.teslable.core.history.ConnectionEvent
 import com.dzid26.teslable.core.protocol.AntiReplayWindow
+import com.dzid26.teslable.core.protocol.InfotainmentPollPolicy
 import com.dzid26.teslable.core.protocol.ShiftStateKind
 import com.dzid26.teslable.core.protocol.TeslaCommands
 import com.dzid26.teslable.core.protocol.TeslaCrypto
@@ -333,7 +334,7 @@ class TeslaBleController(
 
     fun requestChargeState(bleName: String? = null) {
         val link = (bleName ?: selectedBleName)?.let(links::get) ?: return
-        link.requestChargeState()
+        link.requestChargeState(userRequested = true)
     }
 
     /** The UI polls RSSI fast only while it is on screen. */
@@ -680,6 +681,9 @@ class TeslaBleController(
 
         /** The next VCSEC status is the first since the link became ready; the status log always keeps it. */
         private var firstStatusAfterConnect = true
+
+        /** Decides when an Infotainment read is due (ADR-0009). */
+        private val infotainmentPolicy = InfotainmentPollPolicy()
 
         /** The shift state last written to the debug log, so only a change is logged again. */
         private var lastShiftState: ShiftStateKind? = null
@@ -1071,7 +1075,9 @@ class TeslaBleController(
             }
         }
 
-        fun requestChargeState() {
+        /** [userRequested]: the refresh button, sent at once and counted by the policy. */
+        fun requestChargeState(userRequested: Boolean = false) {
+            if (userRequested) infotainmentPolicy.onUserRequest(System.currentTimeMillis())
             if (_state.value.connections[address]
                     ?.status
                     ?.asleep != false
@@ -1186,6 +1192,7 @@ class TeslaBleController(
                             it.copy(charge = charge, chargeAtMillis = acquiredAt.toEpochMilli())
                         }
                         historyStore.record(bleName, charge, acquiredAt, latestRssi(address))
+                        infotainmentPolicy.onChargeReading(charge.chargingStateKind)
                         if (previous?.battery_level != charge.battery_level ||
                             previous?.chargingStateKind != charge.chargingStateKind
                         ) {
@@ -1229,6 +1236,7 @@ class TeslaBleController(
             }
             historyStore.recordDrive(bleName, drive, acquiredAt, latestRssi(address))
             val shift = drive.shiftStateKind
+            infotainmentPolicy.onDriveReading(shift)
             if (shift != lastShiftState) {
                 lastShiftState = shift
                 log("${name()}: shift state ${shift?.name ?: "unknown"}")
@@ -1387,6 +1395,7 @@ class TeslaBleController(
                 when (pairingPhase) {
                     PairingPhase.SENDING, PairingPhase.WAITING_FOR_CARD, PairingPhase.CHECKING -> {
                         setPairing(PairingPhase.OK, keyId)
+                        infotainmentPolicy.onFreshStart(System.currentTimeMillis())
                         log("${name()}: key enrolled (${whitelist.numberOfEntries} keys)")
                     }
 
@@ -1516,14 +1525,13 @@ class TeslaBleController(
                             "asleep=${status.asleep} userPresent=${status.userPresent}",
                     )
                 }
-                if (!status.asleep && !chargeAfterSession) {
-                    // Track SOC for every awake car that can answer, not just
-                    // the selected one; skip cars with no VIN (no session).
-                    val canRead =
-                        sessions.containsKey(Domain.DOMAIN_INFOTAINMENT) ||
-                            vin().length == Vehicle.VIN_LENGTH
-                    if (canRead) requestChargeState()
-                }
+                // Track SOC for every awake car that can answer, not just the
+                // selected one; skip cars with no VIN (no session). The policy
+                // decides when a read is due so the car can fall asleep (ADR-0009).
+                val canRead =
+                    !chargeAfterSession &&
+                        (sessions.containsKey(Domain.DOMAIN_INFOTAINMENT) || vin().length == Vehicle.VIN_LENGTH)
+                if (infotainmentPolicy.onStatus(status, canRead, System.currentTimeMillis())) requestChargeState()
             } else {
                 log("${name()}: RX ${message.size} bytes ${message.toHex()}")
             }
@@ -1554,6 +1562,7 @@ class TeslaBleController(
                         reconnectAttempts = 0
                         nextRetryAtMs = 0
                         firstStatusAfterConnect = true
+                        infotainmentPolicy.onLinkReady(System.currentTimeMillis())
                         recordConnection(this@VehicleLink, ConnectionEvent.State.CONNECTED)
                         // Additive scans stay under the user's control; the selected
                         // car connecting is the one signal that means "found it".
