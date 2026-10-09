@@ -87,16 +87,39 @@ class ReadingAgeTest {
     fun `the same reading with an asleep status is stale and says how old it is`() {
         val readAt = 1_000_000L
         val now = readAt + 4 * minute
-        val reading = batteryPercent(liveConnection(readAt, status = asleep), null, now)
+        val connection = liveConnection(readAt, status = asleep)
+        val reading = batteryPercent(connection, null, now)
         assertEquals(true, reading?.stale)
-        assertEquals("4m ago", reading?.ageLabel(now))
+        assertEquals("4m ago", reading?.ageLabel(now, connection))
     }
 
     @Test
     fun `a reading greyed by sleep soon after it was read is not called just read`() {
         val readAt = 1_000_000L
         val now = readAt + 3 * minute
-        assertEquals("3m ago", batteryPercent(liveConnection(readAt, status = asleep), null, now)?.ageLabel(now))
+        val connection = liveConnection(readAt, status = asleep)
+        assertEquals("3m ago", batteryPercent(connection, null, now)?.ageLabel(now, connection))
+    }
+
+    @Test
+    fun `a connected car whose reading greyed by sleep under a minute ago reads now`() {
+        val readAt = 1_000_000L
+        val now = readAt + 20_000
+        val connection = liveConnection(readAt, status = asleep)
+        assertEquals("now", batteryPercent(connection, null, now)?.ageLabel(now, connection))
+    }
+
+    @Test
+    fun `a car that is not connected never reads now`() {
+        val readAt = 1_000_000L
+        val now = readAt + 20_000
+        val disconnected = liveConnection(readAt, phase = ConnectionPhase.DISCONNECTED)
+        assertEquals("<1m ago", batteryPercent(disconnected, null, now)?.ageLabel(now, disconnected))
+        // No connection at all (a stored fallback): the same.
+        val stored = batteryPercent(null, storedSample(carTimestamp = now, readAt = readAt), now)
+        assertEquals("<1m ago", stored?.ageLabel(now, null))
+        // Older ages are unaffected.
+        assertEquals("3m ago", stored?.ageLabel(readAt + 3 * minute, null))
     }
 
     @Test
@@ -145,7 +168,7 @@ class ReadingAgeTest {
         // The car stamped the reply "now" but the phone read it 12 minutes ago.
         val reading = batteryPercent(null, storedSample(carTimestamp = now, readAt = now - 12 * minute), now)
         assertEquals(true, reading?.stale)
-        assertEquals("12m ago", reading?.ageLabel(now))
+        assertEquals("12m ago", reading?.ageLabel(now, null))
     }
 
     @Test
@@ -153,15 +176,17 @@ class ReadingAgeTest {
         val now = 100 * hour
         val reading = batteryPercent(null, storedSample(carTimestamp = now, readAt = null), now)
         assertEquals(true, reading?.stale)
-        assertNull(reading?.ageLabel(now))
+        assertNull(reading?.ageLabel(now, null))
     }
 
     @Test
     fun `only a stale reading shows its age`() {
         val readAt = 1_000_000L
         val connection = liveConnection(readAt)
-        assertNull(batteryPercent(connection, null, readAt + 4 * minute)?.ageLabel(readAt + 4 * minute))
-        assertEquals("5m ago", batteryPercent(connection, null, readAt + FRESH_READING_MS)?.ageLabel(readAt + FRESH_READING_MS))
-        assertEquals("2h ago", batteryPercent(connection, null, readAt + 2 * hour)?.ageLabel(readAt + 2 * hour))
+
+        fun label(age: Long) = batteryPercent(connection, null, readAt + age)?.ageLabel(readAt + age, connection)
+        assertNull(label(4 * minute))
+        assertEquals("5m ago", label(FRESH_READING_MS))
+        assertEquals("2h ago", label(2 * hour))
     }
 }

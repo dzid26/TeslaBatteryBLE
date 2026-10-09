@@ -267,6 +267,16 @@ private fun HeroCard(
                         )
                     }
                 }
+                // A stale reading says how old it is, small, just left of the pill
+                // (so the pill never moves when the label appears).
+                reading?.ageLabel(nowMillis, connection)?.let { age ->
+                    Text(
+                        text = age,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(end = 8.dp),
+                    )
+                }
                 StatusPill(
                     connection = connection,
                     onAsleepClick = {
@@ -282,7 +292,6 @@ private fun HeroCard(
                 live = charge?.battery_level != null,
                 lastKnown = lastKnown,
                 stateText = display.stateText,
-                nowMillis = nowMillis,
             )
             Spacer(Modifier.height(8.dp))
             connection?.status?.let { status ->
@@ -314,8 +323,8 @@ private fun ChargeDetails(charge: ChargeState?) {
 
 /**
  * The big battery reading, colored like the cars list: primary while fresh,
- * outline once stale, with how old it is under the number. With no reading at
- * all, the connection state shows instead.
+ * outline once stale. With no reading at all, the connection state shows
+ * instead. How old a stale reading is shows in the card's top-right corner.
  */
 @Composable
 private fun SocBlock(
@@ -323,14 +332,13 @@ private fun SocBlock(
     live: Boolean,
     lastKnown: BatterySample?,
     stateText: String,
-    nowMillis: Long,
 ) {
     if (reading == null) {
         Text(text = stateText, style = MaterialTheme.typography.headlineSmall)
         return
     }
     val color = if (reading.stale) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.primary
-    // The number, the "%" and the age share one text baseline.
+    // The number and the "%" share one text baseline.
     Row {
         Text(
             text = "${reading.value}",
@@ -345,15 +353,6 @@ private fun SocBlock(
             color = color,
             modifier = Modifier.alignByBaseline(),
         )
-        // A stale reading says how old it is, small, right after the number.
-        reading.ageLabel(nowMillis)?.let { age ->
-            Text(
-                text = age,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.alignByBaseline().padding(start = 8.dp),
-            )
-        }
     }
     if (live) {
         Spacer(Modifier.height(8.dp))

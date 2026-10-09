@@ -175,7 +175,7 @@ class BleTrackingService : Service() {
                 percentStale = reading?.stale == true,
                 // Only a stale reading shows its age; a fresh one stays null so the
                 // notification is not re-posted while reads keep arriving.
-                percentAgeLabel = reading?.takeIf { it.stale }?.readAtMillis?.let { readingAgeText(now - it) },
+                percentAgeLabel = reading?.ageLabel(now, connection),
                 showWake =
                     connection.status?.asleep == true &&
                         connection.sessions.contains("DOMAIN_VEHICLE_SECURITY"),

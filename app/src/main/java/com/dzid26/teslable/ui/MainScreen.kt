@@ -516,33 +516,29 @@ private fun VehicleCard(
                     )
                 }
                 if (reading != null) {
-                    // The number and the age share one text baseline.
-                    Row {
-                        Text(
-                            text = "${reading.value}%",
-                            style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier.alignByBaseline(),
-                            color =
-                                if (reading.stale) {
-                                    MaterialTheme.colorScheme.outline
-                                } else {
-                                    MaterialTheme.colorScheme.primary
-                                },
-                        )
-                        // A stale reading says how old it is, small, right after the number.
-                        reading.ageLabel(nowMillis)?.let { age ->
-                            Text(
-                                text = age,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.alignByBaseline().padding(start = 4.dp),
-                            )
-                        }
-                    }
+                    Text(
+                        text = "${reading.value}%",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color =
+                            if (reading.stale) {
+                                MaterialTheme.colorScheme.outline
+                            } else {
+                                MaterialTheme.colorScheme.primary
+                            },
+                    )
                 } else {
                     StatusPill(row.connection)
                 }
+            }
+            // A stale reading says how old it is, small, in the card's top-right corner.
+            reading?.ageLabel(nowMillis, row.connection)?.let { age ->
+                Text(
+                    text = age,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.align(Alignment.TopEnd).padding(top = 6.dp, end = 12.dp),
+                )
             }
             DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                 DropdownMenuItem(

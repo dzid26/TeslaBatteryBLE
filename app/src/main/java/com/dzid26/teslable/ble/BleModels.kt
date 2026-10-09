@@ -144,10 +144,25 @@ data class BatteryPercent(
 )
 
 /**
- * The age shown right after a stale percentage ("12m ago"); null
- * for a fresh reading (still being read) and for one whose read time is unknown.
+ * The age shown in the status card's top-right corner for a stale percentage
+ * ("12m ago"); null for a fresh reading (still being read) and for one whose
+ * read time is unknown. When the car is not connected ([connection] null or not
+ * READY) an age under a minute reads "<1m ago", never "now", which would look
+ * like a live reading; "now" stays for a connected car whose reading greyed
+ * because it fell asleep.
  */
-fun BatteryPercent.ageLabel(nowMillis: Long): String? = readAtMillis?.takeIf { stale }?.let { readingAgeText(nowMillis - it) }
+fun BatteryPercent.ageLabel(
+    nowMillis: Long,
+    connection: TeslaConnection?,
+): String? {
+    val readAt = readAtMillis?.takeIf { stale } ?: return null
+    val age = readingAgeText(nowMillis - readAt)
+    val connected = connection?.phase == ConnectionPhase.READY
+    return if (!connected && age == READING_NOW_TEXT) READING_UNDER_A_MINUTE_TEXT else age
+}
+
+private const val READING_NOW_TEXT = "now"
+private const val READING_UNDER_A_MINUTE_TEXT = "<1m ago"
 
 /**
  * The percentage to show for a car: the live charge when there is one,
@@ -188,7 +203,7 @@ fun batteryPercent(
 fun readingAgeText(ageMillis: Long): String {
     val minutes = ageMillis / 60_000
     return when {
-        minutes < 1 -> "now"
+        minutes < 1 -> READING_NOW_TEXT
         minutes < 60 -> "${minutes}m ago"
         minutes < 24 * 60 -> "${minutes / 60}h ago"
         else -> "${minutes / (24 * 60)}d ago"
