@@ -60,6 +60,9 @@ Sources were read on 2026-10-08; quotes are short extracts.
 
 - Not yet measured on a real car. The real-car check in the ADR-0009 PR is the
   first measurement: record the time from idle to asleep here.
+- First real-car log (2026-10-09, old build, unstable link):
+  `real-car-log-2026-10-09.md`. A repeat with a stable link is planned to show
+  whether reads hold the car awake.
 
 ## Related
 
