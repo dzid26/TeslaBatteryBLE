@@ -17,14 +17,14 @@ class ReadingAgeTest {
     private val day = 24 * hour
 
     @Test
-    fun `a reading inside the fresh window reads just now`() {
-        assertEquals("just now", readingAgeText(0))
-        assertEquals("just now", readingAgeText(FRESH_READING_MS - 1))
+    fun `a reading inside the fresh window reads now`() {
+        assertEquals("now", readingAgeText(0))
+        assertEquals("now", readingAgeText(FRESH_READING_MS - 1))
     }
 
     @Test
-    fun `a clock that ran backwards reads just now`() {
-        assertEquals("just now", readingAgeText(-90_000))
+    fun `a clock that ran backwards reads now`() {
+        assertEquals("now", readingAgeText(-90_000))
     }
 
     @Test
@@ -53,7 +53,7 @@ class ReadingAgeTest {
     }
 
     @Test
-    fun `a live reading is never just now once batteryPercent calls it stale`() {
+    fun `a live reading is never now once batteryPercent calls it stale`() {
         val readAt = 1_000L
         val connection =
             TeslaConnection(
@@ -70,7 +70,7 @@ class ReadingAgeTest {
         val nowMillis = readAt + FRESH_READING_MS
         val reading = batteryPercent(connection, lastKnown = null, nowMillis = nowMillis)
         assertTrue(reading?.stale == true)
-        assertNotEquals("just now", readingAgeText(nowMillis - readAt))
+        assertNotEquals("now", readingAgeText(nowMillis - readAt))
     }
 
     private fun liveConnection(readAt: Long?) =
@@ -131,7 +131,7 @@ class ReadingAgeTest {
         // The car stamped the reply "now" but the phone read it 12 minutes ago.
         val reading = batteryPercent(null, storedSample(carTimestamp = now, readAt = now - 12 * minute), now)
         assertEquals(true, reading?.stale)
-        assertEquals("(12m ago)", reading?.ageLabel(now))
+        assertEquals("12m ago", reading?.ageLabel(now))
     }
 
     @Test
@@ -143,11 +143,11 @@ class ReadingAgeTest {
     }
 
     @Test
-    fun `only a stale reading shows its age, in brackets`() {
+    fun `only a stale reading shows its age`() {
         val readAt = 1_000_000L
         val connection = liveConnection(readAt)
         assertNull(batteryPercent(connection, null, readAt + 1_000)?.ageLabel(readAt + 1_000))
-        assertEquals("(<1m ago)", batteryPercent(connection, null, readAt + FRESH_READING_MS)?.ageLabel(readAt + FRESH_READING_MS))
-        assertEquals("(2h ago)", batteryPercent(connection, null, readAt + 2 * hour)?.ageLabel(readAt + 2 * hour))
+        assertEquals("<1m ago", batteryPercent(connection, null, readAt + FRESH_READING_MS)?.ageLabel(readAt + FRESH_READING_MS))
+        assertEquals("2h ago", batteryPercent(connection, null, readAt + 2 * hour)?.ageLabel(readAt + 2 * hour))
     }
 }

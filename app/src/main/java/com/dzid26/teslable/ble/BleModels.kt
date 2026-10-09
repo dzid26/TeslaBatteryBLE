@@ -148,10 +148,10 @@ data class BatteryPercent(
 )
 
 /**
- * The age shown right after a stale percentage, in brackets ("(12m ago)"); null
+ * The age shown right after a stale percentage ("12m ago"); null
  * for a fresh reading (still being read) and for one whose read time is unknown.
  */
-fun BatteryPercent.ageLabel(nowMillis: Long): String? = readAtMillis?.takeIf { stale }?.let { "(${readingAgeText(nowMillis - it)})" }
+fun BatteryPercent.ageLabel(nowMillis: Long): String? = readAtMillis?.takeIf { stale }?.let { readingAgeText(nowMillis - it) }
 
 /**
  * The percentage to show for a car: the live charge when there is one,
@@ -180,14 +180,14 @@ fun batteryPercent(
 
 /**
  * How long ago a reading was taken, worded the same on the notification and the
- * car view: "just now" while the reading is fresh ([FRESH_READING_MS]), "<1m ago"
+ * car view: "now" while the reading is fresh ([FRESH_READING_MS]), "<1m ago"
  * up to a minute, then whole minutes ("7m ago") up to an hour, then whole hours
  * ("2h ago") and days ("3d ago"). A stale reading always gets one of the ages.
  */
 fun readingAgeText(ageMillis: Long): String {
     val minutes = ageMillis / 60_000
     return when {
-        ageMillis < FRESH_READING_MS -> "just now"
+        ageMillis < FRESH_READING_MS -> "now"
         minutes < 1 -> "<1m ago"
         minutes < 60 -> "${minutes}m ago"
         minutes < 24 * 60 -> "${minutes / 60}h ago"
