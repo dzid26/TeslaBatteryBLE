@@ -53,6 +53,9 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build the demo APK
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: ./gradlew :app:assembleDebug -PdemoCar=true
 
       - name: Enable KVM
