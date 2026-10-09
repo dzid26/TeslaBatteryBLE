@@ -36,7 +36,9 @@ Light and dark themes, side by side.
 - **Lets the car sleep** — while it is charging or driving, readings refresh every 10 s. Otherwise the app keeps
   reading every 10 s for a short while after something happens (the car wakes, locks or unlocks, a door or the
   charge port opens or closes, you tap refresh): one minute, or ten while someone is in or near the car. Then it
-  stops asking, so the car can fall asleep and the reading simply gets older.
+  stops asking, so the car can fall asleep and the reading simply gets older. A car that stays awake anyway
+  (climate on, Sentry) is read once every twenty minutes, which is longer than the car's own sleep timer, so
+  the app never keeps it awake.
 - **Background tracking** via a foreground service: SOC timeline and connection state while parked or charging.
   Tracking resumes by itself after a reboot or an app update (once the phone is unlocked), as long as tracking
   is on and a car is paired. Some phones (Xiaomi, Huawei, Oppo/Vivo, Samsung "sleeping apps") block this unless

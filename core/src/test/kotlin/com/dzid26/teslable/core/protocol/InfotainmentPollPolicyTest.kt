@@ -69,7 +69,7 @@ class InfotainmentPollPolicyTest {
 
     /** After a change tick that read: the hold keeps reading every 10 s until it ends, then stops. */
     private fun assertAbsentHoldThenSilence(status: VehicleStatus = status()) {
-        assertEquals(ticks(5), readsOver(30 * 60_000L, status))
+        assertEquals(ticks(5), readsOver(15 * 60_000L, status))
     }
 
     @Test
@@ -125,7 +125,7 @@ class InfotainmentPollPolicyTest {
         assertTrue(tick())
         policy.onChargeReading(ChargingStateKind.Complete)
         assertFalse(tick())
-        assertTrue(readsOver(60 * 60_000L).isEmpty())
+        assertTrue(readsOver(15 * 60_000L).isEmpty())
     }
 
     @Test
@@ -138,7 +138,7 @@ class InfotainmentPollPolicyTest {
     fun aFreshStartHoldsForTenMinutesWhenSomeoneIsPresent() {
         val present = status(userPresent = true)
         freshStartAndFirstRead(present)
-        assertEquals((1 until HOLD_PRESENT / TICK).map { it * TICK }, readsOver(30 * 60_000L, present))
+        assertEquals((1 until HOLD_PRESENT / TICK).map { it * TICK }, readsOver(HOLD_PRESENT, present))
     }
 
     @Test
@@ -148,7 +148,7 @@ class InfotainmentPollPolicyTest {
         readsOver(5 * 60_000L, present)
         // The person leaves: five minutes after the last change, the short hold is long over.
         assertFalse(tick(status()))
-        assertTrue(readsOver(30 * 60_000L).isEmpty())
+        assertTrue(readsOver(15 * 60_000L).isEmpty())
     }
 
     @Test
@@ -165,10 +165,9 @@ class InfotainmentPollPolicyTest {
     fun aPresenceChangeAloneDoesNotStartTheHold() {
         freshStartAndFirstRead()
         goIdle()
-        goIdle(status(userPresent = true))
         assertFalse(tick(status(userPresent = true)))
-        assertTrue(readsOver(60 * 60_000L, status(userPresent = true)).isEmpty())
-        assertTrue(readsOver(60 * 60_000L, status(userPresent = false)).isEmpty())
+        assertTrue(readsOver(5 * 60_000L, status(userPresent = true)).isEmpty())
+        assertTrue(readsOver(2 * 60_000L, status(userPresent = false)).isEmpty())
     }
 
     @Test
@@ -186,7 +185,7 @@ class InfotainmentPollPolicyTest {
         freshStartAndFirstRead()
         tick(status(locked = false))
         goIdle(status(locked = false))
-        assertTrue(readsOver(60 * 60_000L, status(locked = false)).isEmpty())
+        assertTrue(readsOver(8 * 60_000L, status(locked = false)).isEmpty())
     }
 
     @Test
@@ -278,6 +277,54 @@ class InfotainmentPollPolicyTest {
     }
 
     @Test
+    fun anAwakeIdleCarGetsOneSafetyReadEveryTwentyMinutes() {
+        freshStartAndFirstRead()
+        val lastHoldRead = 5 * TICK
+        val reads = readsOver(70 * 60_000L)
+        assertEquals(ticks(5) + listOf(1, 2, 3).map { lastHoldRead + it * SAFETY }, reads)
+    }
+
+    @Test
+    fun noSafetyReadBeforeTwentyMinutesSinceTheLastRead() {
+        freshStartAndFirstRead()
+        readsOver(HOLD_PRESENT)
+        val sinceLastRead = HOLD_PRESENT - 5 * TICK
+        assertTrue(readsOver(SAFETY - sinceLastRead - 2 * TICK).isEmpty())
+        assertFalse(tick())
+        assertTrue(tick(), "due 20 min after the last read")
+    }
+
+    @Test
+    fun theSafetyReadDoesNotStartAHold() {
+        freshStartAndFirstRead()
+        goIdle()
+        readsOver(SAFETY)
+        // Nothing but the safety reads: one in 20 min, never a run of 10 s reads after one.
+        val reads = readsOver(2 * SAFETY)
+        assertTrue(reads.zipWithNext { a, b -> b - a }.all { it == SAFETY }, "$reads")
+        assertEquals(2, reads.size)
+    }
+
+    @Test
+    fun theSafetyReadKeepsTheTwentyMinuteCadenceWhileTheCarStaysAwake() {
+        freshStartAndFirstRead()
+        goIdle()
+        val reads = readsOver(5 * SAFETY)
+        assertEquals(5, reads.size)
+        assertTrue(reads.zipWithNext { a, b -> b - a }.all { it == SAFETY })
+    }
+
+    @Test
+    fun theSafetyReadWaitsForTheSession() {
+        freshStartAndFirstRead()
+        goIdle()
+        readsOver(SAFETY, status(asleep = false)) // reads happen
+        now += SAFETY
+        assertFalse(policy.onStatus(status(), false, now))
+        assertTrue(policy.onStatus(status(), true, now + TICK))
+    }
+
+    @Test
     fun noReadsWhileAsleep() {
         freshStartAndFirstRead()
         policy.onChargeReading(ChargingStateKind.Charging)
@@ -317,7 +364,7 @@ class InfotainmentPollPolicyTest {
         freshStartAndFirstRead()
         goIdle()
         policy.onUserRequest(now)
-        assertEquals(ticks(5), readsOver(30 * 60_000L))
+        assertEquals(ticks(5), readsOver(15 * 60_000L))
     }
 
     @Test
@@ -326,7 +373,7 @@ class InfotainmentPollPolicyTest {
         assertTrue(policy.onStatus(status(), true, now), "first READY reads")
         goIdle()
         policy.onLinkReady(now) // a reconnect: nothing to read
-        assertTrue(readsOver(30 * 60_000L).isEmpty())
+        assertTrue(readsOver(5 * 60_000L).isEmpty())
     }
 
     @Test
@@ -335,7 +382,7 @@ class InfotainmentPollPolicyTest {
         goIdle()
         now += 5 * 60_000L // link down; nothing changed
         assertFalse(policy.onStatus(status(), true, now))
-        assertTrue(readsOver(30 * 60_000L).isEmpty())
+        assertTrue(readsOver(2 * 60_000L).isEmpty())
     }
 
     @Test
@@ -379,5 +426,6 @@ class InfotainmentPollPolicyTest {
     private companion object {
         const val TICK = 10_000L
         const val HOLD_PRESENT = InfotainmentPollPolicy.HOLD_PRESENT_MS
+        const val SAFETY = InfotainmentPollPolicy.IDLE_SAFETY_INTERVAL_MS
     }
 }

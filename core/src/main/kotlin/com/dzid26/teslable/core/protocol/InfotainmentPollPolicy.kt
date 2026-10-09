@@ -19,7 +19,13 @@ import com.tesla.generated.vcsec.VehicleStatus
  *    - the hold is running: [HOLD_PRESENT_MS] after the last status change if the latest status shows
  *      user presence, otherwise [HOLD_ABSENT_MS]. Presence is re-evaluated on every status, so a
  *      person leaving cuts the remaining hold to the short one.
- * 3. Status changes start or restart the hold: asleep to awake, any lock-state change (locking too,
+ * 3. Idle safety read: awake, not active and not holding, one read once [IDLE_SAFETY_INTERVAL_MS] has
+ *    passed since the last read. It catches an event the status misses (remote climate, Sentry, a
+ *    remote wake) when the car stays awake anyway. The interval is deliberately longer than the car's
+ *    own sleep countdown (about 10 to 15 minutes): a car that would sleep is already asleep when the
+ *    read comes due, so it is skipped and its sleep is never extended. The value is tuned from the
+ *    real-car check. The safety read does not start a hold.
+ * 4. Status changes start or restart the hold: asleep to awake, any lock-state change (locking too,
  *    which catches drive-away locking), any closure changing between open and not open (a closure
  *    that is neither CLOSED nor UNKNOWN counts as open, so ajar is open), a fresh start (see
  *    [onFreshStart]) and a user request. A change in user presence alone is not a change: it flips
@@ -112,9 +118,10 @@ class InfotainmentPollPolicy {
             driving = false
             return false
         }
-        if (!sessionReady || !(isActive() || holding(nowMillis))) return false
+        if (!sessionReady) return false
+        val interval = if (isActive() || holding(nowMillis)) READ_INTERVAL_MS else IDLE_SAFETY_INTERVAL_MS
         val last = lastReadAtMs
-        if (last != null && nowMillis - last < READ_INTERVAL_MS - DUE_SLACK_MS) return false
+        if (last != null && nowMillis - last < interval - DUE_SLACK_MS) return false
         lastReadAtMs = nowMillis
         return true
     }
@@ -168,6 +175,12 @@ class InfotainmentPollPolicy {
 
         /** How long after a status change reads continue when nobody is present. */
         const val HOLD_ABSENT_MS = 60_000L
+
+        /**
+         * The idle safety read: longer than the car's own sleep countdown (about 10 to 15 minutes), so a
+         * car that would sleep is asleep by then and is never kept awake by it. Tuned from the real-car check.
+         */
+        const val IDLE_SAFETY_INTERVAL_MS = 1_200_000L
 
         /**
          * VCSEC statuses arrive about every 10 s give or take a few ms, so a read is due slightly

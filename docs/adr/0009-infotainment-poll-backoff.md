@@ -38,6 +38,14 @@ status, whether the charge+drive pair is due. One instance per vehicle link.
     status shows user presence, otherwise 1 minute. Presence is re-evaluated on
     every status, so when the person leaves, the remaining hold drops to the
     short one.
+- Idle safety read: while VCSEC says awake and the car is neither active nor
+  in a hold, one read once 20 minutes (`IDLE_SAFETY_INTERVAL_MS`) have passed
+  since the last read. It catches an event the status does not show (remote
+  climate, Sentry, a remote wake) when the car stays awake anyway. 20 minutes is
+  deliberately longer than the car's own sleep countdown (about 10-15 minutes):
+  a car that would sleep is already asleep when the read comes due, so the read
+  is skipped and its sleep is never extended. It does not start a hold. The
+  value is tuned from the real-car check.
 - Status changes that start or restart the hold: asleep to awake; any
   lock-state change (locking too, which catches driving away and locking from
   the phone); any closure (doors, trunks, charge port) changing between open
@@ -74,6 +82,8 @@ ticks does not turn a 10 s cadence into 20 s.
   so expect sleep roughly 20-25 minutes after the last change. That is
   the price of catching someone getting in and driving off. A real-car check is
   part of the change.
+- A car that stays awake on its own (remote climate, Sentry) gets one reading
+  every 20 minutes. One that would have slept is never touched by it.
 - The raw log format is unchanged; its records are simply sparser while idle.
 
 ## Considered and deferred
