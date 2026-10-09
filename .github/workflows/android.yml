@@ -18,7 +18,20 @@ on:
       - 'website/**'
       - 'fastlane/**'
       - 'LICENSE'
+  # Run on main with a `tag` to cut a release from the branch head: CI tags it,
+  # builds, captures screenshots and publishes the draft release, so nothing is
+  # public until it is complete. Without a `tag` it is a plain CI run.
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to create at the head of main, e.g. v0.4.0 or v0.4.0-beta.3 (leave empty for a plain CI run)'
+        required: false
+        type: string
+      prerelease:
+        description: 'Mark the release as a pre-release'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -112,12 +125,18 @@ jobs:
   release:
     name: Tag release
     needs: build
-    if: startsWith(github.ref, 'refs/tags/')
+    if: |
+      startsWith(github.ref, 'refs/tags/') ||
+      (github.event_name == 'workflow_dispatch' && inputs.tag != '')
     environment: release
     permissions:
       contents: write
       actions: write # dispatch the Pages deploy after the screenshot commit
     runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+      # Only a manual release sets the pre-release flag explicitly.
+      RELEASE_PRERELEASE: ${{ github.event_name == 'workflow_dispatch' && format('{0}', inputs.prerelease) || '' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -134,6 +153,26 @@ jobs:
 
       - name: Make gradlew executable
         run: chmod +x gradlew
+
+      # A manual release creates its tag locally first, because versionName and
+      # versionCode derive from it; it is pushed only when publishing.
+      - name: Create the release tag
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_REF" != refs/heads/main ]; then
+            echo "::error::Manual releases run from main only"
+            exit 1
+          fi
+          if ! printf '%s' "$RELEASE_TAG" | grep -Eq '^v[0-9]+[.][0-9]+[.][0-9]+(-[0-9A-Za-z.]+)?$'; then
+            echo "::error::'$RELEASE_TAG' is not a tag like v1.2.3 or v1.2.3-beta.1"
+            exit 1
+          fi
+          if git rev-parse -q --verify "refs/tags/$RELEASE_TAG" > /dev/null; then
+            echo "::error::tag $RELEASE_TAG already exists"
+            exit 1
+          fi
+          git tag "$RELEASE_TAG"
 
       - name: Set up signing
         env:
@@ -166,7 +205,7 @@ jobs:
       - name: Stage the release APK
         run: |
           mkdir -p dist
-          cp app/build/outputs/apk/debug/app-debug.apk "dist/TeslaBatteryBLE-${GITHUB_REF_NAME}.apk"
+          cp app/build/outputs/apk/debug/app-debug.apk "dist/TeslaBatteryBLE-${RELEASE_TAG}.apk"
 
       - name: Build the demo APK for screenshots
         run: ./gradlew :app:assembleDebug -PdemoCar=true
@@ -207,6 +246,10 @@ jobs:
           disable-animations: true
           script: rm -rf screenshots && bash .github/scripts/capture-screenshots.sh app/build/outputs/apk/debug/app-debug.apk screenshots
 
+      - name: Push the release tag
+        if: github.event_name == 'workflow_dispatch'
+        run: git push origin "refs/tags/$RELEASE_TAG"
+
       - name: Release on tag
         env:
           GH_TOKEN: ${{ github.token }}
@@ -239,7 +282,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add website/images
-          git commit -m "Refresh screenshots from ${{ github.ref_name }}"
+          git commit -m "Refresh screenshots from ${RELEASE_TAG}"
           git push origin HEAD:main
           # A push made with GITHUB_TOKEN does not trigger other workflows, so
           # pages.yml never sees this commit; dispatch it explicitly.
