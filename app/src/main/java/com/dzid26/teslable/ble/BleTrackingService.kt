@@ -13,6 +13,7 @@ import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import android.text.SpannableString
 import android.text.Spanned
 import android.text.style.ForegroundColorSpan
@@ -112,6 +113,11 @@ class BleTrackingService : Service() {
         if (!startLogged) {
             startLogged = true
             controller.recordAppState(AppState.Event.TRACKING_STARTED, startReasonOf(intent))
+            // The receiver only sees toggles; log the current state too, so it is known after a reboot, update or restart.
+            val interactive = getSystemService(PowerManager::class.java)?.isInteractive
+            if (interactive != null) {
+                controller.recordAppState(if (interactive) AppState.Event.SCREEN_ON else AppState.Event.SCREEN_OFF)
+            }
         }
         if (intent?.action == ACTION_WAKE) {
             controller.wakeVehicle(intent.getStringExtra(EXTRA_BLE_NAME))

@@ -205,7 +205,9 @@ identity), `docs/requirements/multi-phone.md`
   the activity's start and stop (a rotation is skipped), because
   `ProcessLifecycleOwner` would need a new dependency; screen on and off from
   a receiver the tracking service registers, so they are logged only while it
-  runs. Nothing reads these records back yet.
+  runs; when the service starts, the current screen state is logged too
+  (`PowerManager.isInteractive`), as an ordinary screen event after
+  `TRACKING_STARTED`. Nothing reads these records back yet.
 - **Read models.** `BatterySample`, `StatusSample` and `DriveSample` are
   derived on load from the records (`BleRecord.toBatterySample`,
   `BleRecord.toStatusSample`, `BleRecord.toDriveSample`); nothing is written
