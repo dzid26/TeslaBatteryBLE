@@ -68,6 +68,21 @@ status, whether the charge+drive pair is due. One instance per vehicle link.
   door change that happened while the link was down therefore starts the hold on
   the first status after the reconnect.
 
+The Infotainment session is requested on demand, by the read itself
+(`InfotainmentSessionGate`, `core`), never on connect:
+
+- A due read with no session starts the handshake and goes out when the
+  session is established; further due reads while it is in flight do not send
+  another request.
+- Never while VCSEC says asleep: a sleeping car cannot answer, and the request
+  might wake it. On connect only the VCSEC session is requested.
+- The wait for the handshake ends when the session is established, the retries
+  give up, the car is reported asleep, or the link drops. A wait that outlived
+  its handshake once blocked every read for a whole drive (found in the first
+  real-car log, `docs/research/real-car-log-2026-10-09.md`).
+- The policy's "session ready" input means "a read can be attempted now": a
+  session exists or the VIN is valid so one can be started.
+
 A read is due slightly early (1 s slack) so that jitter in the 10 s status
 ticks does not turn a 10 s cadence into 20 s.
 
