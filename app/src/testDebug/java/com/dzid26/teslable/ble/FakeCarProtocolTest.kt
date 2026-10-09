@@ -14,7 +14,9 @@ import com.dzid26.teslable.core.protocol.TeslaSessionRequests
 import com.dzid26.teslable.core.protocol.TeslaVcsec
 import com.dzid26.teslable.core.protocol.asleep
 import com.dzid26.teslable.core.protocol.chargingStateKind
+import com.dzid26.teslable.core.protocol.climateOn
 import com.dzid26.teslable.core.protocol.locked
+import com.dzid26.teslable.core.protocol.sentryOn
 import com.dzid26.teslable.core.protocol.shiftStateKind
 import com.dzid26.teslable.core.protocol.userPresent
 import com.tesla.generated.universalmessage.Domain
@@ -24,6 +26,7 @@ import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -188,6 +191,42 @@ class FakeCarProtocolTest {
         // An Action (field 2 = vehicleAction) can be misread as an RKE action, which would wake the car.
         val session = session(Domain.DOMAIN_INFOTAINMENT)
         authenticated(session, Domain.DOMAIN_INFOTAINMENT, TeslaCommands.buildDriveStateRequest())
+
+        assertTrue(protocol.asleep)
+    }
+
+    @Test
+    fun `closures decrypts to a closures state with sentry off`() {
+        val session = session(Domain.DOMAIN_INFOTAINMENT)
+        val plaintext = authenticated(session, Domain.DOMAIN_INFOTAINMENT, TeslaCommands.buildClosuresStateRequest())
+
+        val closures = TeslaCommands.parseClosuresState(plaintext)
+        assertNotNull(closures)
+        assertNotNull(closures!!.sentry_mode_state)
+        assertFalse(closures.sentryOn)
+        // The other categories' parsers find nothing in it.
+        assertNull(TeslaCommands.parseClimateState(plaintext))
+        assertNull(TeslaCommands.parseDriveState(plaintext))
+    }
+
+    @Test
+    fun `climate decrypts to a climate state with the climate off`() {
+        val session = session(Domain.DOMAIN_INFOTAINMENT)
+        val plaintext = authenticated(session, Domain.DOMAIN_INFOTAINMENT, TeslaCommands.buildClimateStateRequest())
+
+        val climate = TeslaCommands.parseClimateState(plaintext)
+        assertNotNull(climate)
+        assertEquals(false, climate!!.is_climate_on)
+        assertFalse(climate.climateOn)
+        assertNotNull(climate.timestamp)
+        assertNull(TeslaCommands.parseClosuresState(plaintext))
+    }
+
+    @Test
+    fun `closures and climate requests are not mistaken for a wake command`() {
+        val session = session(Domain.DOMAIN_INFOTAINMENT)
+        authenticated(session, Domain.DOMAIN_INFOTAINMENT, TeslaCommands.buildClosuresStateRequest())
+        authenticated(session, Domain.DOMAIN_INFOTAINMENT, TeslaCommands.buildClimateStateRequest())
 
         assertTrue(protocol.asleep)
     }

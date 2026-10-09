@@ -3,6 +3,8 @@
 package com.dzid26.teslable.core.protocol
 
 import com.tesla.generated.carserver.vehicle.ChargeState
+import com.tesla.generated.carserver.vehicle.ClimateState
+import com.tesla.generated.carserver.vehicle.ClosuresState
 import com.tesla.generated.carserver.vehicle.DriveState
 import com.tesla.generated.vcsec.UserPresence_E
 import com.tesla.generated.vcsec.VehicleLockState_E
@@ -64,4 +66,30 @@ val DriveState.shiftStateKind: ShiftStateKind?
             shift.SNA != null -> ShiftStateKind.SNA
             else -> null
         }
+    }
+
+/**
+ * Sentry mode is on: any sentry state but Off (Idle, Armed, Aware, Panic, Quiet). A car that sent
+ * none (sentry unsupported, or the field left out) counts as off.
+ */
+val ClosuresState.sentryOn: Boolean
+    get() {
+        val state = sentry_mode_state ?: return false
+        return state.Idle != null ||
+            state.Armed != null ||
+            state.Aware != null ||
+            state.Panic != null ||
+            state.Quiet != null
+    }
+
+/**
+ * The climate is running: the car says it is on, or a climate keeper mode other than Off is active
+ * (On, Dog, Party). The keeper keeps the climate running when `is_climate_on` alone may read false.
+ * Missing and unknown values count as off.
+ */
+val ClimateState.climateOn: Boolean
+    get() {
+        if (is_climate_on == true) return true
+        val keeper = climate_keeper_mode ?: return false
+        return keeper.On != null || keeper.Dog != null || keeper.Party != null
     }

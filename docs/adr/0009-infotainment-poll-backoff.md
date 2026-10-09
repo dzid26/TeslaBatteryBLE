@@ -26,14 +26,21 @@ Related: ADR-0001 (battery tracker), ADR-0008 (BLE log envelope), issue #112,
 ## Decision
 
 `InfotainmentPollPolicy` (`core`, pure, clock passed in) decides, on every VCSEC
-status, whether the charge+drive pair is due. One instance per vehicle link.
+status, whether the read (charge, drive, closures and climate, in sequence) is
+due. One instance per vehicle link.
 
 - Never while asleep (asleep also drops the hold below), and never to wake the
   car: reads only when VCSEC says awake and an Infotainment session exists.
 - A read every 10 s while either of these holds:
-  - Active: charging state Charging or Starting, or shift state D, R or N. When
-    activity ends, these reads stop right away. This is the one place to extend
-    (`isActive()`): sentry and climate join it later.
+  - Active: charging state Charging or Starting, shift state D, R or N, Sentry
+    mode on (any sentry state but Off), or the climate on (`is_climate_on`, or a
+    climate keeper mode of On, Dog or Party). In Sentry and with the climate on
+    the car stays awake and draws hundreds of watts, so a read every 10 s costs
+    nothing that matters and keeps the readings fresh (owner, 2026-10-09).
+    When activity ends, these reads stop right away: the policy takes each
+    flag from the latest closures and climate reading
+    (`onClosuresReading`, `onClimateReading`), and an asleep status or a fresh
+    start clears them. This is the one place to extend (`isActive()`).
   - Within the hold after the last status change: 10 minutes if the latest
     status shows user presence, otherwise 1 minute. Presence is re-evaluated on
     every status, so when the person leaves, the remaining hold drops to the
@@ -97,14 +104,22 @@ ticks does not turn a 10 s cadence into 20 s.
   so expect sleep roughly 20-25 minutes after the last change. That is
   the price of catching someone getting in and driving off. A real-car check is
   part of the change.
-- A car that stays awake on its own (remote climate, Sentry) gets one reading
-  every 20 minutes. One that would have slept is never touched by it.
-- The raw log format is unchanged; its records are simply sparser while idle.
+- A car in Sentry or with the climate on is read every 10 s while it stays
+  that way, and the car sleeps on its own once both are off: the first reading
+  that shows both off ends the active reads, and the idle rules take over (the
+  1 or 10 minute hold is not restarted, because reads are not status changes).
+  A car that stays awake for another reason the status does not show gets one
+  reading every 20 minutes; one that would have slept is never touched by it.
+- Each read is four requests now (charge, drive, closures, climate) instead of
+  two (ADR-0008), on the same cadence.
+- Sentry and climate are only seen on a read, so one that starts between reads
+  shows after the next one: within 10 s during a hold or other activity, up to
+  20 minutes otherwise (the safety read).
+- The envelope gains the closures and climate payloads (ADR-0008); the logs are
+  otherwise sparser while idle.
 
 ## Considered and deferred
 
 - Android activity recognition to detect driving, instead of waiting for a
   drive to show up in a read.
 - An opt-in "stay awake while the phone is near and moving" feature.
-- Sentry and climate as active states. This is the next PR; it needs
-  VehicleState and ClimateState reads, logged raw.

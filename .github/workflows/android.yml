@@ -117,13 +117,14 @@ jobs:
         run: ./gradlew ktlintCheck detekt
 
       # The artifact gets its own application ID (.pr), launcher label and a
-      # versionName ending in -pr<number>, so it installs next to the release
-      # app. The release job and the screenshot captures build
-      # without the property.
+      # versionName like 0.4.1-beta.1-pr85-a47c909 (PR number and head sha from the
+      # env below), so it installs next to the release app and says which commit it
+      # is. The release job builds without them.
       - name: Build debug APK
         env:
           PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: ./gradlew :app:assembleDebug -PciDebugBuild=true -PciPrNumber="$PR_NUMBER"
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: ./gradlew :app:assembleDebug -PciDebugBuild=true
 
       # The APK name says which PR and commit it came from; the artifact name
       # stays fixed because the screenshot comment looks it up.
