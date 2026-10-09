@@ -2,9 +2,8 @@
 package com.dzid26.teslable.ble
 
 import com.dzid26.teslable.core.history.BatterySample
-import com.dzid26.teslable.core.history.StatusDurations
-import com.dzid26.teslable.core.history.compactDuration
 import com.dzid26.teslable.core.protocol.ChargingStateKind
+import com.dzid26.teslable.core.protocol.InfotainmentPollPolicy
 import com.dzid26.teslable.core.protocol.asleep
 import com.dzid26.teslable.core.protocol.locked
 import com.dzid26.teslable.core.protocol.userPresent
@@ -107,13 +106,18 @@ fun BleUiState.shouldTrack(): Boolean =
                 )
         }
 
+/** Slack on top of two read intervals for a late read (BLE retries, a busy main thread). */
+const val FRESH_SLACK_MS = 5_000L
+
 /**
- * How recent a reading must be to count as fresh: still being read. Reads run
- * every 10 s while they run (about three reads), so a reading turns stale
- * within this long of the reads stopping. Everything older is stale (shown
- * gray, with its age).
+ * How recent a reading must be to count as fresh: still being read. This
+ * follows the poll policy's read rate: two [InfotainmentPollPolicy.READ_INTERVAL_MS]
+ * plus [FRESH_SLACK_MS], so one missed or late read does not flip it, yet a
+ * reading turns stale within seconds of the policy no longer reading. If the
+ * policy's interval becomes adaptive, this should follow the interval in force
+ * instead of the constant. Everything older is stale (gray, with its age).
  */
-const val FRESH_READING_MS = 30_000L
+const val FRESH_READING_MS = 2 * InfotainmentPollPolicy.READ_INTERVAL_MS + FRESH_SLACK_MS
 
 /**
  * How often a screen or the notification re-checks reading ages when no
@@ -202,7 +206,6 @@ fun connectionDisplay(
     connection: TeslaConnection?,
     advert: TeslaAdvert?,
     vehicle: Vehicle? = null,
-    durations: StatusDurations? = null,
 ): ConnectionDisplay {
     val title =
         vehicle?.displayName?.takeIf { it.isNotBlank() }
@@ -213,7 +216,7 @@ fun connectionDisplay(
             ?: "Tesla"
     return ConnectionDisplay(
         title = title,
-        stateText = connectionStateText(connection, durations),
+        stateText = connectionStateText(connection),
         // Live RSSI while connected; otherwise the scan advert's, so unpaired
         // cars show signal strength too.
         rssi = if (connection?.phase == ConnectionPhase.READY) connection.rssi ?: advert?.rssi else advert?.rssi,
@@ -224,16 +227,12 @@ fun connectionDisplay(
  * The connection states: disconnected, connected while asleep, connected, or
  * connected with a battery percentage.
  */
-private fun connectionStateText(
-    connection: TeslaConnection?,
-    durations: StatusDurations?,
-): String =
+private fun connectionStateText(connection: TeslaConnection?): String =
     when {
         connection == null -> "Disconnected"
 
         connection.phase == ConnectionPhase.READY && connection.status?.asleep == true ->
-            "Connected \uD83D\uDCA4" +
-                asleepForMillis(connection.status, durations)?.let(::compactDuration)?.let { " · $it" }.orEmpty()
+            "Connected \uD83D\uDCA4"
 
         connection.phase == ConnectionPhase.READY && connection.charge?.battery_level != null ->
             "Connected · ${connection.charge.battery_level}%"
@@ -249,34 +248,13 @@ private fun connectionStateText(
         else -> "Connecting..."
     }
 
-/**
- * "Locked 3h · Asleep 1h 12m · User away 20m" instead of raw booleans. A flag
- * shows how long it has held when [durations] knows (and still matches the
- * live [status]); otherwise just the label.
- */
-fun vehicleStatusText(
-    status: VehicleStatus,
-    durations: StatusDurations? = null,
-): String =
+/** "Locked · Asleep · User away" instead of raw booleans. */
+fun vehicleStatusText(status: VehicleStatus): String =
     listOf(
-        withDuration(if (status.locked) "Locked" else "Unlocked", durations?.takeIf { it.locked == status.locked }?.lockedForMillis),
-        withDuration(if (status.asleep) "Asleep" else "Awake", asleepForMillis(status, durations)),
-        withDuration(
-            if (status.userPresent) "User present" else "User away",
-            durations?.takeIf { it.userPresent == status.userPresent }?.userPresentForMillis,
-        ),
+        if (status.locked) "Locked" else "Unlocked",
+        if (status.asleep) "Asleep" else "Awake",
+        if (status.userPresent) "User present" else "User away",
     ).joinToString(" · ")
-
-/** How long the car has been asleep, when [status] says asleep and [durations] knows. */
-fun asleepForMillis(
-    status: VehicleStatus?,
-    durations: StatusDurations?,
-): Long? = durations?.takeIf { status != null && it.asleep == status.asleep }?.asleepForMillis
-
-private fun withDuration(
-    label: String,
-    millis: Long?,
-): String = millis?.let(::compactDuration)?.let { "$label $it" } ?: label
 
 /** Friendly names for the per-domain secure sessions. */
 fun sessionNames(sessions: List<String>): String =

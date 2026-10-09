@@ -26,8 +26,6 @@ import com.dzid26.teslable.MainActivity
 import com.dzid26.teslable.R
 import com.dzid26.teslable.core.history.AppState
 import com.dzid26.teslable.core.history.BatterySample
-import com.dzid26.teslable.core.history.StatusSample
-import com.dzid26.teslable.core.history.statusDurations
 import com.dzid26.teslable.core.protocol.asleep
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -93,10 +91,10 @@ class BleTrackingService : Service() {
         )
         val controller = BleControllerHolder.get(this)
         scope.launch {
-            combine(controller.state, controller.batteryHistory, controller.statusHistory) { state, history, statuses ->
-                modelsFor(state, history, statuses)
-            }.collect { models ->
-                publish(models)
+            combine(controller.state, controller.batteryHistory) { state, history ->
+                state to history
+            }.collect { (state, history) ->
+                publish(modelsFor(state, history))
             }
         }
         // The charge reading ages between state changes; re-evaluate when the
@@ -114,7 +112,7 @@ class BleTrackingService : Service() {
                     // A newer read restarts this loop, so the timing follows the latest reading.
                     while (true) {
                         delay(stalenessTickDelayMs(newestRead, System.currentTimeMillis()))
-                        publish(modelsFor(controller.state.value, controller.batteryHistory.value, controller.statusHistory.value))
+                        publish(modelsFor(controller.state.value, controller.batteryHistory.value))
                     }
                 }
         }
@@ -138,7 +136,7 @@ class BleTrackingService : Service() {
         if (intent?.action == ACTION_WAKE) {
             controller.wakeVehicle(intent.getStringExtra(EXTRA_BLE_NAME))
         }
-        publish(modelsFor(controller.state.value, controller.batteryHistory.value, controller.statusHistory.value))
+        publish(modelsFor(controller.state.value, controller.batteryHistory.value))
         // START_STICKY may restart us after a process kill; find the cars again.
         controller.ensureConnected()
         return START_STICKY
@@ -158,16 +156,14 @@ class BleTrackingService : Service() {
     private fun modelsFor(
         state: BleUiState,
         history: List<BatterySample>,
-        statuses: List<StatusSample>,
     ): List<NotificationModel> =
         state.vehicles.mapNotNull { vehicle ->
             val connection = state.connections[vehicle.address] ?: return@mapNotNull null
             if (connection.phase == ConnectionPhase.IDLE) return@mapNotNull null
             val advert = state.devices.firstOrNull { it.address == vehicle.address }
-            val now = System.currentTimeMillis()
-            val durations = statusDurations(statuses, vehicle.bleName, now)
-            val display = connectionDisplay(connection, advert, vehicle = vehicle, durations = durations)
+            val display = connectionDisplay(connection, advert, vehicle = vehicle)
             val lastKnown = history.lastOrNull { it.vehicleId == vehicle.bleName }
+            val now = System.currentTimeMillis()
             val reading = batteryPercent(connection, lastKnown, now)
             NotificationModel(
                 bleName = vehicle.bleName,

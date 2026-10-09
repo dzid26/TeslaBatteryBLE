@@ -72,11 +72,9 @@ import com.dzid26.teslable.core.history.ChargeProjection
 import com.dzid26.teslable.core.history.DischargeProjection
 import com.dzid26.teslable.core.history.DriveSample
 import com.dzid26.teslable.core.history.HistoryRange
-import com.dzid26.teslable.core.history.StatusSample
 import com.dzid26.teslable.core.history.chargeProjection
 import com.dzid26.teslable.core.history.chargeStats
 import com.dzid26.teslable.core.history.dischargeProjection
-import com.dzid26.teslable.core.history.statusDurations
 import com.dzid26.teslable.core.history.within
 import com.dzid26.teslable.core.protocol.asleep
 import com.dzid26.teslable.core.protocol.chargingStateKind
@@ -100,7 +98,6 @@ internal fun CarScreen(
     address: String,
     history: List<BatterySample>,
     driveHistory: List<DriveSample>,
-    statusHistory: List<StatusSample>,
     onBack: () -> Unit,
     onPair: () -> Unit,
     onRefresh: () -> Unit,
@@ -120,12 +117,6 @@ internal fun CarScreen(
             emptyList()
         } else {
             driveHistory.filter { it.vehicleId == vehicle.bleName }
-        }
-    val vehicleStatuses =
-        if (vehicle == null) {
-            emptyList()
-        } else {
-            statusHistory.filter { it.vehicleId == vehicle.bleName }
         }
     val paired = isPaired(connection, vehicle)
     val health = remember(vehicleHistory) { healthSummary(vehicleHistory) }
@@ -212,7 +203,6 @@ internal fun CarScreen(
                     advert = advert,
                     vehicle = vehicle,
                     history = vehicleHistory,
-                    statusHistory = vehicleStatuses,
                 )
                 // Once the app key is enrolled the hero carries its status; the
                 // card only exists for pairing, so it disappears when there is
@@ -233,7 +223,6 @@ private fun HeroCard(
     advert: TeslaAdvert?,
     vehicle: Vehicle?,
     history: List<BatterySample>,
-    statusHistory: List<StatusSample>,
 ) {
     val context = LocalContext.current
     val display = connectionDisplay(connection, advert, vehicle = vehicle)
@@ -243,7 +232,6 @@ private fun HeroCard(
     val lastKnown = history.lastOrNull()
     val nowMillis = rememberNowMillis(connection?.chargeAtMillis)
     val reading = batteryPercent(connection, lastKnown, nowMillis)
-    val durations = remember(statusHistory, nowMillis) { statusDurations(statusHistory, vehicle?.bleName.orEmpty(), nowMillis) }
     val keySlot = connection?.keySlot ?: vehicle?.keySlot
     val pairing = connection?.pairing ?: PairingPhase.IDLE
     Card(
@@ -298,7 +286,7 @@ private fun HeroCard(
             )
             Spacer(Modifier.height(8.dp))
             connection?.status?.let { status ->
-                Text(vehicleStatusText(status, durations), style = MaterialTheme.typography.bodySmall)
+                Text(vehicleStatusText(status), style = MaterialTheme.typography.bodySmall)
             }
             ChargeDetails(charge)
         }

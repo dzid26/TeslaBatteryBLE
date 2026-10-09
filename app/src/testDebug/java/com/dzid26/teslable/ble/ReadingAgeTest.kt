@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 package com.dzid26.teslable.ble
 
+import com.dzid26.teslable.core.protocol.InfotainmentPollPolicy
 import com.tesla.generated.carserver.common.Void
 import com.tesla.generated.carserver.vehicle.ChargeState
 import org.junit.Assert.assertEquals
@@ -85,6 +86,15 @@ class ReadingAgeTest {
         assertEquals(false, batteryPercent(connection, null, readAt + FRESH_READING_MS - 1)?.stale)
         assertEquals(true, batteryPercent(connection, null, readAt + FRESH_READING_MS)?.stale)
         assertEquals(true, batteryPercent(connection, null, readAt + 6 * minute)?.stale)
+    }
+
+    @Test
+    fun `fresh window follows the poll policy's read interval`() {
+        assertEquals(2 * InfotainmentPollPolicy.READ_INTERVAL_MS + FRESH_SLACK_MS, FRESH_READING_MS)
+        // One missed read (twice the interval) must not flip a reading to stale.
+        assertTrue(FRESH_READING_MS > 2 * InfotainmentPollPolicy.READ_INTERVAL_MS)
+        // And it greys well before a minute of silence.
+        assertTrue(FRESH_READING_MS < 60_000L)
     }
 
     @Test

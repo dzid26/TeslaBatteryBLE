@@ -30,12 +30,9 @@ Light and dark themes, side by side.
 - **Scan & connect** to nearby Teslas by advertised BLE name, with VIN-based hinting
 - **Pair a key** (CHARGING_MANAGER role by default) via Tesla's unsigned `addKey` flow: NFC card tap on the console + vehicle confirmation
 - **Read battery SOC** and charge state over an authenticated, encrypted session; a
-  reading is blue only while it is still being read (under 30 s old); after that it
+  reading is blue only while it is still being read (under about 25 s old); after that it
   turns gray and the car view, the list and the notification say how long ago it was
   read ("12m ago")
-- **How long each state has held** — the car view shows "Locked 3h · Asleep 1h 12m"
-  from the status history, and the notification shows how long the car has been asleep;
-  no duration is shown when the history does not reach back to the change
 - **On-demand wake** — the car is only woken when you ask, never in the background
 - **Lets the car sleep** — while it is charging, driving, in Sentry mode or running the climate (the car stays
   awake and draws power anyway), readings refresh every 10 s. Otherwise the app keeps
