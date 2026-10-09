@@ -75,5 +75,8 @@ Follow-up tests with a stable link, which settle the caveat in "Sleep" above.
   a request in these logs could be attributed to the app or to the owner, nor
   could we tell whether the app was in the background. That led to the command
   and app-state logs (`<vehicleId>.command.pblog` and `app.pblog`, ADR-0008).
-- **Next measurement:** the car's natural awake time after a wake with no
-  reads at all, to tell the car's own countdown from what our reads add.
+- **A remote wake alone is short.** The owner woke the car over BLE, took one
+  read and nothing more: it slept after about 2 minutes. It stays awake longer
+  only while reads continue or someone physically uses the car, so the car's
+  own countdown after a BLE wake is far shorter than the ~10 minutes ADR-0009
+  assumed for a read.
