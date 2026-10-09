@@ -43,10 +43,11 @@ Sources were read on 2026-10-08; quotes are short extracts.
   minutes; the project owner's premise, 2026-10-08). A 30 s window for 11
   minutes would keep the car awake about 21 minutes instead of 10, and 660 s
   idle reads could keep it awake indefinitely. So ADR-0009 drops both: 10 s
-  while charging or driving, otherwise single reads on events.
+  while charging or driving, and for a short hold (1 min, or 10 min when the
+  car reports someone present) after each status change, then nothing.
 - Driving counts as active because the phone rides along; the ESP32 bridge
   stays home and never sees a drive.
-- This app never wakes the car, so a wake-up blip gets one read and no window.
+- This app never wakes the car, so a wake-up blip only starts the short hold.
 
 ## To measure
 

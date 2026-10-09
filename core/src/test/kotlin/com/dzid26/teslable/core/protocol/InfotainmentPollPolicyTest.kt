@@ -33,6 +33,9 @@ class InfotainmentPollPolicyTest {
     private val doorOpen = ClosureStatuses(frontDriverDoor = ClosureState_E.CLOSURESTATE_OPEN)
     private val doorClosed = ClosureStatuses(frontDriverDoor = ClosureState_E.CLOSURESTATE_CLOSED)
 
+    /** Reads at ticks 10 s, 20 s, ... [count] ticks after the change tick (the change tick itself reads too). */
+    private fun ticks(count: Int) = (1..count).map { it * TICK }
+
     /** Advances the clock by one 10 s VCSEC tick and feeds the status; returns whether a read is due. */
     private fun tick(
         status: VehicleStatus = status(),
@@ -53,28 +56,34 @@ class InfotainmentPollPolicyTest {
         return reads
     }
 
-    private fun connectAndFirstRead() {
+    private fun freshStartAndFirstRead(status: VehicleStatus = status()) {
         policy.onFreshStart(now)
-        assertTrue(policy.onStatus(status(), true, now), "first awake status after connect reads")
+        assertTrue(policy.onStatus(status, true, now), "first awake status after a fresh start reads")
     }
 
-    /** Lets the connect follow-up pass, so the next assertions see a quiet, idle car. */
-    private fun settle() {
-        assertEquals(listOf(FOLLOW_UP), readsOver(10 * 60_000L))
+    /** Lets the short and the long hold run out with nothing changing, so the car is idle. */
+    private fun goIdle(status: VehicleStatus = status()) {
+        readsOver(HOLD_PRESENT + 2 * TICK, status)
+        assertFalse(tick(status), "idle")
+    }
+
+    /** After a change tick that read: the hold keeps reading every 10 s until it ends, then stops. */
+    private fun assertAbsentHoldThenSilence(status: VehicleStatus = status()) {
+        assertEquals(ticks(5), readsOver(30 * 60_000L, status))
     }
 
     @Test
     fun chargingReadsEveryTenSeconds() {
-        connectAndFirstRead()
-        repeat(6) {
-            policy.onChargeReading(ChargingStateKind.Charging)
-            assertTrue(tick(), "tick $it")
-        }
+        freshStartAndFirstRead()
+        goIdle()
+        policy.onChargeReading(ChargingStateKind.Charging)
+        repeat(200) { assertTrue(tick(), "tick $it") }
     }
 
     @Test
     fun startingCountsAsActive() {
-        connectAndFirstRead()
+        freshStartAndFirstRead()
+        goIdle()
         policy.onChargeReading(ChargingStateKind.Starting)
         assertTrue(tick())
         assertTrue(tick())
@@ -83,202 +92,105 @@ class InfotainmentPollPolicyTest {
     @Test
     fun drivingInDriveReverseOrNeutralReadsEveryTenSeconds() {
         for (shift in listOf(ShiftStateKind.D, ShiftStateKind.R, ShiftStateKind.N)) {
-            connectAndFirstRead()
-            repeat(3) {
-                policy.onDriveReading(shift)
-                assertTrue(tick(), "$shift $it")
-            }
+            freshStartAndFirstRead()
+            goIdle()
+            policy.onDriveReading(shift)
+            repeat(30) { assertTrue(tick(), "$shift $it") }
+            policy.onDriveReading(ShiftStateKind.P)
+            assertFalse(tick(), "back in park")
         }
     }
 
     @Test
     fun parkedAndNonChargingStatesAreNotActive() {
-        for (kind in listOf(null) +
-            ChargingStateKind.entries.filter { it != ChargingStateKind.Charging && it != ChargingStateKind.Starting }) {
-            connectAndFirstRead()
+        val idle = ChargingStateKind.entries.filter { it != ChargingStateKind.Charging && it != ChargingStateKind.Starting }
+        for (kind in listOf(null) + idle) {
+            freshStartAndFirstRead()
+            goIdle()
             policy.onChargeReading(kind)
             policy.onDriveReading(ShiftStateKind.P)
             assertFalse(tick(), "$kind")
         }
-        connectAndFirstRead()
         policy.onDriveReading(ShiftStateKind.Invalid)
+        assertFalse(tick())
+        policy.onDriveReading(ShiftStateKind.SNA)
         assertFalse(tick())
     }
 
     @Test
-    fun readsStopRightAwayWhenActivityEnds() {
-        connectAndFirstRead()
+    fun readsStopRightAwayWhenActivityEndsAfterTheHold() {
+        freshStartAndFirstRead()
+        goIdle()
         policy.onChargeReading(ChargingStateKind.Charging)
         assertTrue(tick())
         policy.onChargeReading(ChargingStateKind.Complete)
         assertFalse(tick())
-        // Only the connect follow-up remains: no window, no idle reads.
-        assertEquals(listOf(FOLLOW_UP - 2 * TICK), readsOver(60 * 60_000L))
+        assertTrue(readsOver(60 * 60_000L).isEmpty())
     }
 
     @Test
-    fun activeCadenceKeepsGoingForHours() {
-        connectAndFirstRead()
-        repeat(2_000) {
-            policy.onDriveReading(ShiftStateKind.D)
-            assertTrue(tick())
-        }
+    fun aFreshStartHoldsForOneMinuteWhenNobodyIsPresent() {
+        freshStartAndFirstRead()
+        assertAbsentHoldThenSilence()
     }
 
     @Test
-    fun connectReadsOnceThenFollowsUpOnceAfterSixtySeconds() {
-        connectAndFirstRead()
-        assertEquals(listOf(FOLLOW_UP), readsOver(60 * 60_000L))
+    fun aFreshStartHoldsForTenMinutesWhenSomeoneIsPresent() {
+        val present = status(userPresent = true)
+        freshStartAndFirstRead(present)
+        assertEquals((1 until HOLD_PRESENT / TICK).map { it * TICK }, readsOver(30 * 60_000L, present))
     }
 
     @Test
-    fun connectWhileAsleepReadsNothingUntilTheWake() {
-        policy.onFreshStart(now)
-        assertTrue(readsOver(30 * 60_000L, status(asleep = true)).isEmpty())
-        assertTrue(tick(), "wake read")
-        assertEquals(listOf(FOLLOW_UP), readsOver(30 * 60_000L))
-    }
-
-    @Test
-    fun aReconnectIsNotAnEventButKeepsTheTransitionMemory() {
-        connectAndFirstRead()
-        settle()
-        // The link drops: no statuses for a while, and the car stays as it was. Nothing to read.
-        now += 5 * 60_000L
-        assertFalse(policy.onStatus(status(), true, now))
+    fun presenceIsReEvaluatedOnEveryStatus() {
+        val present = status(userPresent = true)
+        freshStartAndFirstRead(present)
+        readsOver(5 * 60_000L, present)
+        // The person leaves: five minutes after the last change, the short hold is long over.
+        assertFalse(tick(status()))
         assertTrue(readsOver(30 * 60_000L).isEmpty())
     }
 
     @Test
-    fun onlyTheFirstLinkReadyIsAFreshStart() {
-        policy.onLinkReady(now)
-        assertTrue(policy.onStatus(status(), true, now), "first READY reads")
-        settle()
-        policy.onLinkReady(now) // a reconnect: nothing to read, no follow-up
-        assertTrue(readsOver(30 * 60_000L).isEmpty())
+    fun someoneArrivingLengthensTheHoldFromTheLastChange() {
+        freshStartAndFirstRead()
+        assertEquals(ticks(5), readsOver(60_000L))
+        assertFalse(tick(), "the one minute hold is over")
+        // The long hold applies from the same last change, so it is still running.
+        assertTrue(tick(status(userPresent = true)))
+        assertTrue(tick(status(userPresent = true)))
     }
 
     @Test
-    fun aWakeWhileTheLinkWasDownIsAnEventAfterTheReconnect() {
-        connectAndFirstRead()
-        readsOver(3 * TICK, status(asleep = true))
-        now += 5 * 60_000L // link down; the car woke meanwhile
-        assertTrue(policy.onStatus(status(), true, now))
+    fun aPresenceChangeAloneDoesNotStartTheHold() {
+        freshStartAndFirstRead()
+        goIdle()
+        goIdle(status(userPresent = true))
+        assertFalse(tick(status(userPresent = true)))
+        assertTrue(readsOver(60 * 60_000L, status(userPresent = true)).isEmpty())
+        assertTrue(readsOver(60 * 60_000L, status(userPresent = false)).isEmpty())
     }
 
     @Test
-    fun anUnlockOrClosureChangeWhileTheLinkWasDownIsAnEventAfterTheReconnect() {
-        connectAndFirstRead()
-        settle()
-        now += 5 * 60_000L
-        assertTrue(policy.onStatus(status(locked = false), true, now))
-        settle2(status(locked = false))
-        now += 5 * 60_000L
-        assertTrue(policy.onStatus(status(locked = false, closures = doorOpen), true, now))
+    fun anyLockChangeStartsTheHoldIncludingLocking() {
+        freshStartAndFirstRead()
+        goIdle()
+        assertTrue(tick(status(locked = false)), "unlock")
+        assertAbsentHoldThenSilence(status(locked = false))
+        assertTrue(tick(status(locked = true)), "lock, for example driving away")
+        assertAbsentHoldThenSilence(status(locked = true))
     }
 
     @Test
-    fun aFreshStartForgetsTheTransitionMemory() {
-        connectAndFirstRead()
-        settle()
-        now += 5 * 60_000L
-        policy.onFreshStart(now)
-        // Unlocked and a door open since before: the fresh start reads once, those are not events.
-        val changed = status(locked = false, closures = doorOpen)
-        assertTrue(policy.onStatus(changed, true, now))
-        assertEquals(listOf(FOLLOW_UP), readsOver(30 * 60_000L, changed))
+    fun stayingLockedOrUnlockedDoesNotRestartTheHold() {
+        freshStartAndFirstRead()
+        tick(status(locked = false))
+        goIdle(status(locked = false))
+        assertTrue(readsOver(60 * 60_000L, status(locked = false)).isEmpty())
     }
 
     @Test
-    fun aClosureGoingAjarCountsAsOpening() {
-        connectAndFirstRead()
-        settle()
-        val ajar = status(closures = ClosureStatuses(frontDriverDoor = ClosureState_E.CLOSURESTATE_AJAR))
-        assertTrue(tick(ajar))
-    }
-
-    @Test
-    fun anUnknownClosureIsNotOpen() {
-        connectAndFirstRead()
-        settle()
-        val unknown = status(closures = ClosureStatuses(frontDriverDoor = ClosureState_E.CLOSURESTATE_UNKNOWN))
-        assertFalse(tick(unknown))
-    }
-
-    @Test
-    fun noReadsWhileAsleep() {
-        connectAndFirstRead()
-        policy.onChargeReading(ChargingStateKind.Charging)
-        assertTrue(readsOver(2 * 60 * 60_000L, status(asleep = true)).isEmpty())
-    }
-
-    @Test
-    fun asleepDropsAPendingFollowUp() {
-        connectAndFirstRead()
-        readsOver(2 * TICK, status(asleep = true))
-        // The connect follow-up fell due while asleep and is gone; only the wake's own follow-up is left.
-        assertTrue(readsOver(FOLLOW_UP, status(asleep = true)).isEmpty())
-        assertTrue(tick(), "wake read")
-        assertEquals(listOf(FOLLOW_UP), readsOver(30 * 60_000L))
-    }
-
-    @Test
-    fun noReadsWithoutASession() {
-        policy.onFreshStart(now)
-        assertFalse(tick(sessionReady = false))
-        assertFalse(tick(sessionReady = false))
-        assertTrue(tick(sessionReady = true), "reads as soon as the session exists")
-    }
-
-    @Test
-    fun wakeFromSleepReadsAtOnceThenOnceMore() {
-        connectAndFirstRead()
-        settle()
-        readsOver(5 * TICK, status(asleep = true))
-        assertTrue(tick(), "read right away on wake")
-        assertEquals(listOf(FOLLOW_UP), readsOver(30 * 60_000L))
-    }
-
-    @Test
-    fun wakeReadShowingActivityTakesOverAtTenSeconds() {
-        connectAndFirstRead()
-        settle()
-        readsOver(3 * TICK, status(asleep = true))
-        assertTrue(tick())
-        policy.onChargeReading(ChargingStateKind.Charging)
-        assertTrue(tick())
-        assertTrue(tick())
-    }
-
-    @Test
-    fun wakeReadWaitsForTheSession() {
-        connectAndFirstRead()
-        settle()
-        readsOver(3 * TICK, status(asleep = true))
-        assertFalse(tick(sessionReady = false))
-        assertTrue(tick(sessionReady = true))
-        assertFalse(tick(), "the wake read is not repeated")
-    }
-
-    @Test
-    fun readingsFromBeforeSleepDoNotCountAsActiveAfterWake() {
-        connectAndFirstRead()
-        policy.onChargeReading(ChargingStateKind.Charging)
-        readsOver(3 * TICK, status(asleep = true))
-        assertTrue(tick(), "wake read")
-        assertFalse(tick(), "a stale charging reading must not keep the 10 s cadence")
-    }
-
-    @Test
-    fun lockedToUnlockedReadsAtOnceThenOnceMore() {
-        connectAndFirstRead()
-        settle()
-        assertTrue(tick(status(locked = false)))
-        assertEquals(listOf(FOLLOW_UP), readsOver(30 * 60_000L, status(locked = false)))
-    }
-
-    @Test
-    fun openingAnyClosureReadsAtOnceThenOnceMore() {
+    fun everyClosureChangingStartsTheHoldOpeningOrClosing() {
         val all =
             listOf(
                 ClosureStatuses(frontDriverDoor = ClosureState_E.CLOSURESTATE_OPEN),
@@ -291,95 +203,181 @@ class InfotainmentPollPolicyTest {
                 ClosureStatuses(tonneau = ClosureState_E.CLOSURESTATE_OPEN),
             )
         for (closures in all) {
-            connectAndFirstRead()
-            settle()
-            assertTrue(tick(status(closures = closures)), "$closures")
-            assertEquals(listOf(FOLLOW_UP), readsOver(30 * 60_000L, status(closures = closures)), "$closures")
+            freshStartAndFirstRead()
+            goIdle()
+            assertTrue(tick(status(closures = closures)), "opening $closures")
+            assertAbsentHoldThenSilence(status(closures = closures))
+            assertTrue(tick(status(closures = ClosureStatuses())), "closing $closures")
+            assertAbsentHoldThenSilence(status(closures = ClosureStatuses()))
         }
     }
 
     @Test
-    fun closingAClosureIsAnEventToo() {
-        connectAndFirstRead()
-        assertTrue(tick(status(closures = doorOpen)), "opening reads")
-        settle2(status(closures = doorOpen))
-        assertTrue(tick(status(closures = doorClosed)))
-        assertEquals(listOf(FOLLOW_UP), readsOver(30 * 60_000L, status(closures = doorClosed)))
+    fun aClosureGoingAjarCountsAsOpening() {
+        freshStartAndFirstRead()
+        goIdle()
+        assertTrue(tick(status(closures = ClosureStatuses(frontDriverDoor = ClosureState_E.CLOSURESTATE_AJAR))))
     }
 
     @Test
-    fun aSecondClosureChangingWhileOneIsOpenIsAnEvent() {
-        connectAndFirstRead()
+    fun anUnknownClosureIsNotOpen() {
+        freshStartAndFirstRead()
+        goIdle()
+        assertFalse(tick(status(closures = ClosureStatuses(frontDriverDoor = ClosureState_E.CLOSURESTATE_UNKNOWN))))
+    }
+
+    @Test
+    fun aSecondClosureChangingWhileOneIsOpenStartsTheHold() {
+        freshStartAndFirstRead()
         tick(status(closures = doorOpen))
-        settle2(status(closures = doorOpen))
+        goIdle(status(closures = doorOpen))
         val both = doorOpen.copy(chargePort = ClosureState_E.CLOSURESTATE_OPEN)
         assertTrue(tick(status(closures = both)))
     }
 
     @Test
-    fun userRequestCountsAsTheReadThenFollowsUpOnce() {
-        connectAndFirstRead()
-        settle()
-        policy.onUserRequest(now)
-        assertFalse(tick(), "the request itself was the read")
-        assertEquals(listOf(FOLLOW_UP - TICK), readsOver(30 * 60_000L))
-    }
-
-    @Test
-    fun aNewEventReplacesAPendingFollowUp() {
-        connectAndFirstRead()
-        readsOver(40_000L) // 40 s into the connect follow-up
-        assertTrue(tick(status(locked = false)), "unlock event at 50 s")
-        // Only one follow-up, 60 s after the unlock, not one for the connect as well.
-        assertEquals(listOf(FOLLOW_UP), readsOver(30 * 60_000L, status(locked = false)))
-    }
-
-    @Test
-    fun aClosureAlreadyOpenAtConnectIsNotAnEvent() {
+    fun aClosureAlreadyOpenAtAFreshStartIsNotAChange() {
         policy.onFreshStart(now)
         assertTrue(policy.onStatus(status(closures = doorOpen), true, now))
-        // Only the connect follow-up, nothing for the open door.
-        assertEquals(listOf(FOLLOW_UP), readsOver(30 * 60_000L, status(closures = doorOpen)))
+        assertAbsentHoldThenSilence(status(closures = doorOpen))
     }
 
     @Test
-    fun userPresenceIsNotAnEvent() {
-        connectAndFirstRead()
-        settle()
-        assertTrue(readsOver(60 * 60_000L, status(userPresent = true)).isEmpty())
-    }
-
-    @Test
-    fun stayingUnlockedIsNotAnEvent() {
-        connectAndFirstRead()
-        tick(status(locked = false))
-        readsOver(30 * 60_000L, status(locked = false))
-        assertTrue(readsOver(60 * 60_000L, status(locked = false)).isEmpty())
-    }
-
-    @Test
-    fun lockingIsNotAnEvent() {
-        connectAndFirstRead()
-        tick(status(locked = false))
-        readsOver(30 * 60_000L, status(locked = false))
-        assertFalse(tick(status(locked = true)))
-        assertTrue(readsOver(60 * 60_000L, status(locked = true)).isEmpty())
-    }
-
-    @Test
-    fun anAllClosedStatusAfterOneWithoutClosuresIsNotAnEvent() {
-        connectAndFirstRead()
-        settle()
+    fun anAllClosedStatusAfterOneWithoutClosuresIsNotAChange() {
+        freshStartAndFirstRead()
+        goIdle()
         assertTrue(readsOver(10 * 60_000L, status(closures = ClosureStatuses())).isEmpty())
     }
 
-    /** Lets any pending follow-up pass with a fixed status. */
-    private fun settle2(status: VehicleStatus) {
-        readsOver(10 * 60_000L, status)
+    @Test
+    fun wakeFromSleepStartsTheHold() {
+        freshStartAndFirstRead()
+        goIdle()
+        readsOver(5 * TICK, status(asleep = true))
+        assertTrue(tick(), "read right away on wake")
+        assertAbsentHoldThenSilence()
+    }
+
+    @Test
+    fun wakeReadShowingActivityTakesOver() {
+        freshStartAndFirstRead()
+        goIdle()
+        readsOver(3 * TICK, status(asleep = true))
+        assertTrue(tick())
+        policy.onChargeReading(ChargingStateKind.Charging)
+        repeat(20) { assertTrue(tick()) }
+    }
+
+    @Test
+    fun wakeReadWaitsForTheSessionWhileTheHoldRuns() {
+        freshStartAndFirstRead()
+        goIdle()
+        readsOver(3 * TICK, status(asleep = true))
+        assertFalse(tick(sessionReady = false))
+        assertTrue(tick(sessionReady = true))
+    }
+
+    @Test
+    fun noReadsWhileAsleep() {
+        freshStartAndFirstRead()
+        policy.onChargeReading(ChargingStateKind.Charging)
+        assertTrue(readsOver(2 * 60 * 60_000L, status(asleep = true)).isEmpty())
+    }
+
+    @Test
+    fun asleepDropsTheHold() {
+        policy.onFreshStart(now)
+        // Asleep at the first status: the fresh-start hold is gone; the wake later starts a new one.
+        assertFalse(policy.onStatus(status(asleep = true), true, now))
+        readsOver(5 * 60_000L, status(asleep = true))
+        assertTrue(tick(), "wake")
+        assertAbsentHoldThenSilence()
+    }
+
+    @Test
+    fun readingsFromBeforeSleepDoNotCountAsActiveAfterWake() {
+        freshStartAndFirstRead()
+        policy.onChargeReading(ChargingStateKind.Charging)
+        readsOver(3 * TICK, status(asleep = true))
+        assertTrue(tick(), "wake read")
+        readsOver(HOLD_PRESENT)
+        assertFalse(tick(), "a stale charging reading must not keep the 10 s cadence")
+    }
+
+    @Test
+    fun noReadsWithoutASession() {
+        policy.onFreshStart(now)
+        assertFalse(tick(sessionReady = false))
+        assertFalse(tick(sessionReady = false))
+        assertTrue(tick(sessionReady = true), "reads as soon as the session exists, inside the hold")
+    }
+
+    @Test
+    fun userRequestStartsTheHoldAndCountsAsTheRead() {
+        freshStartAndFirstRead()
+        goIdle()
+        policy.onUserRequest(now)
+        assertEquals(ticks(5), readsOver(30 * 60_000L))
+    }
+
+    @Test
+    fun onlyTheFirstLinkReadyIsAFreshStart() {
+        policy.onLinkReady(now)
+        assertTrue(policy.onStatus(status(), true, now), "first READY reads")
+        goIdle()
+        policy.onLinkReady(now) // a reconnect: nothing to read
+        assertTrue(readsOver(30 * 60_000L).isEmpty())
+    }
+
+    @Test
+    fun aReconnectKeepsTheTransitionMemory() {
+        freshStartAndFirstRead()
+        goIdle()
+        now += 5 * 60_000L // link down; nothing changed
+        assertFalse(policy.onStatus(status(), true, now))
+        assertTrue(readsOver(30 * 60_000L).isEmpty())
+    }
+
+    @Test
+    fun aWakeWhileTheLinkWasDownStartsTheHoldAfterTheReconnect() {
+        freshStartAndFirstRead()
+        readsOver(3 * TICK, status(asleep = true))
+        now += 5 * 60_000L
+        assertTrue(policy.onStatus(status(), true, now))
+    }
+
+    @Test
+    fun aLockOrClosureChangeWhileTheLinkWasDownStartsTheHoldAfterTheReconnect() {
+        freshStartAndFirstRead()
+        goIdle()
+        now += 5 * 60_000L
+        assertTrue(policy.onStatus(status(locked = false), true, now))
+        goIdle(status(locked = false))
+        now += 5 * 60_000L
+        assertTrue(policy.onStatus(status(locked = false, closures = doorOpen), true, now))
+    }
+
+    @Test
+    fun aFreshStartForgetsTheTransitionMemory() {
+        freshStartAndFirstRead()
+        goIdle()
+        now += 5 * 60_000L
+        policy.onFreshStart(now)
+        val changed = status(locked = false, closures = doorOpen)
+        assertTrue(policy.onStatus(changed, true, now))
+        assertAbsentHoldThenSilence(changed)
+    }
+
+    @Test
+    fun closingAfterAFreshStartWithTheDoorOpenIsAChange() {
+        policy.onFreshStart(now)
+        policy.onStatus(status(closures = doorOpen), true, now)
+        goIdle(status(closures = doorOpen))
+        assertTrue(tick(status(closures = doorClosed)))
     }
 
     private companion object {
         const val TICK = 10_000L
-        const val FOLLOW_UP = InfotainmentPollPolicy.FOLLOW_UP_DELAY_MS
+        const val HOLD_PRESENT = InfotainmentPollPolicy.HOLD_PRESENT_MS
     }
 }

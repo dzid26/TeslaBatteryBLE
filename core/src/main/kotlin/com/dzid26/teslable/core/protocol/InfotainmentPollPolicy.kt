@@ -12,30 +12,30 @@ import com.tesla.generated.vcsec.VehicleStatus
  * while the car is merely awake keeps it awake (ADR-0009, issue #112). VCSEC status does not, and
  * keeps the BLE link alive, so it stays on its own 10 s cadence outside this class. The rules:
  *
- * 1. Never while asleep, and never to wake the car: reads only when VCSEC says awake and a session
- *    exists.
- * 2. Active (charging state Charging or Starting, or shift state D, R or N): a read every
- *    [ACTIVE_INTERVAL_MS]. When activity ends the reads stop right away.
- * 3. Not active: single reads on events, each sent at once. Events: a fresh start (see
- *    [onFreshStart]), VCSEC asleep to awake, locked to unlocked, any closure changing between open and
- *    not open (a closure that is neither CLOSED nor UNKNOWN counts as open, so ajar is open), and an
- *    explicit user request. A plain reconnect after a dropped link is not an event. Each event also
- *    schedules one follow-up read [FOLLOW_UP_DELAY_MS] later, to catch a shift into D or charging
- *    starting just after it. A new event replaces a pending follow-up instead of stacking. Then
- *    nothing until the next event.
- * 4. User presence, and staying unlocked or locked without a closure change, are not events.
+ * 1. Never while asleep (asleep also drops the hold), and never to wake the car: reads only when
+ *    VCSEC says awake and a session exists.
+ * 2. A read every [READ_INTERVAL_MS] while either
+ *    - the car is active (see [isActive]: charging, driving), or
+ *    - the hold is running: [HOLD_PRESENT_MS] after the last status change if the latest status shows
+ *      user presence, otherwise [HOLD_ABSENT_MS]. Presence is re-evaluated on every status, so a
+ *      person leaving cuts the remaining hold to the short one.
+ * 3. Status changes start or restart the hold: asleep to awake, any lock-state change (locking too,
+ *    which catches drive-away locking), any closure changing between open and not open (a closure
+ *    that is neither CLOSED nor UNKNOWN counts as open, so ajar is open), a fresh start (see
+ *    [onFreshStart]) and a user request. A change in user presence alone is not a change: it flips
+ *    with phone-key range and would keep resetting the car's sleep countdown.
  *
  * Reconnects: the transition memory (previous asleep, locked and closure state) survives a dropped
- * link, so a wake, unlock or door change that happened while the link was down still is an event on
- * the first status after it. The caller therefore does nothing at a plain reconnect.
+ * link, so a wake, lock change or door change that happened while the link was down still starts the
+ * hold on the first status after it. The caller therefore does nothing at a plain reconnect.
  *
  * Pure and clock-free (the caller passes `nowMillis`) so it ports to other platforms; one instance
  * per vehicle link, not thread-safe.
  */
 class InfotainmentPollPolicy {
     private var lastReadAtMs: Long? = null
-    private var followUpAtMs: Long? = null
-    private var readPending = false
+    private var lastChangeAtMs: Long? = null
+    private var userPresent = false
     private var started = false
     private var charging = false
     private var driving = false
@@ -43,13 +43,17 @@ class InfotainmentPollPolicy {
     private var previousLocked: Boolean? = null
     private var previousOpenClosures: Int? = null
 
-    private val active: Boolean get() = charging || driving
+    /**
+     * Whether the car is doing something that warrants a read every [READ_INTERVAL_MS] on its own.
+     * Extension point: sentry mode and climate join charging and driving here later.
+     */
+    private fun isActive(): Boolean = charging || driving
 
     /**
      * A fresh start: the first READY link since the app process or tracking started (app start,
      * auto-start after boot or update, tracking switched on), or the first READY link right after
-     * pairing or key enrollment. Forgets everything, including the transition memory, reads at the
-     * first awake status and follows up once. Not for a reconnect after a dropped link.
+     * pairing or key enrollment. Forgets everything, including the transition memory, and starts the
+     * hold. Not for a reconnect after a dropped link.
      */
     fun onFreshStart(nowMillis: Long) {
         started = true
@@ -59,7 +63,7 @@ class InfotainmentPollPolicy {
         previousAsleep = null
         previousLocked = null
         previousOpenClosures = null
-        event(nowMillis)
+        lastChangeAtMs = nowMillis
     }
 
     /**
@@ -72,13 +76,12 @@ class InfotainmentPollPolicy {
     }
 
     /**
-     * The user asked for a reading (refresh button, notification wake). The caller sends the read
-     * immediately; this counts it as the latest read and schedules the follow-up.
+     * The user asked for a reading (refresh button). The caller sends the read immediately; this
+     * counts it as the latest read and starts the hold.
      */
     fun onUserRequest(nowMillis: Long) {
         lastReadAtMs = nowMillis
-        readPending = false
-        followUpAtMs = nowMillis + FOLLOW_UP_DELAY_MS
+        lastChangeAtMs = nowMillis
     }
 
     /** The latest charge reading. Charging or Starting is activity. */
@@ -95,7 +98,7 @@ class InfotainmentPollPolicy {
      * Feeds one VCSEC status and answers whether an Infotainment read is due now. Returns true at
      * most once per due read: it records the read, so the caller must then send it. With
      * [sessionReady] false (no Infotainment session or VIN yet) nothing is recorded and the answer
-     * is false, so an event read waits for the session. Asleep drops everything pending.
+     * is false; the hold keeps running, so a read still follows once the session exists.
      */
     fun onStatus(
         status: VehicleStatus,
@@ -104,26 +107,21 @@ class InfotainmentPollPolicy {
     ): Boolean {
         observe(status, nowMillis)
         if (status.asleep) {
-            readPending = false
-            followUpAtMs = null
+            lastChangeAtMs = null
             charging = false
             driving = false
             return false
         }
-        if (!sessionReady) return false
-        val followUpDue = followUpAtMs?.let { nowMillis >= it - DUE_SLACK_MS } == true
+        if (!sessionReady || !(isActive() || holding(nowMillis))) return false
         val last = lastReadAtMs
-        val activeDue = active && (last == null || nowMillis - last >= ACTIVE_INTERVAL_MS - DUE_SLACK_MS)
-        if (!readPending && !followUpDue && !activeDue) return false
+        if (last != null && nowMillis - last < READ_INTERVAL_MS - DUE_SLACK_MS) return false
         lastReadAtMs = nowMillis
-        readPending = false
-        if (followUpDue) followUpAtMs = null
         return true
     }
 
-    private fun event(nowMillis: Long) {
-        readPending = true
-        followUpAtMs = nowMillis + FOLLOW_UP_DELAY_MS
+    private fun holding(nowMillis: Long): Boolean {
+        val changedAt = lastChangeAtMs ?: return false
+        return nowMillis - changedAt < if (userPresent) HOLD_PRESENT_MS else HOLD_ABSENT_MS
     }
 
     private fun observe(
@@ -132,9 +130,10 @@ class InfotainmentPollPolicy {
     ) {
         val openClosures = openClosureMask(status.closureStatuses)
         val wokeUp = previousAsleep == true && !status.asleep
-        val unlocked = previousLocked == true && !status.locked
+        val lockChanged = previousLocked?.let { it != status.locked } == true
         val closureChanged = previousOpenClosures?.let { it != openClosures } == true
-        if (wokeUp || unlocked || closureChanged) event(nowMillis)
+        if (wokeUp || lockChanged || closureChanged) lastChangeAtMs = nowMillis
+        userPresent = status.userPresent
         previousAsleep = status.asleep
         previousLocked = status.locked
         previousOpenClosures = openClosures
@@ -161,11 +160,14 @@ class InfotainmentPollPolicy {
     private fun ClosureState_E.isOpen() = this != ClosureState_E.CLOSURESTATE_CLOSED && this != ClosureState_E.CLOSURESTATE_UNKNOWN
 
     companion object {
-        /** Reads while charging or driving, matching the VCSEC status cadence. */
-        const val ACTIVE_INTERVAL_MS = 10_000L
+        /** Reads while active or holding, matching the VCSEC status cadence. */
+        const val READ_INTERVAL_MS = 10_000L
 
-        /** How long after an event the one follow-up read comes. */
-        const val FOLLOW_UP_DELAY_MS = 60_000L
+        /** How long after a status change reads continue while the person is in or near the car. */
+        const val HOLD_PRESENT_MS = 600_000L
+
+        /** How long after a status change reads continue when nobody is present. */
+        const val HOLD_ABSENT_MS = 60_000L
 
         /**
          * VCSEC statuses arrive about every 10 s give or take a few ms, so a read is due slightly

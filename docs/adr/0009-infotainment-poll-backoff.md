@@ -28,43 +28,55 @@ Related: ADR-0001 (battery tracker), ADR-0008 (BLE log envelope), issue #112,
 `InfotainmentPollPolicy` (`core`, pure, clock passed in) decides, on every VCSEC
 status, whether the charge+drive pair is due. One instance per vehicle link.
 
-- Never while asleep, and never to wake the car: reads only when VCSEC says
-  awake and an Infotainment session exists.
-- Active (charging state Charging or Starting; shift state D, R or N): every
-  10 s. When activity ends, the reads stop right away. There is no idle window
-  and no periodic idle read.
-- Not active: single reads on events, each sent at once. Events: a fresh start,
-  VCSEC asleep to awake, locked to unlocked, any closure (doors, trunks, charge
-  port) changing between open and not open, and an explicit user request
-  (the refresh button; waking the car is not one itself, but its asleep to
-  awake step is). Any state other than CLOSED and UNKNOWN counts as open, so a
-  door going ajar is an opening.
+- Never while asleep (asleep also drops the hold below), and never to wake the
+  car: reads only when VCSEC says awake and an Infotainment session exists.
+- A read every 10 s while either of these holds:
+  - Active: charging state Charging or Starting, or shift state D, R or N. When
+    activity ends, these reads stop right away. This is the one place to extend
+    (`isActive()`): sentry and climate join it later.
+  - Within the hold after the last status change: 10 minutes if the latest
+    status shows user presence, otherwise 1 minute. Presence is re-evaluated on
+    every status, so when the person leaves, the remaining hold drops to the
+    short one.
+- Status changes that start or restart the hold: asleep to awake; any
+  lock-state change (locking too, which catches driving away and locking from
+  the phone); any closure (doors, trunks, charge port) changing between open
+  and not open, where any state other than CLOSED and UNKNOWN counts as open, so
+  a door going ajar is an opening; a fresh start; and an explicit user request
+  (the refresh button).
+- A change in user presence alone is not a change. It flips with phone-key
+  range and would keep resetting the car's sleep countdown.
 - A fresh start is the first READY link since the app process or tracking
   started (app start, auto-start after boot or update, tracking switched on) or
   right after pairing / key enrollment. The controller calls
   `onFreshStart(nowMillis)` for it. A reconnect after a dropped link (weak
-  signal, car out of range and back) is not an event: no read, no follow-up, and
-  the controller calls nothing.
+  signal, car out of range and back) is not a change, and the controller calls
+  nothing.
 - The transition memory (previous asleep, locked and closure state) survives
-  ordinary reconnects and is reset only by a fresh start. A wake, unlock or door
-  change that happened while the link was down is therefore an event on the
-  first status after the reconnect.
-- Each event also schedules one follow-up read 60 s later, to catch a shift
-  into D or charging starting just after it. A new event replaces a pending
-  follow-up instead of stacking. After that, nothing until the next event. A
-  follow-up that falls due while the car is asleep is dropped.
-- Not events: user presence, and staying unlocked or locked with no closure
-  change.
+  ordinary reconnects and is reset only by a fresh start. A wake, lock change or
+  door change that happened while the link was down therefore starts the hold on
+  the first status after the reconnect.
 
 A read is due slightly early (1 s slack) so that jitter in the 10 s status
 ticks does not turn a 10 s cadence into 20 s.
 
 ## Consequences
 
-- Readings (SOC, charging, gear) can be old while the car is awake and idle,
-  and stop while it sleeps (the status log still shows the sleep). Charging and
-  driving stay at 10 s.
-- After the last event the car's own countdown runs undisturbed, so it should
-  sleep within about 10 minutes of the follow-up (roughly 15-25 minutes of
-  being left idle in total). A real-car check is part of the change.
+- Readings (SOC, charging, gear) refresh every 10 s while the car is active or
+  recently changed, and go stale once the hold ends and while it sleeps (the
+  status log still shows the sleep).
+- With nobody present, the car's own countdown runs undisturbed from 1 minute
+  after the last change, so it should sleep roughly 11-12 minutes after it.
+  When the car reports presence (a phone key in range counts), the hold is 10
+  minutes, so expect sleep roughly 20-25 minutes after the last change. That is
+  the price of catching someone getting in and driving off. A real-car check is
+  part of the change.
 - The raw log format is unchanged; its records are simply sparser while idle.
+
+## Considered and deferred
+
+- Android activity recognition to detect driving, instead of waiting for a
+  drive to show up in a read.
+- An opt-in "stay awake while the phone is near and moving" feature.
+- Sentry and climate as active states. This is the next PR; it needs
+  VehicleState and ClimateState reads, logged raw.
