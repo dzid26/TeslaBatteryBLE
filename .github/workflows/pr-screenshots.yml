@@ -5,7 +5,7 @@ name: PR screenshots
 # flow, so reviews see the visual result. This workflow builds pull request
 # code, so it runs without secrets and with a read-only token: it uploads the
 # screenshots, the PR number and the short SHA as the `pr-screenshots`
-# artifact, and pr-screenshots-comment.yml posts the sheet from the default
+# artifact, and pr-screenshots-comment.yml posts the screenshots from the default
 # branch. One comment per ready revision (tagged by SHA), so flipping a PR back
 # to ready after rework posts the next round's screenshots instead of
 # overwriting the reviewed one; draft pushes are skipped. Manual runs only
@@ -16,8 +16,6 @@ on:
     paths:
       - 'app/**'
       - '.github/scripts/capture-screenshots.sh'
-      - '.github/scripts/build-screenshot-sheet.sh'
-      - '.github/scripts/upload-screenshot.sh'
       - '.github/workflows/pr-screenshots.yml'
   workflow_dispatch:
 
@@ -34,7 +32,9 @@ jobs:
     # Skip while a PR is a draft: rework pushes do not need screenshots, and the
     # ready_for_review event posts the next review round's comment.
     if: github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false
-    runs-on: ubuntu-latest
+    # Pinned: the emulator, KVM and adb steps are not yet validated on ubuntu-latest
+    # (migrating to Ubuntu 26 on 2026-10-19).
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
