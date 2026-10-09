@@ -30,6 +30,8 @@ data class TeslaConnection(
     val charge: ChargeState? = null,
     /** When [charge] was last read; null until the first charge response. */
     val chargeAtMillis: Long? = null,
+    /** An Infotainment read (charge, drive, closures, climate) is in flight; the VCSEC status poll does not count. */
+    val readInFlight: Boolean = false,
     /** Pairing flow state for this car; idle unless a Pair is in flight. */
     val pairing: PairingPhase = PairingPhase.IDLE,
     val pairingKeyId: String? = null,
@@ -134,6 +136,15 @@ fun stalenessTickDelayMs(
     val untilStale = readAtMillis + FRESH_READING_MS - nowMillis
     return if (untilStale > 0) minOf(untilStale + 1, STALENESS_TICK_MS) else STALENESS_TICK_MS
 }
+
+/** A read spinner, once shown, stays visible at least this long so a sub-second read does not flicker. */
+const val READ_SPINNER_MIN_VISIBLE_MS = 600L
+
+/** How much longer a spinner shown at [shownAtMillis] must stay visible at [nowMillis]; 0 once the minimum has passed. */
+fun spinnerHoldMs(
+    shownAtMillis: Long,
+    nowMillis: Long,
+): Long = (READ_SPINNER_MIN_VISIBLE_MS - (nowMillis - shownAtMillis)).coerceIn(0, READ_SPINNER_MIN_VISIBLE_MS)
 
 /** A battery percentage with its freshness: live, or the last stored sample. */
 data class BatteryPercent(

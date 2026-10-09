@@ -267,15 +267,21 @@ private fun HeroCard(
                         )
                     }
                 }
-                // A stale reading says how old it is, small, just left of the pill
-                // (so the pill never moves when the label appears).
-                reading?.ageLabel(nowMillis, connection)?.let { age ->
-                    Text(
-                        text = age,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(end = 8.dp),
-                    )
+                // Just left of the pill, so the pill never moves: a spinner while a read is in
+                // flight, and how old a stale reading is.
+                Row(
+                    modifier = Modifier.padding(end = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    ReadingSpinner(connection)
+                    reading?.ageLabel(nowMillis, connection)?.let { age ->
+                        Text(
+                            text = age,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
                 StatusPill(
                     connection = connection,

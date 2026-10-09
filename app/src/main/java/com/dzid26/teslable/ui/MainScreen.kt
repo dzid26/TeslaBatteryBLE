@@ -61,6 +61,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.dzid26.teslable.ble.BleUiState
 import com.dzid26.teslable.ble.ConnectionPhase
 import com.dzid26.teslable.ble.LogEntry
+import com.dzid26.teslable.ble.READ_SPINNER_MIN_VISIBLE_MS
 import com.dzid26.teslable.ble.STALENESS_TICK_MS
 import com.dzid26.teslable.ble.TeslaAdvert
 import com.dzid26.teslable.ble.TeslaConnection
@@ -68,6 +69,7 @@ import com.dzid26.teslable.ble.Vehicle
 import com.dzid26.teslable.ble.ageLabel
 import com.dzid26.teslable.ble.batteryPercent
 import com.dzid26.teslable.ble.connectionDisplay
+import com.dzid26.teslable.ble.spinnerHoldMs
 import com.dzid26.teslable.ble.stalenessTickDelayMs
 import com.dzid26.teslable.core.history.BatterySample
 import com.dzid26.teslable.core.protocol.asleep
@@ -531,14 +533,20 @@ private fun VehicleCard(
                     StatusPill(row.connection)
                 }
             }
-            // A stale reading says how old it is, small, in the card's top-right corner.
-            reading?.ageLabel(nowMillis, row.connection)?.let { age ->
-                Text(
-                    text = age,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.align(Alignment.TopEnd).padding(top = 6.dp, end = 12.dp),
-                )
+            // The top-right corner: a spinner while a read is in flight, and how old a stale reading is.
+            Row(
+                modifier = Modifier.align(Alignment.TopEnd).padding(top = 6.dp, end = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                ReadingSpinner(row.connection)
+                reading?.ageLabel(nowMillis, row.connection)?.let { age ->
+                    Text(
+                        text = age,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
             DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                 DropdownMenuItem(
@@ -689,6 +697,30 @@ internal fun rememberNowMillis(readAtMillis: Long? = null): Long {
         }
     }
     return nowMillis
+}
+
+/**
+ * A small spinner while an Infotainment read is in flight on a connected car. Once it shows it
+ * stays at least [READ_SPINNER_MIN_VISIBLE_MS], since a read takes well under a second.
+ */
+@Composable
+internal fun ReadingSpinner(connection: TeslaConnection?) {
+    val inFlight = connection?.readInFlight == true && connection.phase == ConnectionPhase.READY
+    var visible by remember { mutableStateOf(false) }
+    val shownAt = remember { longArrayOf(0L) }
+    LaunchedEffect(inFlight) {
+        if (inFlight) {
+            if (!visible) shownAt[0] = System.currentTimeMillis()
+            visible = true
+        } else if (visible) {
+            // A read that starts again cancels this wait, and the spinner stays up.
+            delay(spinnerHoldMs(shownAt[0], System.currentTimeMillis()))
+            visible = false
+        }
+    }
+    if (visible) {
+        CircularProgressIndicator(modifier = Modifier.size(13.dp), strokeWidth = 2.dp)
+    }
 }
 
 @Composable
