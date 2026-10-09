@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 package com.dzid26.teslable.ble
 
+import com.dzid26.teslable.core.history.BatterySample
 import com.dzid26.teslable.core.protocol.InfotainmentPollPolicy
 import com.tesla.generated.carserver.common.Void
 import com.tesla.generated.carserver.vehicle.ChargeState
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -110,5 +112,42 @@ class ReadingAgeTest {
         assertEquals(STALENESS_TICK_MS, stalenessTickDelayMs(readAt, readAt + FRESH_READING_MS))
         assertEquals(STALENESS_TICK_MS, stalenessTickDelayMs(readAt, readAt + hour))
         assertEquals(STALENESS_TICK_MS, stalenessTickDelayMs(null, readAt))
+    }
+
+    private fun storedSample(
+        carTimestamp: Long,
+        readAt: Long?,
+    ) = BatterySample(
+        timestampMillis = carTimestamp,
+        batteryLevel = 78,
+        chargingState = null,
+        chargeLimit = null,
+        readAtMillis = readAt,
+    )
+
+    @Test
+    fun `a stored sample's age is the phone read time, not the car's timestamp`() {
+        val now = 100 * hour
+        // The car stamped the reply "now" but the phone read it 12 minutes ago.
+        val reading = batteryPercent(null, storedSample(carTimestamp = now, readAt = now - 12 * minute), now)
+        assertEquals(true, reading?.stale)
+        assertEquals("(12m ago)", reading?.ageLabel(now))
+    }
+
+    @Test
+    fun `a stored sample with no phone read time shows no age`() {
+        val now = 100 * hour
+        val reading = batteryPercent(null, storedSample(carTimestamp = now, readAt = null), now)
+        assertEquals(true, reading?.stale)
+        assertNull(reading?.ageLabel(now))
+    }
+
+    @Test
+    fun `only a stale reading shows its age, in brackets`() {
+        val readAt = 1_000_000L
+        val connection = liveConnection(readAt)
+        assertNull(batteryPercent(connection, null, readAt + 1_000)?.ageLabel(readAt + 1_000))
+        assertEquals("(<1m ago)", batteryPercent(connection, null, readAt + FRESH_READING_MS)?.ageLabel(readAt + FRESH_READING_MS))
+        assertEquals("(2h ago)", batteryPercent(connection, null, readAt + 2 * hour)?.ageLabel(readAt + 2 * hour))
     }
 }

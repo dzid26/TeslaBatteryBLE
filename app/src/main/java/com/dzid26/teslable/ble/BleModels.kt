@@ -121,8 +121,7 @@ const val FRESH_READING_MS = 2 * InfotainmentPollPolicy.READ_INTERVAL_MS + FRESH
 
 /**
  * How often a screen or the notification re-checks reading ages when no
- * reading is about to turn stale, so ages ("12m ago") and state durations stay
- * current on a quiet screen.
+ * reading is about to turn stale, so ages ("12m ago") stay current on a quiet screen.
  */
 const val STALENESS_TICK_MS = 60_000L
 
@@ -144,9 +143,15 @@ fun stalenessTickDelayMs(
 data class BatteryPercent(
     val value: Int,
     val stale: Boolean,
-    /** When the reading was taken, when known. */
+    /** The phone's clock when the reading was read, when known; never the car's clock. */
     val readAtMillis: Long?,
 )
+
+/**
+ * The age shown right after a stale percentage, in brackets ("(12m ago)"); null
+ * for a fresh reading (still being read) and for one whose read time is unknown.
+ */
+fun BatteryPercent.ageLabel(nowMillis: Long): String? = readAtMillis?.takeIf { stale }?.let { "(${readingAgeText(nowMillis - it)})" }
 
 /**
  * The percentage to show for a car: the live charge when there is one,
@@ -168,7 +173,8 @@ fun batteryPercent(
         )
     }
     return lastKnown?.let {
-        BatteryPercent(value = it.percent, stale = true, readAtMillis = it.timestampMillis)
+        // The age is the phone's read time; the sample's own timestamp is the car's clock.
+        BatteryPercent(value = it.percent, stale = true, readAtMillis = it.readAtMillis)
     }
 }
 

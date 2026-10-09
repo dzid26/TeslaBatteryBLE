@@ -65,9 +65,9 @@ import com.dzid26.teslable.ble.STALENESS_TICK_MS
 import com.dzid26.teslable.ble.TeslaAdvert
 import com.dzid26.teslable.ble.TeslaConnection
 import com.dzid26.teslable.ble.Vehicle
+import com.dzid26.teslable.ble.ageLabel
 import com.dzid26.teslable.ble.batteryPercent
 import com.dzid26.teslable.ble.connectionDisplay
-import com.dzid26.teslable.ble.readingAgeText
 import com.dzid26.teslable.ble.stalenessTickDelayMs
 import com.dzid26.teslable.core.history.BatterySample
 import com.dzid26.teslable.core.protocol.asleep
@@ -516,7 +516,7 @@ private fun VehicleCard(
                     )
                 }
                 if (reading != null) {
-                    Column(horizontalAlignment = Alignment.End) {
+                    Row(verticalAlignment = Alignment.Bottom) {
                         Text(
                             text = "${reading.value}%",
                             style = MaterialTheme.typography.headlineSmall,
@@ -528,13 +528,13 @@ private fun VehicleCard(
                                     MaterialTheme.colorScheme.primary
                                 },
                         )
-                        // A stale reading always says how old it is.
-                        val readAtMillis = reading.readAtMillis
-                        if (reading.stale && readAtMillis != null) {
+                        // A stale reading says how old it is, small, right after the number.
+                        reading.ageLabel(nowMillis)?.let { age ->
                             Text(
-                                text = readingAgeText(nowMillis - readAtMillis),
+                                text = age,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(start = 4.dp, bottom = 3.dp),
                             )
                         }
                     }

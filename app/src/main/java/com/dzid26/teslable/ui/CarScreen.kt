@@ -62,10 +62,10 @@ import com.dzid26.teslable.ble.PairingPhase
 import com.dzid26.teslable.ble.TeslaAdvert
 import com.dzid26.teslable.ble.TeslaConnection
 import com.dzid26.teslable.ble.Vehicle
+import com.dzid26.teslable.ble.ageLabel
 import com.dzid26.teslable.ble.batteryPercent
 import com.dzid26.teslable.ble.chargingStateText
 import com.dzid26.teslable.ble.connectionDisplay
-import com.dzid26.teslable.ble.readingAgeText
 import com.dzid26.teslable.ble.vehicleStatusText
 import com.dzid26.teslable.core.history.BatterySample
 import com.dzid26.teslable.core.history.ChargeProjection
@@ -343,15 +343,15 @@ private fun SocBlock(
             color = color,
             modifier = Modifier.padding(bottom = 6.dp),
         )
-    }
-    val readAtMillis = reading.readAtMillis
-    if (reading.stale && readAtMillis != null) {
-        Spacer(Modifier.height(4.dp))
-        Text(
-            text = "Last known · ${readingAgeText(nowMillis - readAtMillis)}",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        // A stale reading says how old it is, small, right after the number.
+        reading.ageLabel(nowMillis)?.let { age ->
+            Text(
+                text = age,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 8.dp, bottom = 6.dp),
+            )
+        }
     }
     if (live) {
         Spacer(Modifier.height(8.dp))
