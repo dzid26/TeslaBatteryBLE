@@ -74,7 +74,10 @@ fi
 # this tag. Its pre-release checkbox is left as the owner set it.
 DRAFT_ID="$(gh api --paginate "repos/$REPO/releases" \
   --jq '.[] | select(.draft and .name == "Next release (draft)") | .id' | sed -n 1p)"
-if [ -n "$DRAFT_ID" ]; then
+# Skipped when a release for the tag already exists (the draft was published from
+# the GitHub UI, which created the tag and triggered this run): that release is
+# just edited below.
+if [ -n "$DRAFT_ID" ] && ! gh release view "$TAG" > /dev/null 2>&1; then
   gh api -X PATCH "repos/$REPO/releases/$DRAFT_ID" \
     -f tag_name="$TAG" -f name="$TAG" -F draft=false > /dev/null
   # A pushed tag leaves the draft's pre-release checkbox as the owner set it.
