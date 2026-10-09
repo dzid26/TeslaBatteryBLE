@@ -206,15 +206,24 @@ jobs:
             echo "::error::'$tag' is not a tag like v1.2.3 or v1.2.3-beta.1; type it into the draft's Tag field or pass the tag input"
             exit 1
           fi
-          if git rev-parse -q --verify "refs/tags/$tag" > /dev/null; then
-            echo "::error::tag $tag already exists"
-            exit 1
-          fi
           echo "RELEASE_TAG=$tag" >> "$GITHUB_ENV"
-          echo "RELEASE_PRERELEASE=$prerelease" >> "$GITHUB_ENV"
-          # Created locally first, because versionName and versionCode derive
-          # from it; it is pushed only when publishing.
-          git tag "$tag"
+          if git rev-parse -q --verify "refs/tags/$tag" > /dev/null; then
+            # The tag exists (for example a release published without an APK):
+            # rebuild that tagged commit and attach the APK to its release. The
+            # tag, the release's pre-release flag and main are left alone; only
+            # the CI scripts come from main.
+            echo "Tag $tag exists; regenerating its APK from the tagged commit"
+            echo "RELEASE_REGENERATE=true" >> "$GITHUB_ENV"
+            scripts_from="$(git rev-parse HEAD)"
+            git checkout -q --detach "refs/tags/$tag"
+            git checkout "$scripts_from" -- .github/scripts
+            chmod +x gradlew
+          else
+            echo "RELEASE_PRERELEASE=$prerelease" >> "$GITHUB_ENV"
+            # Created locally first, because versionName and versionCode derive
+            # from it; it is pushed only when publishing.
+            git tag "$tag"
+          fi
 
       - name: Set up signing
         env:
@@ -289,7 +298,7 @@ jobs:
           script: rm -rf screenshots && bash .github/scripts/capture-screenshots.sh app/build/outputs/apk/debug/app-debug.apk screenshots
 
       - name: Push the release tag
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' && env.RELEASE_REGENERATE != 'true'
         run: git push origin "refs/tags/$RELEASE_TAG"
 
       - name: Release on tag
@@ -302,7 +311,9 @@ jobs:
       # build that was just released. Tags only, commits to main, and only when
       # a PNG actually changed; website/** is ignored by Android CI, so the
       # commit does not rebuild the app or update the draft release.
+      # Not for a regenerated tag: its screenshots would overwrite newer ones.
       - name: Refresh the committed screenshots
+        if: env.RELEASE_REGENERATE != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

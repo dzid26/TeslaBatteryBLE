@@ -14,7 +14,10 @@ SHOTS_DIR="screenshots"
 SHOTS="02-scanning.png 03-car.png 05-settings.png 02-scanning-dark.png 03-car-dark.png 05-settings-dark.png"
 
 # A manual release states the flag outright; a pushed tag derives it from the name.
-if [ -n "${RELEASE_PRERELEASE:-}" ]; then
+if [ "${RELEASE_REGENERATE:-}" = true ]; then
+  # Regenerating an existing tag leaves its release's pre-release flag alone.
+  PRE_FLAG=()
+elif [ -n "${RELEASE_PRERELEASE:-}" ]; then
   PRE_FLAG=("--prerelease=$RELEASE_PRERELEASE")
 elif [ "$TAG" != "${TAG%-*}" ]; then
   PRE_FLAG=(--prerelease)
