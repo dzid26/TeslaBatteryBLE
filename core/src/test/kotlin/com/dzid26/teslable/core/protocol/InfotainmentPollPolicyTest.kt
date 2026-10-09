@@ -10,6 +10,7 @@ import com.tesla.generated.vcsec.VehicleStatus
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class InfotainmentPollPolicyTest {
@@ -493,6 +494,47 @@ class InfotainmentPollPolicyTest {
         policy.onStatus(status(closures = doorOpen), true, now)
         goIdle(status(closures = doorOpen))
         assertTrue(tick(status(closures = doorClosed)))
+    }
+
+    @Test
+    fun noReasonBeforeTheFirstRead() {
+        assertNull(policy.lastReadReason)
+    }
+
+    @Test
+    fun theFirstReadAfterAFreshStartSaysSo() {
+        freshStartAndFirstRead()
+        assertEquals(InfotainmentPollPolicy.Reason.FRESH_START, policy.lastReadReason)
+    }
+
+    @Test
+    fun readsWithinTheHoldAreHoldReads() {
+        freshStartAndFirstRead()
+        assertTrue(tick())
+        assertEquals(InfotainmentPollPolicy.Reason.HOLD, policy.lastReadReason)
+    }
+
+    @Test
+    fun readsWhileActiveAreActiveReadsEvenInsideTheHold() {
+        freshStartAndFirstRead()
+        policy.onChargeReading(ChargingStateKind.Charging)
+        assertTrue(tick())
+        assertEquals(InfotainmentPollPolicy.Reason.ACTIVE, policy.lastReadReason)
+    }
+
+    @Test
+    fun theIdleSafetyReadSaysSo() {
+        freshStartAndFirstRead()
+        goIdle()
+        assertTrue(readsOver(SAFETY).isNotEmpty(), "the safety read comes due")
+        assertEquals(InfotainmentPollPolicy.Reason.SAFETY, policy.lastReadReason)
+    }
+
+    @Test
+    fun aRefusedTickKeepsTheLastReason() {
+        freshStartAndFirstRead()
+        assertFalse(policy.onStatus(status(), false, now + TICK))
+        assertEquals(InfotainmentPollPolicy.Reason.FRESH_START, policy.lastReadReason)
     }
 
     private companion object {

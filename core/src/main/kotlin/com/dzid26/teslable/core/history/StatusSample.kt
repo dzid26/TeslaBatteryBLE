@@ -8,7 +8,7 @@ package com.dzid26.teslable.core.history
  * status replies carry no time of their own.
  */
 data class StatusSample(
-    /** Phone clock when the reply arrived (`acquired_at`). */
+    /** Phone clock when the reply arrived (`device_timestamp`). */
     val timestampMillis: Long,
     /** Which vehicle the reading came from: the advertised BLE name, as in [BatterySample.vehicleId]. */
     val vehicleId: String,

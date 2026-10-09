@@ -18,21 +18,26 @@ syntax = "proto3";
 package teslable.history;
 
 import "google/protobuf/timestamp.proto";
+import "car_server.proto";
+import "universal_message.proto";
 import "vcsec.proto";
 import "vehicle.proto";
 
 option java_package = "com.dzid26.teslable.core.history";
 
 // One record the phone acquired over BLE: a reply from the car, kept verbatim,
-// or a change in the phone's connection to it. Fields follow a reading's
-// order: time, signal strength, then the payload kinds connection, VCSEC
-// status, charge, drive, closures, climate.
+// or a change in the phone's connection to it, or something the app itself did
+// (a command it sent, the car's refusal of one, a change in its own state).
+// Fields follow a reading's order: time, signal strength, then the payload
+// kinds connection, VCSEC status, charge, drive, closures, climate, command,
+// command result, app state.
 message BleRecord {
     // Phone clock when the record was acquired: when the reply arrived, or
-    // when the connection changed. A car timestamp inside the payload
-    // (ChargeState.timestamp, DriveState.timestamp, ClimateState.timestamp) is
-    // never touched.
-    google.protobuf.Timestamp acquired_at = 1;
+    // when the connection changed. (Named acquired_at until 2026-10-09; the
+    // rename is name-only, the field number and type are unchanged.) A car
+    // timestamp inside the payload (ChargeState.timestamp,
+    // DriveState.timestamp, ClimateState.timestamp) is never touched.
+    google.protobuf.Timestamp device_timestamp = 1;
 
     // The phone's latest RSSI reading for the car when the record was
     // acquired, in dBm. Absent when the phone had none. It hints at how close
@@ -48,6 +53,12 @@ message BleRecord {
         // vendored VehicleState message carries only the guest mode).
         CarServer.ClosuresState closures_state = 7;
         CarServer.ClimateState climate_state = 8;
+        // What the app sent to the car, and why (ADR-0008).
+        Command command = 9;
+        // The car refused a command, or never answered it.
+        CommandResult command_result = 10;
+        // The app's own state: screen, foreground, tracking service.
+        AppState app_state = 11;
     }
 }
 
@@ -59,4 +70,83 @@ message ConnectionEvent {
         DISCONNECTED = 2; // an established connection ended, dropped or closed by the app
     }
     State state = 1;
+}
+
+// A request the app sent to the car, kept as built (before encryption) with the
+// reason the app had for sending it. The routine 10 s VCSEC status poll is not
+// logged: the status records imply it.
+message Command {
+    enum Reason {
+        REASON_UNSPECIFIED = 0;
+        USER_WAKE = 1;         // the wake button or the notification action
+        USER_REFRESH = 2;      // the refresh button
+        POLICY_ACTIVE = 3;     // poll policy: charging, driving, Sentry or the climate running
+        POLICY_HOLD = 4;       // poll policy: within the hold after a status change
+        POLICY_SAFETY = 5;     // poll policy: the idle safety read
+        FRESH_START = 6;       // poll policy: the first read after the app or tracking started
+        SESSION_HANDSHAKE = 7; // a session info request, whatever asked for the session
+        FOLLOW_UP = 8;         // drive, closures or climate read after the previous reply
+        PAIRING = 9;           // checking the whitelist for our key, or adding it
+        KEY_LOOKUP = 10;       // locating our key's slot in the whitelist
+    }
+
+    Reason reason = 1;
+
+    // The plaintext request, as the app built it. Exactly one is set.
+    oneof request {
+        // Wake, whitelist or key-slot lookups, pairing (VCSEC).
+        VCSEC.UnsignedMessage vcsec = 2;
+        // A GetVehicleData read (charge, drive, closures, climate).
+        CarServer.Action infotainment = 3;
+        // A session info request: the domain it is addressed to. The public
+        // key, the routing address and the request id are left out.
+        UniversalMessage.RoutableMessage session_info = 4;
+    }
+}
+
+// How a command went wrong, logged only when the car refused it or never
+// answered. Replies that went fine are already visible as data records.
+message CommandResult {
+    // The reason of the command this answers.
+    Command.Reason reason = 1;
+    // The domain the command was addressed to.
+    UniversalMessage.Domain domain = 2;
+
+    // The car's status, as sent. At most one is set; none when it never answered.
+    oneof status {
+        // Infotainment refused an action.
+        CarServer.ActionStatus action_status = 3;
+        // VCSEC refused a command.
+        VCSEC.CommandStatus command_status = 4;
+        // The message itself was rejected (a fault such as busy or invalid signature).
+        UniversalMessage.MessageStatus message_status = 5;
+    }
+
+    // No reply came in time, or the connection ended first.
+    optional bool timed_out = 6;
+}
+
+// A change in the app's own state, not tied to a car.
+message AppState {
+    enum Event {
+        EVENT_UNSPECIFIED = 0;
+        SCREEN_ON = 1;
+        SCREEN_OFF = 2;
+        APP_FOREGROUND = 3;   // the UI became visible
+        APP_BACKGROUND = 4;   // the UI is no longer visible
+        TRACKING_STARTED = 5; // the foreground tracking service started
+        TRACKING_STOPPED = 6; // it stopped (a killed process logs nothing)
+    }
+
+    enum StartReason {
+        START_REASON_UNSPECIFIED = 0;
+        USER = 1;             // the app was open, or the user turned tracking on
+        BOOT = 2;             // auto-start after a reboot
+        PACKAGE_REPLACED = 3; // auto-start after an app update
+        SYSTEM_RESTART = 4;   // Android restarted the service after killing the process
+    }
+
+    Event event = 1;
+    // Set with TRACKING_STARTED.
+    optional StartReason start_reason = 2;
 }

@@ -56,3 +56,27 @@ session was established or the link closed. When the handshake never finished
 (retries ran out, the car went back to sleep, or the link dropped) the flag
 stayed set, the policy never got `sessionReady`, and no new handshake started.
 Fixed by `InfotainmentSessionGate`; see ADR-0009.
+
+## 2026-10-09 afternoon
+
+Follow-up tests with a stable link, which settle the caveat in "Sleep" above.
+
+- **Reads keep the car awake.** An old build reading every ~5 s held it awake
+  for 22 minutes (13:50 to 14:12 UTC). The car slept 2.5 minutes after the
+  reads stopped, in line with ADR-0009 (reads only on activity or in a hold).
+- **A second test:** the car slept 30 s after the last read, and 7.5 minutes
+  after a wake.
+- **Two apps on one phone:** with a second app running, the newer app's reads
+  mostly failed. The suspects are interleaved BLE writes or notifications from
+  the two apps. Run one app at a time.
+- **At wake the closures briefly read UNKNOWN.** The poll policy ignores that
+  correctly: UNKNOWN does not count as open, so it starts no hold.
+- **We could not tell the app's requests from the owner's.** Neither a wake nor
+  a request in these logs could be attributed to the app or to the owner, nor
+  could we tell whether the app was in the background. That led to the command
+  and app-state logs (`<vehicleId>.command.pblog` and `app.pblog`, ADR-0008).
+- **A remote wake alone is short.** The owner woke the car over BLE, took one
+  read and nothing more: it slept after about 2 minutes. It stays awake longer
+  only while reads continue or someone physically uses the car, so the car's
+  own countdown after a BLE wake is far shorter than the ~10 minutes ADR-0009
+  assumed for a read.

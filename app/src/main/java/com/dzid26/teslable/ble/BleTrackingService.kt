@@ -6,11 +6,14 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import android.text.SpannableString
 import android.text.Spanned
 import android.text.style.ForegroundColorSpan
@@ -21,6 +24,7 @@ import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import com.dzid26.teslable.MainActivity
 import com.dzid26.teslable.R
+import com.dzid26.teslable.core.history.AppState
 import com.dzid26.teslable.core.history.BatterySample
 import com.dzid26.teslable.core.protocol.asleep
 import kotlinx.coroutines.CoroutineScope
@@ -50,11 +54,38 @@ class BleTrackingService : Service() {
     private var lastSummary: NotificationModel? = null
     private val lastCarModels = mutableMapOf<String, NotificationModel>()
     private val postedCarIds = mutableMapOf<String, Int>()
+    private var startLogged = false
+
+    /** Screen on and off only reach a receiver registered at run time; the app-state log keeps them (ADR-0008). */
+    private val screenReceiver =
+        object : BroadcastReceiver() {
+            override fun onReceive(
+                context: Context,
+                intent: Intent,
+            ) {
+                val event =
+                    when (intent.action) {
+                        Intent.ACTION_SCREEN_ON -> AppState.Event.SCREEN_ON
+                        Intent.ACTION_SCREEN_OFF -> AppState.Event.SCREEN_OFF
+                        else -> return
+                    }
+                BleControllerHolder.get(context).recordAppState(event)
+            }
+        }
 
     override fun onCreate() {
         super.onCreate()
         isRunning = true
         createChannel()
+        ContextCompat.registerReceiver(
+            this,
+            screenReceiver,
+            IntentFilter().apply {
+                addAction(Intent.ACTION_SCREEN_ON)
+                addAction(Intent.ACTION_SCREEN_OFF)
+            },
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
         val controller = BleControllerHolder.get(this)
         scope.launch {
             combine(controller.state, controller.batteryHistory) { state, history ->
@@ -79,6 +110,15 @@ class BleTrackingService : Service() {
         startId: Int,
     ): Int {
         val controller = BleControllerHolder.get(this)
+        if (!startLogged) {
+            startLogged = true
+            controller.recordAppState(AppState.Event.TRACKING_STARTED, startReasonOf(intent))
+            // The receiver only sees toggles; log the current state too, so it is known after a reboot, update or restart.
+            val interactive = getSystemService(PowerManager::class.java)?.isInteractive
+            if (interactive != null) {
+                controller.recordAppState(if (interactive) AppState.Event.SCREEN_ON else AppState.Event.SCREEN_OFF)
+            }
+        }
         if (intent?.action == ACTION_WAKE) {
             controller.wakeVehicle(intent.getStringExtra(EXTRA_BLE_NAME))
         }
@@ -90,6 +130,8 @@ class BleTrackingService : Service() {
 
     override fun onDestroy() {
         isRunning = false
+        runCatching { unregisterReceiver(screenReceiver) }
+        BleControllerHolder.get(this).recordAppState(AppState.Event.TRACKING_STOPPED)
         scope.cancel()
         super.onDestroy()
     }
@@ -363,6 +405,7 @@ class BleTrackingService : Service() {
     companion object {
         private const val ACTION_START = "com.dzid26.teslable.action.START_TRACKING"
         private const val ACTION_WAKE = "com.dzid26.teslable.action.WAKE_VEHICLE"
+        private const val EXTRA_START_REASON = "com.dzid26.teslable.extra.START_REASON"
 
         /** Extra carrying a car's advertised name for notification taps/wakes. */
         const val EXTRA_BLE_NAME = "com.dzid26.teslable.extra.BLE_NAME"
@@ -379,11 +422,26 @@ class BleTrackingService : Service() {
         @Volatile
         var isRunning: Boolean = false
 
-        fun start(context: Context) {
+        /** Why the service starts, for the app-state log: no intent means Android restarted it after a kill. */
+        private fun startReasonOf(intent: Intent?): AppState.StartReason =
+            if (intent == null) {
+                AppState.StartReason.SYSTEM_RESTART
+            } else {
+                AppState.StartReason.fromValue(intent.getIntExtra(EXTRA_START_REASON, AppState.StartReason.USER.value))
+                    ?: AppState.StartReason.USER
+            }
+
+        /** Starts the service; [reason] goes into the app-state log when it was not running yet. */
+        fun start(
+            context: Context,
+            reason: AppState.StartReason,
+        ) {
             try {
                 ContextCompat.startForegroundService(
                     context,
-                    Intent(context, BleTrackingService::class.java).setAction(ACTION_START),
+                    Intent(context, BleTrackingService::class.java)
+                        .setAction(ACTION_START)
+                        .putExtra(EXTRA_START_REASON, reason.value),
                 )
             } catch (e: IllegalStateException) {
                 // ForegroundServiceStartNotAllowedException (API 31+): Android

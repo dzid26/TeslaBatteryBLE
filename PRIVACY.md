@@ -25,12 +25,22 @@ anywhere.**
   it ended, with the signal strength at that moment, in local files that stay
   on this phone. Signal strength hints at how close your phone was to the car,
   so with the times it shows when you were near the car and when you left
+- The commands the app sent to each car (a wake, a refresh, the periodic reads
+  and the session setup, exactly as built, with the reason it sent them, plus
+  any refusal or missing answer from the car) and the app's own usage state:
+  when the screen turned on or off, when the app came to the foreground or went
+  to the background, and when its tracking service started (and whether you,
+  a reboot, an update or Android started it) or stopped. They are kept with the
+  time and, for a car, the signal strength, in local files that stay on this
+  phone. The routine status requests are not kept, and neither are VINs, keys
+  or session keys
 - App settings
 
 The app never synchronizes, uploads, or shares anything. Android's system backup
 is separate: if you have it enabled, your device may include app data in cloud
 backup or device-to-device transfer, except battery history, status readings,
 drive, closures and climate state, signal strength and connection times,
+the commands the app sent and its usage state,
 which the app excludes so they stay on this device. By default each vehicle key is encrypted
 with an AES key that stays in this device's hardware-backed Keystore. Android 11
 and below keep the encrypted keys out of backups; on Android 12+ a backup may

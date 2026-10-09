@@ -29,6 +29,7 @@ import com.dzid26.teslable.ble.BleTrackingService
 import com.dzid26.teslable.ble.PairingKeyStore
 import com.dzid26.teslable.ble.TeslaBleController
 import com.dzid26.teslable.ble.shouldTrack
+import com.dzid26.teslable.core.history.AppState
 import com.dzid26.teslable.history.HistorySamples
 import com.dzid26.teslable.ui.AboutScreen
 import com.dzid26.teslable.ui.MainScreen
@@ -82,7 +83,7 @@ class MainActivity : ComponentActivity() {
                         // Start tracking whether or not notifications were allowed: the
                         // foreground service runs either way, it is just silent without
                         // the permission.
-                        BleTrackingService.start(context)
+                        BleTrackingService.start(context, AppState.StartReason.USER)
                     }
 
                 // Once a car with an enrolled key is connected, hand off to the
@@ -93,7 +94,7 @@ class MainActivity : ComponentActivity() {
                     if (!hasNotificationPermission(context)) {
                         notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                     } else {
-                        BleTrackingService.start(context)
+                        BleTrackingService.start(context, AppState.StartReason.USER)
                     }
                 }
 
@@ -166,8 +167,21 @@ class MainActivity : ComponentActivity() {
         // Android forbids starting a foreground service from the background;
         // retry on resume so tracking comes up after a denied attempt.
         if (!BleTrackingService.isRunning && controller.shouldTrack()) {
-            BleTrackingService.start(this)
+            BleTrackingService.start(this, AppState.StartReason.USER)
         }
+    }
+
+    // The activity's start and stop mark the app coming to and leaving the foreground for the
+    // app-state log (ADR-0008); it is the only activity. A rotation stops and restarts it
+    // without the app ever leaving the screen, so that is not logged.
+    override fun onStart() {
+        super.onStart()
+        controller.recordAppState(AppState.Event.APP_FOREGROUND)
+    }
+
+    override fun onStop() {
+        if (!isChangingConfigurations) controller.recordAppState(AppState.Event.APP_BACKGROUND)
+        super.onStop()
     }
 }
 

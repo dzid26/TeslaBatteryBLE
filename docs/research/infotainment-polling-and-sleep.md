@@ -40,7 +40,8 @@ Sources were read on 2026-10-08; quotes are short extracts.
 ## Where ADR-0009 differs, and why
 
 - Any Infotainment request restarts the car's own sleep countdown (about 10
-  minutes; the project owner's premise, 2026-10-08). A 30 s window for 11
+  minutes; the project owner's premise, 2026-10-08; measured shorter on
+  2026-10-09, see "To measure"). A 30 s window for 11
   minutes would keep the car awake about 21 minutes instead of 10, and 660 s
   idle reads could keep it awake indefinitely. So ADR-0009 drops both: 10 s
   while charging or driving, and for a short hold (1 min, or 10 min when the
@@ -58,8 +59,11 @@ Sources were read on 2026-10-08; quotes are short extracts.
 
 ## To measure
 
-- Not yet measured on a real car. The real-car check in the ADR-0009 PR is the
-  first measurement: record the time from idle to asleep here.
+- Measured 2026-10-09 (`docs/research/real-car-log-2026-10-09.md`): the car
+  slept 0.5-2.5 minutes after the last read, and about 2 minutes after a BLE
+  wake with a single read. Reads keep it awake while they continue, but each
+  adds only a couple of minutes, not the ~10 assumed above, so the hold costs
+  less than ADR-0009 estimated.
 - First real-car log (2026-10-09, old build, unstable link):
   `real-car-log-2026-10-09.md`. A repeat with a stable link is planned to show
   whether reads hold the car awake.

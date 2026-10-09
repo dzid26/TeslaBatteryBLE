@@ -9,6 +9,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Log
 import androidx.core.content.ContextCompat
+import com.dzid26.teslable.core.history.AppState
 
 /**
  * Restarts background tracking after a reboot or an app update, when Android
@@ -37,7 +38,13 @@ class AutoStartReceiver : BroadcastReceiver() {
             return
         }
         Log.i(LOG_TAG, "Restarting tracking after ${intent.action}")
-        BleTrackingService.start(context)
+        val reason =
+            if (intent.action == Intent.ACTION_BOOT_COMPLETED) {
+                AppState.StartReason.BOOT
+            } else {
+                AppState.StartReason.PACKAGE_REPLACED
+            }
+        BleTrackingService.start(context, reason)
     }
 
     private fun hasNotificationPermission(context: Context): Boolean =

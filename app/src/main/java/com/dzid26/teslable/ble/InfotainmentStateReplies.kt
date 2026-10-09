@@ -35,14 +35,14 @@ internal class InfotainmentStateReplies(
     /** A DriveState reply. Only a shift-state change reaches the debug log. */
     fun onDrive(
         plaintext: ByteArray,
-        acquiredAt: Instant,
+        deviceTimestamp: Instant,
     ) {
         val drive = runCatching { TeslaCommands.parseDriveState(plaintext) }.getOrNull()
         if (drive == null) {
             log("drive response missing data${refusal(plaintext)}")
             return
         }
-        historyStore.recordDrive(vehicleId, drive, acquiredAt, rssi())
+        historyStore.recordDrive(vehicleId, drive, deviceTimestamp, rssi())
         val shift = drive.shiftStateKind
         policy.onDriveReading(shift)
         if (shift != lastShiftState) {
@@ -54,14 +54,14 @@ internal class InfotainmentStateReplies(
     /** A ClosuresState reply, which holds the sentry mode state. */
     fun onClosures(
         plaintext: ByteArray,
-        acquiredAt: Instant,
+        deviceTimestamp: Instant,
     ) {
         val closures = runCatching { TeslaCommands.parseClosuresState(plaintext) }.getOrNull()
         if (closures == null) {
             log("closures response missing data${refusal(plaintext)}")
             return
         }
-        historyStore.recordClosures(vehicleId, closures, acquiredAt, rssi())
+        historyStore.recordClosures(vehicleId, closures, deviceTimestamp, rssi())
         val sentry = closures.sentryOn
         policy.onClosuresReading(sentry)
         if (sentry != lastSentryOn) {
@@ -73,14 +73,14 @@ internal class InfotainmentStateReplies(
     /** A ClimateState reply. */
     fun onClimate(
         plaintext: ByteArray,
-        acquiredAt: Instant,
+        deviceTimestamp: Instant,
     ) {
         val climate = runCatching { TeslaCommands.parseClimateState(plaintext) }.getOrNull()
         if (climate == null) {
             log("climate response missing data${refusal(plaintext)}")
             return
         }
-        historyStore.recordClimate(vehicleId, climate, acquiredAt, rssi())
+        historyStore.recordClimate(vehicleId, climate, deviceTimestamp, rssi())
         val on = climate.climateOn
         policy.onClimateReading(on)
         if (on != lastClimateOn) {

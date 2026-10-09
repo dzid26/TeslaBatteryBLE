@@ -49,6 +49,9 @@ Light and dark themes, side by side.
   every measurement is a dot (dense samples form a thick band), and dashed
   lines project the charge completion or, while parked, the parked drain half
   the range ahead (stretches where the odometer moved are left out)
+- **Local activity log** — the commands the app sends to the car (and why) and whether the screen was on and the
+  app in the foreground are kept on the phone only, so a wake or a read in the car's own history can be told
+  apart from yours
 - **Simulated car** in debug builds for development without a vehicle or hardware (demo/screenshot mode)
 
 Everything is computed on-device. The app has no internet permission.
