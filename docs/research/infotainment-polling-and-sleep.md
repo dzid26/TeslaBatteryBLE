@@ -49,6 +49,13 @@ Sources were read on 2026-10-08; quotes are short extracts.
   stays home and never sees a drive.
 - This app never wakes the car, so a wake-up blip only starts the short hold.
 
+## Presence
+
+- The owner's experience (2026-10-09): VCSEC reports a user present when
+  someone sits in the car; approaching with a phone key does not set it. This
+  differs from the PR #213 comment above, so the real-car check should confirm
+  which applies.
+
 ## To measure
 
 - Not yet measured on a real car. The real-car check in the ADR-0009 PR is the

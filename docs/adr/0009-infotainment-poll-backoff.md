@@ -12,8 +12,8 @@ Related: ADR-0001 (battery tracker), ADR-0008 (BLE log envelope), issue #112,
   car was doing. ADR-0001 only intended that cadence while charging.
 - Other BLE projects found the same thing and back off their Infotainment
   polling: it runs every 10 s only while the car is active, and slows down or
-  stops when it is not. Only genuine activity counts; "user present" is true
-  whenever a phone key is near, and merely staying unlocked is not activity.
+  stops when it is not. Only genuine activity counts; merely staying unlocked,
+  or "user present" on its own, is not activity.
   Evidence and citations: `docs/research/infotainment-polling-and-sleep.md`.
 - Any Infotainment request restarts the car's own sleep countdown (about 10
   minutes). A slow idle cadence, such as 30 s reads for 11 minutes, would keep
@@ -44,8 +44,11 @@ status, whether the charge+drive pair is due. One instance per vehicle link.
   and not open, where any state other than CLOSED and UNKNOWN counts as open, so
   a door going ajar is an opening; a fresh start; and an explicit user request
   (the refresh button).
-- A change in user presence alone is not a change. It flips with phone-key
-  range and would keep resetting the car's sleep countdown.
+- A change in user presence alone is not a change, so presence never starts a
+  hold by itself; it only sets the hold's length. In the owner's experience
+  presence means someone sitting in the car, not a phone key approaching
+  (another project reports phone-key range; see the research note), and either
+  way it alone must not keep resetting the car's sleep countdown.
 - A fresh start is the first READY link since the app process or tracking
   started (app start, auto-start after boot or update, tracking switched on) or
   right after pairing / key enrollment. The controller calls
@@ -67,8 +70,8 @@ ticks does not turn a 10 s cadence into 20 s.
   status log still shows the sleep).
 - With nobody present, the car's own countdown runs undisturbed from 1 minute
   after the last change, so it should sleep roughly 11-12 minutes after it.
-  When the car reports presence (a phone key in range counts), the hold is 10
-  minutes, so expect sleep roughly 20-25 minutes after the last change. That is
+  When the car reports presence (someone in the car), the hold is 10 minutes,
+  so expect sleep roughly 20-25 minutes after the last change. That is
   the price of catching someone getting in and driving off. A real-car check is
   part of the change.
 - The raw log format is unchanged; its records are simply sparser while idle.
