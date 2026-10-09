@@ -9,6 +9,8 @@ import com.dzid26.teslable.core.protocol.TeslaSession
 import com.tesla.generated.carserver.common.Void
 import com.tesla.generated.carserver.server.Action
 import com.tesla.generated.carserver.vehicle.ChargeState
+import com.tesla.generated.carserver.vehicle.ClimateState
+import com.tesla.generated.carserver.vehicle.ClosuresState
 import com.tesla.generated.carserver.vehicle.DriveState
 import com.tesla.generated.carserver.vehicle.ShiftState
 import com.tesla.generated.carserver.vehicle.VehicleData
@@ -46,7 +48,7 @@ import com.tesla.generated.carserver.server.Response as CarServerResponse
  *
  * It speaks enough of the protocol for the real controller: plaintext VCSEC
  * status and whitelist replies, the add-key pairing flow with a simulated card
- * tap, session handshakes with the core crypto, and encrypted wake/charge/drive
+ * tap, session handshakes with the core crypto, and encrypted wake/charge/drive/closures/climate
  * responses.
  */
 class FakeCarProtocol(
@@ -321,6 +323,14 @@ class FakeCarProtocol(
             out += authenticated(domain, uuid, requestTag, driveResponse())
             return
         }
+        if (vehicleData?.getClosuresState != null) {
+            out += authenticated(domain, uuid, requestTag, closuresResponse())
+            return
+        }
+        if (vehicleData?.getClimateState != null) {
+            out += authenticated(domain, uuid, requestTag, climateResponse())
+            return
+        }
 
         val unsigned = runCatching { UnsignedMessage.ADAPTER.decode(plaintext) }.getOrNull()
         if (unsigned?.RKEAction != null) {
@@ -387,6 +397,36 @@ class FakeCarProtocol(
                             power = 0,
                             odometer_in_hundredths_of_a_mile = ODOMETER_HUNDREDTHS_OF_A_MILE,
                             // Like the real car, stamp every sample: history takes its time from here.
+                            timestamp = Instant.ofEpochMilli(System.currentTimeMillis()),
+                        ),
+                ),
+        ).encode()
+
+    /** Sentry mode off: the simulated car never enables it. */
+    private fun closuresResponse(): ByteArray =
+        CarServerResponse(
+            vehicleData =
+                VehicleData(
+                    closures_state =
+                        ClosuresState(
+                            sentry_mode_state = ClosuresState.SentryModeState(Off = Void()),
+                            locked = locked,
+                            // Like the real car, stamp every sample.
+                            timestamp = Instant.ofEpochMilli(System.currentTimeMillis()),
+                        ),
+                ),
+        ).encode()
+
+    /** Climate off: the simulated car never preconditions and has no keeper mode on. */
+    private fun climateResponse(): ByteArray =
+        CarServerResponse(
+            vehicleData =
+                VehicleData(
+                    climate_state =
+                        ClimateState(
+                            is_climate_on = false,
+                            climate_keeper_mode = ClimateState.ClimateKeeperMode(Off = Void()),
+                            // Like the real car, stamp every sample.
                             timestamp = Instant.ofEpochMilli(System.currentTimeMillis()),
                         ),
                 ),

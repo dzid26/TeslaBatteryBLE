@@ -4,6 +4,8 @@ package com.dzid26.teslable.core.protocol
 
 import com.tesla.generated.carserver.common.Void
 import com.tesla.generated.carserver.vehicle.ChargeState
+import com.tesla.generated.carserver.vehicle.ClimateState
+import com.tesla.generated.carserver.vehicle.ClosuresState
 import com.tesla.generated.carserver.vehicle.DriveState
 import com.tesla.generated.carserver.vehicle.ShiftState
 import com.tesla.generated.vcsec.UserPresence_E
@@ -113,5 +115,47 @@ class StateViewsTest {
         // The counts match the oneofs in vehicle.proto (8 charging states, 6 gears); the mappings above name every one.
         assertEquals(8, ChargingStateKind.entries.size)
         assertEquals(6, ShiftStateKind.entries.size)
+    }
+
+    @Test
+    fun `every sentry state but off is sentry on`() {
+        fun sentry(state: ClosuresState.SentryModeState?) = ClosuresState(sentry_mode_state = state).sentryOn
+
+        assertFalse(sentry(ClosuresState.SentryModeState(Off = Void())))
+        assertTrue(sentry(ClosuresState.SentryModeState(Idle = Void())))
+        assertTrue(sentry(ClosuresState.SentryModeState(Armed = Void())))
+        assertTrue(sentry(ClosuresState.SentryModeState(Aware = Void())))
+        assertTrue(sentry(ClosuresState.SentryModeState(Panic = Void())))
+        assertTrue(sentry(ClosuresState.SentryModeState(Quiet = Void())))
+    }
+
+    @Test
+    fun `a closures state without a sentry state is sentry off`() {
+        // Sentry unsupported, the field left out, or an empty message.
+        assertFalse(ClosuresState().sentryOn)
+        assertFalse(ClosuresState(sentry_mode_state = ClosuresState.SentryModeState()).sentryOn)
+    }
+
+    @Test
+    fun `the climate is on when the car says so`() {
+        assertTrue(ClimateState(is_climate_on = true).climateOn)
+        assertFalse(ClimateState(is_climate_on = false).climateOn)
+    }
+
+    @Test
+    fun `a climate keeper mode other than off keeps the climate on`() {
+        fun keeper(mode: ClimateState.ClimateKeeperMode) = ClimateState(is_climate_on = false, climate_keeper_mode = mode).climateOn
+
+        assertTrue(keeper(ClimateState.ClimateKeeperMode(On = Void())))
+        assertTrue(keeper(ClimateState.ClimateKeeperMode(Dog = Void())))
+        assertTrue(keeper(ClimateState.ClimateKeeperMode(Party = Void())))
+        assertFalse(keeper(ClimateState.ClimateKeeperMode(Off = Void())))
+        assertFalse(keeper(ClimateState.ClimateKeeperMode(Unknown = Void())))
+        assertFalse(keeper(ClimateState.ClimateKeeperMode()))
+    }
+
+    @Test
+    fun `a climate state without the flags is climate off`() {
+        assertFalse(ClimateState().climateOn)
     }
 }

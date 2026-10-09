@@ -6,7 +6,7 @@ import com.tesla.generated.vcsec.ClosureStatuses
 import com.tesla.generated.vcsec.VehicleStatus
 
 /**
- * When to ask the car for its Infotainment state (charge + drive).
+ * When to ask the car for its Infotainment state (charge, drive, closures and climate).
  *
  * Any Infotainment request restarts the car's own sleep countdown (about 10 minutes), so polling it
  * while the car is merely awake keeps it awake (ADR-0009, issue #112). VCSEC status does not, and
@@ -15,7 +15,7 @@ import com.tesla.generated.vcsec.VehicleStatus
  * 1. Never while asleep (asleep also drops the hold), and never to wake the car: reads only when
  *    VCSEC says awake and a session exists.
  * 2. A read every [READ_INTERVAL_MS] while either
- *    - the car is active (see [isActive]: charging, driving), or
+ *    - the car is active (see [isActive]: charging, driving, Sentry mode, climate on), or
  *    - the hold is running: [HOLD_PRESENT_MS] after the last status change if the latest status shows
  *      user presence, otherwise [HOLD_ABSENT_MS]. Presence is re-evaluated on every status, so a
  *      person leaving cuts the remaining hold to the short one.
@@ -45,15 +45,18 @@ class InfotainmentPollPolicy {
     private var started = false
     private var charging = false
     private var driving = false
+    private var sentry = false
+    private var climate = false
     private var previousAsleep: Boolean? = null
     private var previousLocked: Boolean? = null
     private var previousOpenClosures: Int? = null
 
     /**
-     * Whether the car is doing something that warrants a read every [READ_INTERVAL_MS] on its own.
-     * Extension point: sentry mode and climate join charging and driving here later.
+     * Whether the car is doing something that warrants a read every [READ_INTERVAL_MS] on its own:
+     * charging, driving, Sentry mode or the climate running. In the last two the car stays awake and
+     * draws hundreds of watts anyway, so reading costs nothing that matters.
      */
-    private fun isActive(): Boolean = charging || driving
+    private fun isActive(): Boolean = charging || driving || sentry || climate
 
     /**
      * A fresh start: the first READY link since the app process or tracking started (app start,
@@ -66,6 +69,8 @@ class InfotainmentPollPolicy {
         lastReadAtMs = null
         charging = false
         driving = false
+        sentry = false
+        climate = false
         previousAsleep = null
         previousLocked = null
         previousOpenClosures = null
@@ -100,6 +105,16 @@ class InfotainmentPollPolicy {
         driving = shiftState == ShiftStateKind.D || shiftState == ShiftStateKind.R || shiftState == ShiftStateKind.N
     }
 
+    /** The latest closures reading (the category that holds Sentry mode). Sentry on is activity. */
+    fun onClosuresReading(sentryOn: Boolean) {
+        sentry = sentryOn
+    }
+
+    /** The latest climate reading. Climate on, or a climate keeper mode, is activity. */
+    fun onClimateReading(climateOn: Boolean) {
+        climate = climateOn
+    }
+
     /**
      * Feeds one VCSEC status and answers whether an Infotainment read is due now. Returns true at
      * most once per due read: it records the read, so the caller must then send it. With
@@ -116,6 +131,8 @@ class InfotainmentPollPolicy {
             lastChangeAtMs = null
             charging = false
             driving = false
+            sentry = false
+            climate = false
             return false
         }
         if (!sessionReady) return false

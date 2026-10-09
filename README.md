@@ -33,11 +33,12 @@ Light and dark themes, side by side.
   reading older than five minutes turns gray, and the car view and the notification
   say how long ago it was read
 - **On-demand wake** — the car is only woken when you ask, never in the background
-- **Lets the car sleep** — while it is charging or driving, readings refresh every 10 s. Otherwise the app keeps
+- **Lets the car sleep** — while it is charging, driving, in Sentry mode or running the climate (the car stays
+  awake and draws power anyway), readings refresh every 10 s. Otherwise the app keeps
   reading every 10 s for a short while after something happens (the car wakes, locks or unlocks, a door or the
   charge port opens or closes, you tap refresh): one minute, or ten while someone is in or near the car. Then it
-  stops asking, so the car can fall asleep and the reading simply gets older. A car that stays awake anyway
-  (climate on, Sentry) is read once every twenty minutes, which is longer than the car's own sleep timer, so
+  stops asking, so the car can fall asleep and the reading simply gets older. A car that stays awake for a reason
+  the app cannot see is read once every twenty minutes, which is longer than the car's own sleep timer, so
   the app never keeps it awake.
 - **Background tracking** via a foreground service: SOC timeline and connection state while parked or charging.
   Tracking resumes by itself after a reboot or an app update (once the phone is unlocked), as long as tracking

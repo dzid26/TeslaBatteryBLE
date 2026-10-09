@@ -12,9 +12,15 @@ anywhere.**
 - Battery history (SOC samples, charge sessions), the car's status readings
   (asleep or awake, locked, someone in the car, doors and other closures) and
   its drive state (gear, speed, power, odometer and, while the car is
-  navigating, the navigation destination and route it reports), each with the
-  time your phone received it and the signal strength (RSSI) it last measured
-  from the car, in local files that stay on this phone
+  navigating, the navigation destination and route it reports), its closures
+  state (Sentry mode, doors, windows, sunroof, lock state, whether someone is
+  in the car, the display state, valet mode) and its climate state (whether
+  the climate is on, cabin and outside temperatures, temperature settings, fan,
+  seat and other heater settings, defrost and keeper mode such as Dog or
+  Party). Neither the closures nor the climate state carries a location, a
+  route or any name or text. Every reading is kept with the time your phone
+  received it and the signal strength (RSSI) it last measured from the car, in
+  local files that stay on this phone
 - When your phone's Bluetooth connection to each car was established and when
   it ended, with the signal strength at that moment, in local files that stay
   on this phone. Signal strength hints at how close your phone was to the car,
@@ -24,8 +30,8 @@ anywhere.**
 The app never synchronizes, uploads, or shares anything. Android's system backup
 is separate: if you have it enabled, your device may include app data in cloud
 backup or device-to-device transfer, except battery history, status readings,
-drive state, signal strength and connection times, which the app excludes so
-they stay on this device. By default each vehicle key is encrypted
+drive, closures and climate state, signal strength and connection times,
+which the app excludes so they stay on this device. By default each vehicle key is encrypted
 with an AES key that stays in this device's hardware-backed Keystore. Android 11
 and below keep the encrypted keys out of backups; on Android 12+ a backup may
 include them, but they cannot be decrypted on another phone. Either way, a new
