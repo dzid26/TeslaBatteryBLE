@@ -48,9 +48,9 @@ PREV_TAG="$(git describe --tags --abbrev=0 --match 'v*' "$TAG^" 2>/dev/null || t
   fi
   echo
   if [ -n "$PREV_TAG" ]; then
-    git log --no-merges --pretty=format:'- %s ([%h](https://github.com/'"$REPO"'/commit/%H))' "$PREV_TAG..$TAG"
+    bash .github/scripts/changelog.sh "$REPO" "$PREV_TAG..$TAG"
   else
-    git log --no-merges --pretty=format:'- %s ([%h](https://github.com/'"$REPO"'/commit/%H))' "$TAG"
+    bash .github/scripts/changelog.sh "$REPO" "$TAG"
   fi
   echo
 
