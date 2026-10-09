@@ -17,18 +17,18 @@ import com.dzid26.teslable.core.protocol.userPresent
 /**
  * The battery sample for a logged charge reply, or null unless the record
  * holds a charge state with a level and the car's own timestamp. The sample
- * sits on that car timestamp: `acquired_at` never stands in for it (ADR-0006).
+ * sits on that car timestamp: `device_timestamp` never stands in for it (ADR-0006).
  */
 fun BleRecord.toBatterySample(vehicleId: String): BatterySample? = charge_state?.toBatterySample(vehicleId)
 
 /**
  * The status sample for a logged VCSEC reply, or null unless the record holds
- * a status and `acquired_at`. VCSEC replies carry no time of their own, so the
- * phone's `acquired_at` is the sample's time.
+ * a status and `device_timestamp`. VCSEC replies carry no time of their own, so the
+ * phone's `device_timestamp` is the sample's time.
  */
 fun BleRecord.toStatusSample(vehicleId: String): StatusSample? {
     val status = vehicle_status ?: return null
-    val time = acquired_at?.toEpochMilli() ?: return null
+    val time = device_timestamp?.toEpochMilli() ?: return null
     return StatusSample(
         timestampMillis = time,
         vehicleId = vehicleId,
@@ -41,7 +41,7 @@ fun BleRecord.toStatusSample(vehicleId: String): StatusSample? {
 /**
  * The drive sample for a logged DriveState reply, or null unless the record
  * holds a drive state with the car's own timestamp. The sample sits on that
- * car timestamp: `acquired_at` never stands in for it (ADR-0006, ADR-0008).
+ * car timestamp: `device_timestamp` never stands in for it (ADR-0006, ADR-0008).
  */
 fun BleRecord.toDriveSample(vehicleId: String): DriveSample? {
     val drive = drive_state ?: return null

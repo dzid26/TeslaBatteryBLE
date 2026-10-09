@@ -108,7 +108,7 @@ internal object DemoHistory {
     ): BleRecord {
         val charge = sample(now, point)
         // The simulated phone acquires each reply the moment the car stamps it.
-        return BleRecord(acquired_at = charge.timestamp, charge_state = charge)
+        return BleRecord(device_timestamp = charge.timestamp, charge_state = charge)
     }
 
     /**
@@ -131,7 +131,7 @@ internal object DemoHistory {
                     odometer_in_hundredths_of_a_mile = odometer,
                     timestamp = time,
                 )
-            BleRecord(acquired_at = time, drive_state = drive)
+            BleRecord(device_timestamp = time, drive_state = drive)
         }
     }
 

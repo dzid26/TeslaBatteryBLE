@@ -39,7 +39,7 @@ import java.time.Instant
  * One file per vehicle per kind in `filesDir/battery-history/`, cached in
  * memory and exposed as [StateFlow]s:
  * - `<vehicleId>.vcsec.pblog`: VCSEC status readings logged when
- *   [shouldLogStatus] says so, timed by `acquired_at` ([statusSamples]);
+ *   [shouldLogStatus] says so, timed by `device_timestamp` ([statusSamples]);
  * - `<vehicleId>.charge.pblog`: every charge reply, raw; the chart uses the
  *   ones with the car's own `ChargeState.timestamp` and a level ([samples]);
  * - `<vehicleId>.drive.pblog`: every DriveState reply, raw; [driveSamples]
@@ -99,21 +99,21 @@ class HistoryStore(
     }
 
     /**
-     * Logs one charge reply. [acquiredAt] is the phone's clock when it
-     * arrived; it goes only into the record's own `acquired_at`, so the sample
+     * Logs one charge reply. [deviceTimestamp] is the phone's clock when it
+     * arrived; it goes only into the record's own `device_timestamp`, so the sample
      * stays on the car's `ChargeState.timestamp`. [rssi] is the phone's
      * latest RSSI for the car, or null when it has none.
      */
     fun record(
         vehicleId: String,
         charge: ChargeState,
-        acquiredAt: Instant,
+        deviceTimestamp: Instant,
         rssi: Int?,
     ) {
         // Every reply is logged as the car sent it. Chart time comes only from
         // the car's own timestamp and is never filled in, so a reply without
         // one (or without a level) stays in the log but off the chart.
-        val record = BleRecord(acquired_at = acquiredAt, rssi = rssi, charge_state = charge)
+        val record = BleRecord(device_timestamp = deviceTimestamp, rssi = rssi, charge_state = charge)
         val sample = record.toBatterySample(vehicleId)
         scope.launch {
             mutex.withLock {
@@ -125,22 +125,22 @@ class HistoryStore(
 
     /**
      * Logs one VCSEC status reading when [shouldLogStatus] says so. The reply
-     * carries no time, so [acquiredAt] is the phone's clock at receipt
+     * carries no time, so [deviceTimestamp] is the phone's clock at receipt
      * and the reading's time on the timeline; it goes only into the record's
-     * own `acquired_at`, never into a car field. [rssi] is the phone's latest
+     * own `device_timestamp`, never into a car field. [rssi] is the phone's latest
      * RSSI for the car, or null when it has none.
      */
     fun recordStatus(
         vehicleId: String,
         status: VehicleStatus,
-        acquiredAt: Instant,
+        deviceTimestamp: Instant,
         rssi: Int?,
         firstAfterConnect: Boolean,
     ) {
-        val record = BleRecord(acquired_at = acquiredAt, rssi = rssi, vehicle_status = status)
+        val record = BleRecord(device_timestamp = deviceTimestamp, rssi = rssi, vehicle_status = status)
         scope.launch {
             mutex.withLock {
-                if (shouldLogStatus(lastLoggedStatus[vehicleId], status, acquiredAt, firstAfterConnect)) {
+                if (shouldLogStatus(lastLoggedStatus[vehicleId], status, deviceTimestamp, firstAfterConnect)) {
                     appendStatus(vehicleId, record)
                 }
             }
@@ -149,21 +149,21 @@ class HistoryStore(
 
     /**
      * Logs one DriveState reply, verbatim: every field the car sent, the
-     * navigation destination and route included. [acquiredAt] is the
+     * navigation destination and route included. [deviceTimestamp] is the
      * phone's clock when it arrived; it goes only into the record's own
-     * `acquired_at`, so the sample stays on the car's `DriveState.timestamp`.
+     * `device_timestamp`, so the sample stays on the car's `DriveState.timestamp`.
      * [rssi] is the phone's latest RSSI for the car, or null when it has none.
      */
     fun recordDrive(
         vehicleId: String,
         drive: DriveState,
-        acquiredAt: Instant,
+        deviceTimestamp: Instant,
         rssi: Int?,
     ) {
         // Every reply is logged as the car sent it. Drive time comes only from
         // the car's own timestamp and is never filled in, so a reply without
         // one stays in the log but out of [driveSamples].
-        val record = BleRecord(acquired_at = acquiredAt, rssi = rssi, drive_state = drive)
+        val record = BleRecord(device_timestamp = deviceTimestamp, rssi = rssi, drive_state = drive)
         val sample = record.toDriveSample(vehicleId)
         scope.launch {
             mutex.withLock {
@@ -175,32 +175,32 @@ class HistoryStore(
 
     /**
      * Logs one ClosuresState reply, verbatim (ADR-0008). It holds the sentry
-     * mode state next to the doors, windows and lock state. [acquiredAt] is the
+     * mode state next to the doors, windows and lock state. [deviceTimestamp] is the
      * phone's clock when it arrived; [rssi] is the phone's latest RSSI for the
      * car, or null when it has none. No read model yet.
      */
     fun recordClosures(
         vehicleId: String,
         closures: ClosuresState,
-        acquiredAt: Instant,
+        deviceTimestamp: Instant,
         rssi: Int?,
     ) {
-        val record = BleRecord(acquired_at = acquiredAt, rssi = rssi, closures_state = closures)
+        val record = BleRecord(device_timestamp = deviceTimestamp, rssi = rssi, closures_state = closures)
         scope.launch { mutex.withLock { closuresLogs.append(vehicleId, record) } }
     }
 
     /**
-     * Logs one ClimateState reply, verbatim (ADR-0008). [acquiredAt] is the
+     * Logs one ClimateState reply, verbatim (ADR-0008). [deviceTimestamp] is the
      * phone's clock when it arrived; [rssi] is the phone's latest RSSI for the
      * car, or null when it has none. No read model yet.
      */
     fun recordClimate(
         vehicleId: String,
         climate: ClimateState,
-        acquiredAt: Instant,
+        deviceTimestamp: Instant,
         rssi: Int?,
     ) {
-        val record = BleRecord(acquired_at = acquiredAt, rssi = rssi, climate_state = climate)
+        val record = BleRecord(device_timestamp = deviceTimestamp, rssi = rssi, climate_state = climate)
         scope.launch { mutex.withLock { climateLogs.append(vehicleId, record) } }
     }
 
@@ -208,19 +208,19 @@ class HistoryStore(
      * Logs a change in the phone's connection to [vehicleId] (ADR-0008):
      * [state] is `CONNECTED` when the connection became ready and
      * `DISCONNECTED` when an established one ended, so a DISCONNECTED marks
-     * when watching ended. [acquiredAt] is when it happened, and [rssi]
+     * when watching ended. [deviceTimestamp] is when it happened, and [rssi]
      * the phone's last RSSI for the car before that, or null when it has none.
      * Nothing reads these records back yet.
      */
     fun recordConnection(
         vehicleId: String,
         state: ConnectionEvent.State,
-        acquiredAt: Instant,
+        deviceTimestamp: Instant,
         rssi: Int?,
     ) {
         val record =
             BleRecord(
-                acquired_at = acquiredAt,
+                device_timestamp = deviceTimestamp,
                 rssi = rssi,
                 connection_event = ConnectionEvent(state = state),
             )
@@ -281,19 +281,19 @@ class HistoryStore(
         /** `<vehicleId>.charge.pblog`: charge replies in [BleRecord]s, on the car's own timestamp (ADR-0008). */
         const val CHARGE_LOG_SUFFIX = ".charge.pblog"
 
-        /** `<vehicleId>.vcsec.pblog`: VCSEC status replies in [BleRecord]s, timed by `acquired_at` (ADR-0008). */
+        /** `<vehicleId>.vcsec.pblog`: VCSEC status replies in [BleRecord]s, timed by `device_timestamp` (ADR-0008). */
         const val STATUS_LOG_SUFFIX = ".vcsec.pblog"
 
         /** `<vehicleId>.drive.pblog`: DriveState replies in [BleRecord]s, on the car's own timestamp (ADR-0008). */
         const val DRIVE_LOG_SUFFIX = ".drive.pblog"
 
-        /** `<vehicleId>.closures.pblog`: ClosuresState replies in [BleRecord]s, with `acquired_at` (ADR-0008). */
+        /** `<vehicleId>.closures.pblog`: ClosuresState replies in [BleRecord]s, with `device_timestamp` (ADR-0008). */
         const val CLOSURES_LOG_SUFFIX = ".closures.pblog"
 
-        /** `<vehicleId>.climate.pblog`: ClimateState replies in [BleRecord]s, with `acquired_at` (ADR-0008). */
+        /** `<vehicleId>.climate.pblog`: ClimateState replies in [BleRecord]s, with `device_timestamp` (ADR-0008). */
         const val CLIMATE_LOG_SUFFIX = ".climate.pblog"
 
-        /** `<vehicleId>.connection.pblog`: connection events in [BleRecord]s, timed by `acquired_at` (ADR-0008). */
+        /** `<vehicleId>.connection.pblog`: connection events in [BleRecord]s, timed by `device_timestamp` (ADR-0008). */
         const val CONNECTION_LOG_SUFFIX = ".connection.pblog"
         const val MAX_SAMPLES = 20_000
     }

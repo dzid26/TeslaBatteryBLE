@@ -17,18 +17,18 @@ import com.tesla.generated.vcsec.VehicleStatus
  * passed is unknown.
  *
  * @param last the newest record logged for this vehicle, or null when there is none.
- * @param acquiredAt the phone's clock when [status] arrived.
+ * @param deviceTimestamp the phone's clock when [status] arrived.
  * @param firstAfterConnect true for the first reading since the link became ready.
  */
 fun shouldLogStatus(
     last: BleRecord?,
     status: VehicleStatus,
-    acquiredAt: Instant,
+    deviceTimestamp: Instant,
     firstAfterConnect: Boolean,
 ): Boolean {
     if (last == null || firstAfterConnect || last.vehicle_status != status) return true
-    val lastAt = last.acquired_at?.toEpochMilli() ?: return true
-    val elapsed = acquiredAt.toEpochMilli() - lastAt
+    val lastAt = last.device_timestamp?.toEpochMilli() ?: return true
+    val elapsed = deviceTimestamp.toEpochMilli() - lastAt
     return elapsed < 0 || elapsed >= STATUS_HEARTBEAT_MILLIS
 }
 

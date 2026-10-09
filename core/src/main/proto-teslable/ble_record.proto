@@ -29,10 +29,11 @@ option java_package = "com.dzid26.teslable.core.history";
 // status, charge, drive, closures, climate.
 message BleRecord {
     // Phone clock when the record was acquired: when the reply arrived, or
-    // when the connection changed. A car timestamp inside the payload
-    // (ChargeState.timestamp, DriveState.timestamp, ClimateState.timestamp) is
-    // never touched.
-    google.protobuf.Timestamp acquired_at = 1;
+    // when the connection changed. (Named acquired_at until 2026-10-09; the
+    // rename is name-only, the field number and type are unchanged.) A car
+    // timestamp inside the payload (ChargeState.timestamp,
+    // DriveState.timestamp, ClimateState.timestamp) is never touched.
+    google.protobuf.Timestamp device_timestamp = 1;
 
     // The phone's latest RSSI reading for the car when the record was
     // acquired, in dBm. Absent when the phone had none. It hints at how close

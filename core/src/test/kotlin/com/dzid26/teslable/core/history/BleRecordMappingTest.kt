@@ -85,7 +85,7 @@ class BleRecordMappingTest {
 
         val varint = 0
         val lengthDelimited = 2
-        assertEquals(1 shl 3 or lengthDelimited, tag(BleRecord(acquired_at = ofEpochSecond(1, 0))))
+        assertEquals(1 shl 3 or lengthDelimited, tag(BleRecord(device_timestamp = ofEpochSecond(1, 0))))
         assertEquals(2 shl 3 or lengthDelimited, tag(BleRecord(vehicle_status = asleep)))
         assertEquals(3 shl 3 or lengthDelimited, tag(BleRecord(charge_state = charging)))
         assertEquals(4 shl 3 or lengthDelimited, tag(BleRecord(drive_state = DriveState())))
@@ -104,7 +104,7 @@ class BleRecordMappingTest {
 
     @Test
     fun `a charge record maps onto the sample its raw charge state maps onto`() {
-        val sample = BleRecord(acquired_at = ofEpochSecond(1_001, 0), charge_state = charging).toBatterySample(VEHICLE)
+        val sample = BleRecord(device_timestamp = ofEpochSecond(1_001, 0), charge_state = charging).toBatterySample(VEHICLE)
         assertEquals(charging.toBatterySample(VEHICLE), sample)
         assertEquals(77, sample?.batteryLevel)
         assertEquals(ChargingStateKind.Charging, sample?.chargingState)
@@ -113,28 +113,28 @@ class BleRecordMappingTest {
     @Test
     fun `a charge record keeps the car's timestamp as its timeline time`() {
         // The phone read the reply 90 s after the car stamped it: the sample
-        // stays on the car's clock, and acquired_at does not move it.
-        val record = BleRecord(acquired_at = ofEpochSecond(1_090, 0), charge_state = charging)
+        // stays on the car's clock, and device_timestamp does not move it.
+        val record = BleRecord(device_timestamp = ofEpochSecond(1_090, 0), charge_state = charging)
         assertEquals(1_000_000L, record.toBatterySample(VEHICLE)?.timestampMillis)
     }
 
     @Test
-    fun `a charge record maps without acquired_at`() {
+    fun `a charge record maps without device_timestamp`() {
         // The charge timeline is the car's own clock, so the phone's time is not needed to place a sample.
         assertEquals(charging.toBatterySample(VEHICLE), BleRecord(charge_state = charging).toBatterySample(VEHICLE))
     }
 
     @Test
     fun `a charge record without a car timestamp yields no battery sample`() {
-        // acquired_at is never a stand-in for the car's own time (ADR-0006).
-        val acquiredAt = ofEpochSecond(1_090, 0)
-        assertNull(BleRecord(acquired_at = acquiredAt, charge_state = charging.copy(timestamp = null)).toBatterySample(VEHICLE))
-        assertNull(BleRecord(acquired_at = acquiredAt, charge_state = charging.copy(battery_level = null)).toBatterySample(VEHICLE))
+        // device_timestamp is never a stand-in for the car's own time (ADR-0006).
+        val at = ofEpochSecond(1_090, 0)
+        assertNull(BleRecord(device_timestamp = at, charge_state = charging.copy(timestamp = null)).toBatterySample(VEHICLE))
+        assertNull(BleRecord(device_timestamp = at, charge_state = charging.copy(battery_level = null)).toBatterySample(VEHICLE))
     }
 
     @Test
     fun `a status record maps onto a sample at the phone's acquisition time`() {
-        val record = BleRecord(acquired_at = ofEpochSecond(1, 500_000_000), vehicle_status = inUse)
+        val record = BleRecord(device_timestamp = ofEpochSecond(1, 500_000_000), vehicle_status = inUse)
         val expected =
             StatusSample(
                 timestampMillis = 1_500L,
@@ -148,21 +148,21 @@ class BleRecordMappingTest {
 
     @Test
     fun `a sleeping car maps onto asleep, locked and away`() {
-        val sample = BleRecord(acquired_at = ofEpochSecond(60, 0), vehicle_status = asleep).toStatusSample("car")
+        val sample = BleRecord(device_timestamp = ofEpochSecond(60, 0), vehicle_status = asleep).toStatusSample("car")
         assertEquals(StatusSample(60_000L, "car", asleep = true, userPresent = false, locked = true), sample)
     }
 
     @Test
-    fun `a status sample needs a status and acquired_at`() {
-        assertNull(BleRecord(acquired_at = ofEpochSecond(1, 0)).toStatusSample("car"))
+    fun `a status sample needs a status and device_timestamp`() {
+        assertNull(BleRecord(device_timestamp = ofEpochSecond(1, 0)).toStatusSample("car"))
         assertNull(BleRecord(vehicle_status = asleep).toStatusSample("car"))
     }
 
     @Test
     fun `a drive record maps onto a sample on the car's own clock`() {
         // The phone read the reply 90 s after the car stamped it: the sample
-        // stays on the car's clock, and acquired_at does not move it.
-        val record = BleRecord(acquired_at = ofEpochSecond(2_090, 0), drive_state = driving)
+        // stays on the car's clock, and device_timestamp does not move it.
+        val record = BleRecord(device_timestamp = ofEpochSecond(2_090, 0), drive_state = driving)
         val expected =
             DriveSample(
                 timestampMillis = 2_000_000L,
@@ -176,7 +176,7 @@ class BleRecordMappingTest {
     }
 
     @Test
-    fun `a drive record maps without acquired_at`() {
+    fun `a drive record maps without device_timestamp`() {
         // The drive timeline is the car's own clock, so the phone's time is not needed to place a sample.
         assertEquals(2_000_000L, BleRecord(drive_state = driving).toDriveSample(VEHICLE)?.timestampMillis)
     }
@@ -199,18 +199,18 @@ class BleRecordMappingTest {
 
     @Test
     fun `a drive record without a car timestamp yields no drive sample`() {
-        // acquired_at is never a stand-in for the car's own time (ADR-0006).
-        val record = BleRecord(acquired_at = ofEpochSecond(2_090, 0), drive_state = driving.copy(timestamp = null))
+        // device_timestamp is never a stand-in for the car's own time (ADR-0006).
+        val record = BleRecord(device_timestamp = ofEpochSecond(2_090, 0), drive_state = driving.copy(timestamp = null))
         assertNull(record.toDriveSample(VEHICLE))
     }
 
     @Test
     fun `each payload feeds only its own sample`() {
-        val acquiredAt = ofEpochSecond(1_001, 0)
-        val charge = BleRecord(acquired_at = acquiredAt, charge_state = charging)
-        val status = BleRecord(acquired_at = acquiredAt, vehicle_status = asleep)
-        val drive = BleRecord(acquired_at = acquiredAt, drive_state = driving)
-        val connection = BleRecord(acquired_at = acquiredAt, rssi = -70, connection_event = connected)
+        val deviceTimestamp = ofEpochSecond(1_001, 0)
+        val charge = BleRecord(device_timestamp = deviceTimestamp, charge_state = charging)
+        val status = BleRecord(device_timestamp = deviceTimestamp, vehicle_status = asleep)
+        val drive = BleRecord(device_timestamp = deviceTimestamp, drive_state = driving)
+        val connection = BleRecord(device_timestamp = deviceTimestamp, rssi = -70, connection_event = connected)
         assertNull(charge.toStatusSample("car"))
         assertNull(charge.toDriveSample("car"))
         assertNull(status.toBatterySample("car"))
@@ -221,7 +221,7 @@ class BleRecordMappingTest {
         assertNull(connection.toBatterySample("car"))
         assertNull(connection.toStatusSample("car"))
         assertNull(connection.toDriveSample("car"))
-        val empty = BleRecord(acquired_at = acquiredAt)
+        val empty = BleRecord(device_timestamp = deviceTimestamp)
         assertNull(empty.toBatterySample("car"))
         assertNull(empty.toDriveSample("car"))
     }
@@ -230,10 +230,10 @@ class BleRecordMappingTest {
     fun `mixed records round-trip through the log codec with their payloads intact`() {
         val records =
             listOf(
-                BleRecord(acquired_at = ofEpochSecond(0, 0), vehicle_status = asleep),
-                BleRecord(acquired_at = ofEpochSecond(1_090, 0), charge_state = charging),
-                BleRecord(acquired_at = ofEpochSecond(1_800, 0), vehicle_status = inUse),
-                BleRecord(acquired_at = ofEpochSecond(2_090, 0), drive_state = driving),
+                BleRecord(device_timestamp = ofEpochSecond(0, 0), vehicle_status = asleep),
+                BleRecord(device_timestamp = ofEpochSecond(1_090, 0), charge_state = charging),
+                BleRecord(device_timestamp = ofEpochSecond(1_800, 0), vehicle_status = inUse),
+                BleRecord(device_timestamp = ofEpochSecond(2_090, 0), drive_state = driving),
             )
         val decoded = ProtoLog.decode(ProtoLog.encode(records), BleRecord.ADAPTER)
         assertEquals(records, decoded)
@@ -245,12 +245,12 @@ class BleRecordMappingTest {
     fun `connection events and signal strength round-trip through the log codec`() {
         val records =
             listOf(
-                BleRecord(acquired_at = ofEpochSecond(10, 0), rssi = -72, connection_event = connected),
-                BleRecord(acquired_at = ofEpochSecond(11, 0), rssi = -58, vehicle_status = asleep),
-                BleRecord(acquired_at = ofEpochSecond(12, 0), rssi = -64, charge_state = charging),
-                BleRecord(acquired_at = ofEpochSecond(13, 0), rssi = -80, connection_event = disconnected),
+                BleRecord(device_timestamp = ofEpochSecond(10, 0), rssi = -72, connection_event = connected),
+                BleRecord(device_timestamp = ofEpochSecond(11, 0), rssi = -58, vehicle_status = asleep),
+                BleRecord(device_timestamp = ofEpochSecond(12, 0), rssi = -64, charge_state = charging),
+                BleRecord(device_timestamp = ofEpochSecond(13, 0), rssi = -80, connection_event = disconnected),
                 // The phone had no reading yet.
-                BleRecord(acquired_at = ofEpochSecond(14, 0), connection_event = connected),
+                BleRecord(device_timestamp = ofEpochSecond(14, 0), connection_event = connected),
             )
         val decoded = ProtoLog.decode(ProtoLog.encode(records), BleRecord.ADAPTER)
         assertEquals(records, decoded)
@@ -272,8 +272,8 @@ class BleRecordMappingTest {
             )
         val records =
             listOf(
-                BleRecord(acquired_at = ofEpochSecond(3_001, 0), rssi = -61, closures_state = closures),
-                BleRecord(acquired_at = ofEpochSecond(3_002, 0), rssi = -62, climate_state = climate),
+                BleRecord(device_timestamp = ofEpochSecond(3_001, 0), rssi = -61, closures_state = closures),
+                BleRecord(device_timestamp = ofEpochSecond(3_002, 0), rssi = -62, climate_state = climate),
             )
         val decoded = ProtoLog.decode(ProtoLog.encode(records), BleRecord.ADAPTER)
         assertEquals(records, decoded)
@@ -290,7 +290,7 @@ class BleRecordMappingTest {
     @Test
     fun `a record without a signal strength reads it as absent`() {
         // A record from before rssi existed, or from a phone with no reading, has no field 5.
-        val withoutSignal = BleRecord(acquired_at = ofEpochSecond(5, 0), vehicle_status = asleep)
+        val withoutSignal = BleRecord(device_timestamp = ofEpochSecond(5, 0), vehicle_status = asleep)
         val decoded = ProtoLog.decode(ProtoLog.encode(listOf(withoutSignal)), BleRecord.ADAPTER).single()
         assertNull(decoded.rssi)
         assertEquals(withoutSignal, decoded)
@@ -300,10 +300,10 @@ class BleRecordMappingTest {
 
     @Test
     fun `a payload kind from a newer version reads as a record without a known payload`() {
-        // A newer writer's record: field 9, a payload kind added after climate_state, beside acquired_at.
+        // A newer writer's record: field 9, a payload kind added after climate_state, beside device_timestamp.
         val fieldNine = byteArrayOf(0x4A, 0x02, 0x08, 0x01)
-        val record = BleRecord.ADAPTER.decode(BleRecord(acquired_at = ofEpochSecond(5, 0)).encode() + fieldNine)
-        assertEquals(ofEpochSecond(5, 0), record.acquired_at)
+        val record = BleRecord.ADAPTER.decode(BleRecord(device_timestamp = ofEpochSecond(5, 0)).encode() + fieldNine)
+        assertEquals(ofEpochSecond(5, 0), record.device_timestamp)
         assertNull(record.toBatterySample("car"))
         assertNull(record.toStatusSample("car"))
         assertNull(record.toDriveSample("car"))

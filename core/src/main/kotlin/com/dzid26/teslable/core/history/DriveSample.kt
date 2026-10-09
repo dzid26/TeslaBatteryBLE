@@ -7,7 +7,7 @@ import com.dzid26.teslable.core.protocol.ShiftStateKind
 /**
  * One DriveState reading, derived from a logged [BleRecord] (ADR-0008). Like
  * [BatterySample] it sits on the car's own clock: the time is
- * `DriveState.timestamp`, never the phone's `acquired_at`.
+ * `DriveState.timestamp`, never the phone's `device_timestamp`.
  *
  * It keeps only what drive detection needs; the full DriveState, navigation
  * destination and route included, stays in the log. The odometer lets the

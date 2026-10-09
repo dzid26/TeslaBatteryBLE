@@ -622,8 +622,8 @@ class TeslaBleController(
         state: ConnectionEvent.State,
     ) {
         if (link.phase != ConnectionPhase.READY) return
-        val acquiredAt = Instant.ofEpochMilli(System.currentTimeMillis())
-        historyStore.recordConnection(link.bleName, state, acquiredAt, latestRssi(link.address))
+        val deviceTimestamp = Instant.ofEpochMilli(System.currentTimeMillis())
+        historyStore.recordConnection(link.bleName, state, deviceTimestamp, latestRssi(link.address))
     }
 
     private fun log(message: String) {
@@ -1167,7 +1167,7 @@ class TeslaBleController(
 
         private fun handleEncryptedResponse(
             bytes: ByteArray,
-            acquiredAt: Instant,
+            deviceTimestamp: Instant,
         ): Boolean {
             val message =
                 runCatching { RoutableMessage.ADAPTER.decode(bytes) }.getOrNull()
@@ -1203,26 +1203,26 @@ class TeslaBleController(
                     log("${name()}: wake ${status?.name ?: "response received"}")
                 }
 
-                CommandKind.CHARGE -> handleChargeResponse(plaintext, acquiredAt)
+                CommandKind.CHARGE -> handleChargeResponse(plaintext, deviceTimestamp)
 
                 CommandKind.DRIVE -> {
-                    stateReplies.onDrive(plaintext, acquiredAt)
+                    stateReplies.onDrive(plaintext, deviceTimestamp)
                     requestFollowUp(TeslaCommands.buildClosuresStateRequest(), CommandKind.CLOSURES)
                 }
 
                 CommandKind.CLOSURES -> {
-                    stateReplies.onClosures(plaintext, acquiredAt)
+                    stateReplies.onClosures(plaintext, deviceTimestamp)
                     requestFollowUp(TeslaCommands.buildClimateStateRequest(), CommandKind.CLIMATE)
                 }
 
-                CommandKind.CLIMATE -> stateReplies.onClimate(plaintext, acquiredAt)
+                CommandKind.CLIMATE -> stateReplies.onClimate(plaintext, deviceTimestamp)
             }
             return true
         }
 
         private fun handleChargeResponse(
             plaintext: ByteArray,
-            acquiredAt: Instant,
+            deviceTimestamp: Instant,
         ) {
             val charge = runCatching { TeslaCommands.parseChargeState(plaintext) }.getOrNull()
             if (charge == null) {
@@ -1232,9 +1232,9 @@ class TeslaBleController(
             }
             val previous = _state.value.connections[address]?.charge
             updateConnection(address) {
-                it.copy(charge = charge, chargeAtMillis = acquiredAt.toEpochMilli())
+                it.copy(charge = charge, chargeAtMillis = deviceTimestamp.toEpochMilli())
             }
-            historyStore.record(bleName, charge, acquiredAt, latestRssi(address))
+            historyStore.record(bleName, charge, deviceTimestamp, latestRssi(address))
             infotainmentPolicy.onChargeReading(charge.chargingStateKind)
             if (previous?.battery_level != charge.battery_level ||
                 previous?.chargingStateKind != charge.chargingStateKind
@@ -1488,9 +1488,9 @@ class TeslaBleController(
             // The phone's clock when this reply arrived, read once: both BLE
             // logs keep it beside the car's reply (ADR-0008). Whole milliseconds,
             // as stored before; Instant.now() can carry finer digits.
-            val acquiredAt = Instant.ofEpochMilli(System.currentTimeMillis())
+            val deviceTimestamp = Instant.ofEpochMilli(System.currentTimeMillis())
             if (handleSessionInfo(message)) return
-            if (handleEncryptedResponse(message, acquiredAt)) return
+            if (handleEncryptedResponse(message, deviceTimestamp)) return
             if (handlePairingResponse(message)) return
 
             val whitelist = runCatching { TeslaVcsec.parseWhitelistInfoResponse(message) }.getOrNull()
@@ -1510,7 +1510,7 @@ class TeslaBleController(
                 // VCSEC replies carry no time: the phone's clock at receipt is
                 // the status log's timeline (ADR-0008).
                 val rssi = latestRssi(address)
-                historyStore.recordStatus(bleName, status, acquiredAt, rssi, firstAfterConnect = firstStatusAfterConnect)
+                historyStore.recordStatus(bleName, status, deviceTimestamp, rssi, firstAfterConnect = firstStatusAfterConnect)
                 firstStatusAfterConnect = false
                 if (!status.asleep) {
                     handler.removeCallbacks(wakeRefresh)

@@ -45,8 +45,12 @@ identity), `docs/requirements/multi-phone.md`
 
 - **One envelope for every logged reply and connection event.** `BleRecord`
   (`core/src/main/proto-teslable/ble_record.proto`) holds:
-  - `acquired_at` (field 1): the phone's clock when the record was acquired,
-    that is when the reply arrived or the connection changed;
+  - `device_timestamp` (field 1): the phone's clock when the record was
+    acquired, that is when the reply arrived or the connection changed. It was
+    first called `acquired_at`; the rename (2026-10-09) is name-only, field 1
+    and its type are unchanged, so stored bytes are identical and nothing
+    needs migrating. The new name says whose clock it is, next to the car's
+    own timestamps in the payloads;
   - `rssi` (field 5, `optional sint32`): the phone's latest RSSI reading for
     the car at that moment, in dBm, absent when the phone had none;
   - a `payload` oneof with either the car's raw reply, verbatim, nothing
@@ -61,7 +65,7 @@ identity), `docs/requirements/multi-phone.md`
   Tesla's vendored protos (`core/src/main/proto`, pinned by `TESLA_COMMIT`)
   stay untouched; ours sit in a second Wire source root, so a re-vendor never
   touches it. This amends ADR-0006's "no custom proto, no envelope".
-- **Car timestamps are untouched.** Phone time lives only in `acquired_at`:
+- **Car timestamps are untouched.** Phone time lives only in `device_timestamp`:
   it is never written into a car timestamp field and never stands in for a
   missing one. Records the car stamps keep that stamp as their timeline:
   charge samples stay on `ChargeState.timestamp` and drive samples on
@@ -70,7 +74,7 @@ identity), `docs/requirements/multi-phone.md`
   reply without the car's timestamp or without a level, or a drive reply
   without its timestamp, stays in the log but off the read models; this
   replaces ADR-0006's "not logged".
-- **Status is timed by `acquired_at`**, because VCSEC has no clock. It is the
+- **Status is timed by `device_timestamp`**, because VCSEC has no clock. It is the
   one reply kind whose timeline is the phone's clock.
 - **Signal strength on every record.** `rssi` is set on every record the app
   writes: status, charge, drive and connection. The controller already reads
@@ -83,7 +87,7 @@ identity), `docs/requirements/multi-phone.md`
 - **Connection events.** `ConnectionEvent` carries one `State`: `CONNECTED`
   when a connection becomes ready (where the controller also marks the next
   status reading as the first after a connect) and `DISCONNECTED` when a
-  connection that had become ready ends. `acquired_at` is the event time and
+  connection that had become ready ends. `device_timestamp` is the event time and
   `rssi` the last RSSI before it. Failed connection attempts, which never
   became ready, are not logged, so a car out of range does not fill the log
   with retries. DISCONNECTED covers every way a ready connection ends: the
@@ -186,7 +190,7 @@ identity), `docs/requirements/multi-phone.md`
   After updating, the history chart starts empty and fills from new reads. The
   old files stay in app storage, so a one-time import that wraps them in
   `BleRecord`s can come later if wanted; the charge timeline needs no
-  `acquired_at`, so those records could leave it absent. No migration code
+  `device_timestamp`, so those records could leave it absent. No migration code
   runs. Status logs use the new name `.vcsec.pblog`, so a `.status.pblog`
   left by a pre-merge test build (an earlier record format) is ignored the
   same way instead of hiding every later record. Pre-merge test builds of
@@ -204,11 +208,11 @@ identity), `docs/requirements/multi-phone.md`
   samples on the car's. The two agree to within seconds, which is fine for
   this use: status marks stretches of minutes to hours (asleep, parked,
   someone in the car), and nothing joins the logs at second precision. Charge
-  and drive records also carry `acquired_at`, so the offset between the
+  and drive records also carry `device_timestamp`, so the offset between the
   clocks can be measured when it matters.
 - **Multi-phone merge** (`docs/requirements/multi-phone.md`): a vehicle's
   history is the union of every phone's records, ordered by the car's
-  timestamp for charge and drive and by `acquired_at` for status, with exact
+  timestamp for charge and drive and by `device_timestamp` for status, with exact
   duplicates collapsing. Two phones watching at once only make the timeline
   denser.
 - **Coverage.** Status readings exist only while a phone is connected. The
