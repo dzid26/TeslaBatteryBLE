@@ -5,7 +5,7 @@
 # built and the emulator screenshots captured into `screenshots/`.
 set -euo pipefail
 
-TAG="${GITHUB_REF_NAME:?GITHUB_REF_NAME is required}"
+TAG="${RELEASE_TAG:-${GITHUB_REF_NAME:?GITHUB_REF_NAME or RELEASE_TAG is required}}"
 REPO="${GITHUB_REPOSITORY:?GITHUB_REPOSITORY is required}"
 APK="dist/TeslaBatteryBLE-${TAG}.apk"
 NOTES="release-notes.md"
@@ -13,7 +13,14 @@ SHOTS_DIR="screenshots"
 # README-table-style columns: the scan, the car detail, Settings; light row + dark row.
 SHOTS="02-scanning.png 03-car.png 05-settings.png 02-scanning-dark.png 03-car-dark.png 05-settings-dark.png"
 
-if [ "$TAG" != "${TAG%-*}" ]; then PRE_FLAG="--prerelease"; else PRE_FLAG=""; fi
+# A manual release states the flag outright; a pushed tag derives it from the name.
+if [ -n "${RELEASE_PRERELEASE:-}" ]; then
+  PRE_FLAG=("--prerelease=$RELEASE_PRERELEASE")
+elif [ "$TAG" != "${TAG%-*}" ]; then
+  PRE_FLAG=(--prerelease)
+else
+  PRE_FLAG=()
+fi
 
 [ -f "$APK" ] || { echo "missing $APK (the release job stages it)" >&2; exit 1; }
 
@@ -70,13 +77,14 @@ DRAFT_ID="$(gh api --paginate "repos/$REPO/releases" \
 if [ -n "$DRAFT_ID" ]; then
   gh api -X PATCH "repos/$REPO/releases/$DRAFT_ID" \
     -f tag_name="$TAG" -f name="$TAG" -F draft=false > /dev/null
-  PRE_FLAG=""
+  # A pushed tag leaves the draft's pre-release checkbox as the owner set it.
+  if [ -z "${RELEASE_PRERELEASE:-}" ]; then PRE_FLAG=(); fi
 fi
 
 if gh release view "$TAG" > /dev/null 2>&1; then
-  gh release edit "$TAG" --title "$TAG" --notes-file "$NOTES" $PRE_FLAG
+  gh release edit "$TAG" --title "$TAG" --notes-file "$NOTES" "${PRE_FLAG[@]}"
 else
-  gh release create "$TAG" --title "$TAG" --notes-file "$NOTES" $PRE_FLAG
+  gh release create "$TAG" --title "$TAG" --notes-file "$NOTES" "${PRE_FLAG[@]}"
 fi
 
 # Uploads are flaky; retry before failing the release.

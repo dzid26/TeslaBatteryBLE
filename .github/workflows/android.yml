@@ -18,7 +18,28 @@ on:
       - 'website/**'
       - 'fastlane/**'
       - 'LICENSE'
+  # Run on main with `release` ticked to cut a release from the branch head: CI
+  # tags it, builds, captures screenshots and publishes the draft release, so
+  # nothing is public until it is complete. The tag and pre-release flag come
+  # from the draft ("Next release (draft)": type the tag into its Tag field and
+  # tick Pre-release there), or from the inputs below. Without `release` it is
+  # a plain CI run.
   workflow_dispatch:
+    inputs:
+      release:
+        description: 'Cut a release (tag and pre-release flag from the draft unless set below)'
+        required: false
+        type: boolean
+        default: false
+      tag:
+        description: 'Release tag to create, e.g. v0.4.0 or v0.4.0-beta.3 (overrides the draft''s tag)'
+        required: false
+        type: string
+      prerelease:
+        description: 'Pre-release flag; only used together with a tag above'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -112,7 +133,9 @@ jobs:
   release:
     name: Tag release
     needs: build
-    if: startsWith(github.ref, 'refs/tags/')
+    if: |
+      startsWith(github.ref, 'refs/tags/') ||
+      (github.event_name == 'workflow_dispatch' && (inputs.release || inputs.tag != ''))
     environment: release
     permissions:
       contents: write
@@ -134,6 +157,52 @@ jobs:
 
       - name: Make gradlew executable
         run: chmod +x gradlew
+
+      # Settles RELEASE_TAG and RELEASE_PRERELEASE for the rest of the job. A
+      # pushed tag is the tag; a manual release takes the tag input, else the tag
+      # typed into the draft's Tag field, with the pre-release flag from the
+      # input or the draft's checkbox.
+      - name: Resolve the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_TAG: ${{ inputs.tag }}
+          INPUT_PRERELEASE: ${{ format('{0}', inputs.prerelease) }}
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_EVENT_NAME" != workflow_dispatch ]; then
+            echo "RELEASE_TAG=$GITHUB_REF_NAME" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          if [ "$GITHUB_REF" != refs/heads/main ]; then
+            echo "::error::Manual releases run from main only"
+            exit 1
+          fi
+          if [ -n "$INPUT_TAG" ]; then
+            tag="$INPUT_TAG"
+            prerelease="$INPUT_PRERELEASE"
+          else
+            draft="$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases" \
+              --jq '.[] | select(.draft and .name == "Next release (draft)") | [.tag_name, .prerelease] | @tsv' | sed -n 1p)"
+            if [ -z "$draft" ]; then
+              echo "::error::No draft release 'Next release (draft)' to release; pass a tag"
+              exit 1
+            fi
+            tag="${draft%%$'\t'*}"
+            prerelease="${draft##*$'\t'}"
+          fi
+          if ! printf '%s' "$tag" | grep -Eq '^v[0-9]+[.][0-9]+[.][0-9]+(-[0-9A-Za-z.]+)?$'; then
+            echo "::error::'$tag' is not a tag like v1.2.3 or v1.2.3-beta.1; type it into the draft's Tag field or pass the tag input"
+            exit 1
+          fi
+          if git rev-parse -q --verify "refs/tags/$tag" > /dev/null; then
+            echo "::error::tag $tag already exists"
+            exit 1
+          fi
+          echo "RELEASE_TAG=$tag" >> "$GITHUB_ENV"
+          echo "RELEASE_PRERELEASE=$prerelease" >> "$GITHUB_ENV"
+          # Created locally first, because versionName and versionCode derive
+          # from it; it is pushed only when publishing.
+          git tag "$tag"
 
       - name: Set up signing
         env:
@@ -166,7 +235,7 @@ jobs:
       - name: Stage the release APK
         run: |
           mkdir -p dist
-          cp app/build/outputs/apk/debug/app-debug.apk "dist/TeslaBatteryBLE-${GITHUB_REF_NAME}.apk"
+          cp app/build/outputs/apk/debug/app-debug.apk "dist/TeslaBatteryBLE-${RELEASE_TAG}.apk"
 
       - name: Build the demo APK for screenshots
         run: ./gradlew :app:assembleDebug -PdemoCar=true
@@ -207,6 +276,10 @@ jobs:
           disable-animations: true
           script: rm -rf screenshots && bash .github/scripts/capture-screenshots.sh app/build/outputs/apk/debug/app-debug.apk screenshots
 
+      - name: Push the release tag
+        if: github.event_name == 'workflow_dispatch'
+        run: git push origin "refs/tags/$RELEASE_TAG"
+
       - name: Release on tag
         env:
           GH_TOKEN: ${{ github.token }}
@@ -239,7 +312,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add website/images
-          git commit -m "Refresh screenshots from ${{ github.ref_name }}"
+          git commit -m "Refresh screenshots from ${RELEASE_TAG}"
           git push origin HEAD:main
           # A push made with GITHUB_TOKEN does not trigger other workflows, so
           # pages.yml never sees this commit; dispatch it explicitly.
