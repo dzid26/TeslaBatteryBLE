@@ -33,6 +33,11 @@ fi
 {
   echo "Draft of the next release - updated on every push to \`main\`."
   echo
+  # Dropped when the tag release replaces these notes with the release APK.
+  if [ -n "${APK_ARTIFACT_URL:-}" ]; then
+    echo "**Debug APK**: [CI artifact (zip; needs a GitHub login)]($APK_ARTIFACT_URL). It installs next to the release app as a separate app."
+    echo
+  fi
   if [ -n "$PREV_TAG" ]; then
     echo "## Changes since [$PREV_TAG](https://github.com/$REPO/releases/tag/$PREV_TAG)"
   else

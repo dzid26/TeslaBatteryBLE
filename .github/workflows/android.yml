@@ -69,6 +69,8 @@ jobs:
   build:
     permissions:
       contents: read
+    outputs:
+      apk-artifact-url: ${{ steps.upload-apk.outputs.artifact-url }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -136,6 +138,7 @@ jobs:
           cp app/build/outputs/apk/debug/app-debug.apk "dist-apk/TeslaBatteryBLE-${PR_NUMBER:+pr$PR_NUMBER-}${HEAD_SHA:0:7}.apk"
 
       - name: Upload debug APK
+        id: upload-apk
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: teslable-debug-apk
@@ -352,6 +355,7 @@ jobs:
       - name: Update the draft release
         env:
           GH_TOKEN: ${{ github.token }}
+          APK_ARTIFACT_URL: ${{ needs.build.outputs.apk-artifact-url }}
         run: bash .github/scripts/update-draft-release.sh
 
   go-vectors:
