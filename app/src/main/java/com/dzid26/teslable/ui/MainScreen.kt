@@ -67,6 +67,8 @@ import com.dzid26.teslable.ble.TeslaConnection
 import com.dzid26.teslable.ble.Vehicle
 import com.dzid26.teslable.ble.batteryPercent
 import com.dzid26.teslable.ble.connectionDisplay
+import com.dzid26.teslable.ble.readingAgeText
+import com.dzid26.teslable.ble.stalenessTickDelayMs
 import com.dzid26.teslable.core.history.BatterySample
 import com.dzid26.teslable.core.protocol.asleep
 import com.dzid26.teslable.history.HistorySamples
@@ -134,6 +136,7 @@ fun MainScreen(
             address = address,
             history = history.battery,
             driveHistory = history.drive,
+            statusHistory = history.status,
             onBack = { viewingBleName = null },
             onPair = { onPairKey(address) },
             onRefresh = {
@@ -477,7 +480,8 @@ private fun VehicleCard(
     onWake: () -> Unit,
 ) {
     val display = connectionDisplay(row.connection, row.advert, vehicle = row.vehicle)
-    val reading = batteryPercent(row.connection, row.lastKnown, rememberNowMillis())
+    val nowMillis = rememberNowMillis(row.connection?.chargeAtMillis)
+    val reading = batteryPercent(row.connection, row.lastKnown, nowMillis)
     val canWake =
         row.connection?.status?.asleep == true &&
             row.connection?.sessions?.contains("DOMAIN_VEHICLE_SECURITY") == true
@@ -513,17 +517,28 @@ private fun VehicleCard(
                     )
                 }
                 if (reading != null) {
-                    Text(
-                        text = "${reading.value}%",
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color =
-                            if (reading.stale) {
-                                MaterialTheme.colorScheme.outline
-                            } else {
-                                MaterialTheme.colorScheme.primary
-                            },
-                    )
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text(
+                            text = "${reading.value}%",
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color =
+                                if (reading.stale) {
+                                    MaterialTheme.colorScheme.outline
+                                } else {
+                                    MaterialTheme.colorScheme.primary
+                                },
+                        )
+                        // A stale reading always says how old it is.
+                        val readAtMillis = reading.readAtMillis
+                        if (reading.stale && readAtMillis != null) {
+                            Text(
+                                text = readingAgeText(nowMillis - readAtMillis),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
                 } else {
                     StatusPill(row.connection)
                 }
@@ -659,18 +674,20 @@ internal fun StatusPill(
 
 /**
  * The wall clock, re-read each time the screen starts and then every
- * [STALENESS_TICK_MS] while it shows. A reading's age measured against it keeps
- * growing on a quiet screen, where a clock read once per composition would leave
- * an old reading looking fresh until something else redrew the screen.
+ * [STALENESS_TICK_MS] while it shows, or sooner when the reading taken at
+ * [readAtMillis] is about to turn stale ([stalenessTickDelayMs]). A reading's
+ * age measured against it keeps growing on a quiet screen, where a clock read
+ * once per composition would leave an old reading looking fresh until
+ * something else redrew the screen.
  */
 @Composable
-internal fun rememberNowMillis(): Long {
+internal fun rememberNowMillis(readAtMillis: Long? = null): Long {
     val lifecycle = LocalLifecycleOwner.current.lifecycle
-    val nowMillis by produceState(System.currentTimeMillis(), lifecycle) {
+    val nowMillis by produceState(System.currentTimeMillis(), lifecycle, readAtMillis) {
         lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
             while (true) {
                 value = System.currentTimeMillis()
-                delay(STALENESS_TICK_MS)
+                delay(stalenessTickDelayMs(readAtMillis, value))
             }
         }
     }

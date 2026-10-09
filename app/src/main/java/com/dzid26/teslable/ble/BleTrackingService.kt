@@ -26,6 +26,8 @@ import com.dzid26.teslable.MainActivity
 import com.dzid26.teslable.R
 import com.dzid26.teslable.core.history.AppState
 import com.dzid26.teslable.core.history.BatterySample
+import com.dzid26.teslable.core.history.StatusSample
+import com.dzid26.teslable.core.history.statusDurations
 import com.dzid26.teslable.core.protocol.asleep
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -33,7 +35,10 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 /**
@@ -88,19 +93,30 @@ class BleTrackingService : Service() {
         )
         val controller = BleControllerHolder.get(this)
         scope.launch {
-            combine(controller.state, controller.batteryHistory) { state, history ->
-                state to history
-            }.collect { (state, history) ->
-                publish(modelsFor(state, history))
+            combine(controller.state, controller.batteryHistory, controller.statusHistory) { state, history, statuses ->
+                modelsFor(state, history, statuses)
+            }.collect { models ->
+                publish(models)
             }
         }
-        // The charge reading ages between state changes; re-evaluate every
-        // minute so the percentage can turn gray at the staleness boundary.
+        // The charge reading ages between state changes; re-evaluate when the
+        // newest one is due to turn gray (sooner than the minute tick while it
+        // is fresh) and every minute after, so ages and durations stay current.
+        // publish() posts only what changed, so this is at most one post a minute.
         scope.launch {
-            while (true) {
-                delay(STALENESS_TICK_MS)
-                publish(modelsFor(controller.state.value, controller.batteryHistory.value))
-            }
+            controller.state
+                .map { state ->
+                    state.connections.values
+                        .mapNotNull { it.chargeAtMillis }
+                        .maxOrNull()
+                }.distinctUntilChanged()
+                .collectLatest { newestRead ->
+                    // A newer read restarts this loop, so the timing follows the latest reading.
+                    while (true) {
+                        delay(stalenessTickDelayMs(newestRead, System.currentTimeMillis()))
+                        publish(modelsFor(controller.state.value, controller.batteryHistory.value, controller.statusHistory.value))
+                    }
+                }
         }
     }
 
@@ -122,7 +138,7 @@ class BleTrackingService : Service() {
         if (intent?.action == ACTION_WAKE) {
             controller.wakeVehicle(intent.getStringExtra(EXTRA_BLE_NAME))
         }
-        publish(modelsFor(controller.state.value, controller.batteryHistory.value))
+        publish(modelsFor(controller.state.value, controller.batteryHistory.value, controller.statusHistory.value))
         // START_STICKY may restart us after a process kill; find the cars again.
         controller.ensureConnected()
         return START_STICKY
@@ -142,14 +158,16 @@ class BleTrackingService : Service() {
     private fun modelsFor(
         state: BleUiState,
         history: List<BatterySample>,
+        statuses: List<StatusSample>,
     ): List<NotificationModel> =
         state.vehicles.mapNotNull { vehicle ->
             val connection = state.connections[vehicle.address] ?: return@mapNotNull null
             if (connection.phase == ConnectionPhase.IDLE) return@mapNotNull null
             val advert = state.devices.firstOrNull { it.address == vehicle.address }
-            val display = connectionDisplay(connection, advert, vehicle = vehicle)
-            val lastKnown = history.lastOrNull { it.vehicleId == vehicle.bleName }
             val now = System.currentTimeMillis()
+            val durations = statusDurations(statuses, vehicle.bleName, now)
+            val display = connectionDisplay(connection, advert, vehicle = vehicle, durations = durations)
+            val lastKnown = history.lastOrNull { it.vehicleId == vehicle.bleName }
             val reading = batteryPercent(connection, lastKnown, now)
             NotificationModel(
                 bleName = vehicle.bleName,
@@ -159,7 +177,9 @@ class BleTrackingService : Service() {
                 rssi = display.rssi,
                 percent = reading?.value,
                 percentStale = reading?.stale == true,
-                percentAgeLabel = reading?.readAtMillis?.let { readingAgeText(now - it) },
+                // Only a stale reading shows its age; a fresh one stays null so the
+                // notification is not re-posted while reads keep arriving.
+                percentAgeLabel = reading?.takeIf { it.stale }?.readAtMillis?.let { readingAgeText(now - it) },
                 showWake =
                     connection.status?.asleep == true &&
                         connection.sessions.contains("DOMAIN_VEHICLE_SECURITY"),

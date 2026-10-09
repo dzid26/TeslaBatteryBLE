@@ -10,6 +10,7 @@ import com.dzid26.teslable.core.history.BatterySample
 import com.dzid26.teslable.core.history.Command
 import com.dzid26.teslable.core.history.ConnectionEvent
 import com.dzid26.teslable.core.history.DriveSample
+import com.dzid26.teslable.core.history.StatusSample
 import com.dzid26.teslable.core.protocol.AntiReplayWindow
 import com.dzid26.teslable.core.protocol.CommandRecords
 import com.dzid26.teslable.core.protocol.InfotainmentPollPolicy
@@ -57,6 +58,9 @@ class TeslaBleController(
 
     /** Battery readings recorded from every charge response, oldest first. */
     val batteryHistory: StateFlow<List<BatterySample>> get() = historyStore.samples
+
+    /** VCSEC status readings logged for every car, oldest first. */
+    val statusHistory: StateFlow<List<StatusSample>> get() = historyStore.statusSamples
 
     /** Drive readings recorded from every DriveState response, oldest first. */
     val driveHistory: StateFlow<List<DriveSample>> get() = historyStore.driveSamples
