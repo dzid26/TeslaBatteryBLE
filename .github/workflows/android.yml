@@ -59,7 +59,9 @@ jobs:
   build:
     permissions:
       contents: read
-    runs-on: ubuntu-latest
+    # Pinned: the emulator, KVM and adb steps are not yet validated on ubuntu-latest
+    # (migrating to Ubuntu 26 on 2026-10-19).
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -359,6 +361,8 @@ jobs:
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version-file: /tmp/vehicle-command/go.mod
+          # The module cache would key on a go.sum that lives outside the workspace.
+          cache: false
 
       - name: Generate fixtures from the Go runtime
         run: |

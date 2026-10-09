@@ -32,7 +32,9 @@ jobs:
     # Skip while a PR is a draft: rework pushes do not need screenshots, and the
     # ready_for_review event posts the next review round's comment.
     if: github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false
-    runs-on: ubuntu-latest
+    # Pinned: the emulator, KVM and adb steps are not yet validated on ubuntu-latest
+    # (migrating to Ubuntu 26 on 2026-10-19).
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
