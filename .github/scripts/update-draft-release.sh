@@ -40,9 +40,9 @@ fi
   fi
   echo
   if [ -n "$PREV_TAG" ]; then
-    git log --no-merges --pretty=format:'- %s ([%h](https://github.com/'"$REPO"'/commit/%H))' "$PREV_TAG..$SHA" || true
+    bash .github/scripts/changelog.sh "$REPO" "$PREV_TAG..$SHA"
   else
-    git log --no-merges --pretty=format:'- %s ([%h](https://github.com/'"$REPO"'/commit/%H))' "$SHA" || true
+    bash .github/scripts/changelog.sh "$REPO" "$SHA"
   fi
   echo
   if [ -n "$PREV_TAG" ]; then
