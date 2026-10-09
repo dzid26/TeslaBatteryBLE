@@ -350,8 +350,9 @@ class HistoryStore(
     }
 }
 
-/** The logs the screens read: battery samples and drive samples, each oldest first. */
+/** The logs the screens read: battery, drive and status samples, each oldest first. */
 data class HistorySamples(
     val battery: List<BatterySample>,
     val drive: List<DriveSample>,
+    val status: List<StatusSample> = emptyList(),
 )

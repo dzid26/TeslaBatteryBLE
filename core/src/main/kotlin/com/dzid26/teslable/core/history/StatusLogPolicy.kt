@@ -33,4 +33,4 @@ fun shouldLogStatus(
 }
 
 /** An unchanged status is logged again after this long. */
-private const val STATUS_HEARTBEAT_MILLIS = 15 * 60_000L
+internal const val STATUS_HEARTBEAT_MILLIS = 15 * 60_000L

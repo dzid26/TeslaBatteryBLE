@@ -2,6 +2,8 @@
 package com.dzid26.teslable.ble
 
 import com.dzid26.teslable.core.history.BatterySample
+import com.dzid26.teslable.core.history.StatusDurations
+import com.dzid26.teslable.core.history.compactDuration
 import com.dzid26.teslable.core.protocol.ChargingStateKind
 import com.dzid26.teslable.core.protocol.asleep
 import com.dzid26.teslable.core.protocol.locked
@@ -238,6 +240,7 @@ fun connectionDisplay(
     connection: TeslaConnection?,
     advert: TeslaAdvert?,
     vehicle: Vehicle? = null,
+    durations: StatusDurations? = null,
 ): ConnectionDisplay {
     val title =
         vehicle?.displayName?.takeIf { it.isNotBlank() }
@@ -248,7 +251,7 @@ fun connectionDisplay(
             ?: "Tesla"
     return ConnectionDisplay(
         title = title,
-        stateText = connectionStateText(connection),
+        stateText = connectionStateText(connection, durations),
         // Live RSSI while connected; otherwise the scan advert's, so unpaired
         // cars show signal strength too.
         rssi = if (connection?.phase == ConnectionPhase.READY) connection.rssi ?: advert?.rssi else advert?.rssi,
@@ -259,12 +262,16 @@ fun connectionDisplay(
  * The connection states: disconnected, connected while asleep, connected, or
  * connected with a battery percentage.
  */
-private fun connectionStateText(connection: TeslaConnection?): String =
+private fun connectionStateText(
+    connection: TeslaConnection?,
+    durations: StatusDurations?,
+): String =
     when {
         connection == null -> "Disconnected"
 
         connection.phase == ConnectionPhase.READY && connection.status?.asleep == true ->
-            "Connected \uD83D\uDCA4"
+            "Connected \uD83D\uDCA4" +
+                asleepForMillis(connection.status, durations)?.let(::compactDuration)?.let { " · $it" }.orEmpty()
 
         connection.phase == ConnectionPhase.READY && connection.charge?.battery_level != null ->
             "Connected · ${connection.charge.battery_level}%"
@@ -280,13 +287,34 @@ private fun connectionStateText(connection: TeslaConnection?): String =
         else -> "Connecting..."
     }
 
-/** "Locked · Asleep · User away" instead of raw booleans. */
-fun vehicleStatusText(status: VehicleStatus): String =
-    listOf(
-        if (status.locked) "Locked" else "Unlocked",
-        if (status.asleep) "Asleep" else "Awake",
+/**
+ * "Asleep 1h 12m · Locked 3h · User away" instead of raw booleans. Asleep and
+ * locked show how long they have held when [durations] knows (and still matches
+ * the live [status]); user presence never shows one.
+ */
+fun vehicleStatusText(
+    status: VehicleStatus,
+    durations: StatusDurations? = null,
+): String {
+    val asleepFor = asleepForMillis(status, durations)
+    val lockedFor = durations?.takeIf { it.locked == status.locked }?.lockedForMillis
+    return listOf(
+        withDuration(if (status.asleep) "Asleep" else "Awake", asleepFor),
+        withDuration(if (status.locked) "Locked" else "Unlocked", lockedFor),
         if (status.userPresent) "User present" else "User away",
     ).joinToString(" · ")
+}
+
+/** How long the car has been asleep, when [status] says asleep and [durations] knows. */
+fun asleepForMillis(
+    status: VehicleStatus?,
+    durations: StatusDurations?,
+): Long? = durations?.takeIf { status != null && it.asleep == status.asleep }?.asleepForMillis
+
+private fun withDuration(
+    label: String,
+    millis: Long?,
+): String = millis?.let(::compactDuration)?.let { "$label $it" } ?: label
 
 /** Friendly names for the per-domain secure sessions. */
 fun sessionNames(sessions: List<String>): String =
