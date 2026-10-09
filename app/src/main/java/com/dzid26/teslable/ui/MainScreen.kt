@@ -516,11 +516,13 @@ private fun VehicleCard(
                     )
                 }
                 if (reading != null) {
-                    Row(verticalAlignment = Alignment.Bottom) {
+                    // The number and the age share one text baseline.
+                    Row {
                         Text(
                             text = "${reading.value}%",
                             style = MaterialTheme.typography.headlineSmall,
                             fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.alignByBaseline(),
                             color =
                                 if (reading.stale) {
                                     MaterialTheme.colorScheme.outline
@@ -534,7 +536,7 @@ private fun VehicleCard(
                                 text = age,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(start = 4.dp, bottom = 3.dp),
+                                modifier = Modifier.alignByBaseline().padding(start = 4.dp),
                             )
                         }
                     }

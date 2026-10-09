@@ -330,18 +330,20 @@ private fun SocBlock(
         return
     }
     val color = if (reading.stale) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.primary
-    Row(verticalAlignment = Alignment.Bottom) {
+    // The number, the "%" and the age share one text baseline.
+    Row {
         Text(
             text = "${reading.value}",
             style = MaterialTheme.typography.displayLarge,
             fontWeight = FontWeight.SemiBold,
             color = color,
+            modifier = Modifier.alignByBaseline(),
         )
         Text(
             text = "%",
             style = MaterialTheme.typography.headlineSmall,
             color = color,
-            modifier = Modifier.padding(bottom = 6.dp),
+            modifier = Modifier.alignByBaseline(),
         )
         // A stale reading says how old it is, small, right after the number.
         reading.ageLabel(nowMillis)?.let { age ->
@@ -349,7 +351,7 @@ private fun SocBlock(
                 text = age,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(start = 8.dp, bottom = 6.dp),
+                modifier = Modifier.alignByBaseline().padding(start = 8.dp),
             )
         }
     }
