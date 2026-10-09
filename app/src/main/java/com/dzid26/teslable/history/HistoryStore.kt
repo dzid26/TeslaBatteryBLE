@@ -253,6 +253,12 @@ class HistoryStore(
     }
 }
 
+/** The logs the screens read: battery samples and drive samples, each oldest first. */
+data class HistorySamples(
+    val battery: List<BatterySample>,
+    val drive: List<DriveSample>,
+)
+
 /**
  * One kind of per-vehicle log: `<vehicleId><suffix>` files in [dir], holding
  * [BleRecord]s. Each kind (charge, VCSEC status, drive, connection) is one

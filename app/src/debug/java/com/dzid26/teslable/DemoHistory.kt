@@ -10,6 +10,8 @@ import com.dzid26.teslable.core.history.ProtoLog
 import com.dzid26.teslable.core.protocol.ChargingStateKind
 import com.tesla.generated.carserver.common.Void
 import com.tesla.generated.carserver.vehicle.ChargeState
+import com.tesla.generated.carserver.vehicle.DriveState
+import com.tesla.generated.carserver.vehicle.ShiftState
 import java.io.File
 import java.time.Instant
 import kotlin.math.roundToInt
@@ -17,7 +19,9 @@ import kotlin.math.roundToInt
 /**
  * DEBUG-ONLY: seeds two days of plausible battery history for the simulated
  * car so demo and screenshot builds open with a populated graph and realistic
- * projections. Every raw field is filled the way the car reports it, so the
+ * projections. A DriveState record sits next to every charge record, as on a
+ * real car, with the odometer moving only across the drives, so the
+ * parked-drain projection can tell them apart. Every raw field is filled the way the car reports it, so the
  * chart, stats, and both projections read like real data. Runs once, only for
  * the demo car, and only when no history file exists; it never reaches a
  * release build (debug source set plus [DemoMode]).
@@ -26,6 +30,13 @@ internal object DemoHistory {
     // Mirrors HistoryStore's log layout; the demo seeds it directly.
     private const val HISTORY_DIR_NAME = "battery-history"
     private const val LOG_SUFFIX = ".charge.pblog"
+    private const val DRIVE_LOG_SUFFIX = ".drive.pblog"
+
+    /** FakeCarProtocol's live odometer, where the seeded drives end, so live reads continue the history. */
+    private const val ODOMETER_HUNDREDTHS_OF_A_MILE = 1_234_567
+
+    /** Odometer gain between two drive samples: a quarter-hour step at about 40 mph. */
+    private const val DRIVE_STEP_HUNDREDTHS_OF_A_MILE = 1_000
     private const val CHARGE_LIMIT = 85
     private const val RATED_MILES_PER_PERCENT = 3.0f
     private const val ESTIMATED_MILES_PER_PERCENT = 2.9f
@@ -40,7 +51,10 @@ internal object DemoHistory {
         val file = File(dir, "$vehicleId$LOG_SUFFIX")
         if (file.exists()) return
         dir.mkdirs()
-        file.writeBytes(ProtoLog.encode(records(System.currentTimeMillis())))
+        val now = System.currentTimeMillis()
+        val points = timeline()
+        file.writeBytes(ProtoLog.encode(points.map { point -> chargeRecord(now, point) }))
+        File(dir, "$vehicleId$DRIVE_LOG_SUFFIX").writeBytes(ProtoLog.encode(driveRecords(now, points)))
     }
 
     /** One reading in the seeded timeline; [chargeStartPercent] marks a session. */
@@ -49,26 +63,28 @@ internal object DemoHistory {
         val percent: Int,
         val state: ChargingStateKind,
         val chargeStartPercent: Int? = null,
+        /** The car is on a drive at this reading. */
+        val driving: Boolean = false,
     )
 
-    private fun records(now: Long): List<BleRecord> {
+    private fun timeline(): List<Point> {
         val points =
             buildList {
                 // 48 h ago: parked at 64%, then a morning drive to 55.
                 addAll(segment(2880, 2700, 64, 63, 60, ChargingStateKind.Disconnected))
-                addAll(segment(2700, 2580, 63, 55, 15, ChargingStateKind.Disconnected))
+                addAll(segment(2700, 2580, 63, 55, 15, ChargingStateKind.Disconnected, driving = true))
                 // Parked: 55 -> 54.
                 addAll(segment(2580, 2460, 55, 54, 60, ChargingStateKind.Disconnected))
                 // First charge of the window: a two-hour AC session to 66.
                 addAll(segment(2460, 2340, 54, 66, 10, ChargingStateKind.Charging))
                 // Drive to work: 66 -> 58.
-                addAll(segment(2340, 2220, 66, 58, 15, ChargingStateKind.Disconnected))
+                addAll(segment(2340, 2220, 66, 58, 15, ChargingStateKind.Disconnected, driving = true))
                 // Parked: 58 -> 57.
                 addAll(segment(2220, 2100, 58, 57, 60, ChargingStateKind.Disconnected))
                 // Second charge: a two-hour session to 69.
                 addAll(segment(2100, 1980, 57, 69, 10, ChargingStateKind.Charging))
                 // Drive home: 69 -> 60.
-                addAll(segment(1980, 1860, 69, 60, 15, ChargingStateKind.Disconnected))
+                addAll(segment(1980, 1860, 69, 60, 15, ChargingStateKind.Disconnected, driving = true))
                 // Parked overnight: 60 -> 58.
                 addAll(segment(1860, 1440, 60, 58, 60, ChargingStateKind.Disconnected))
                 // Third charge: the four-hour AC session to the limit.
@@ -84,11 +100,39 @@ internal object DemoHistory {
             .reversed()
             .distinctBy { it.minutesAgo }
             .reversed()
-            .map { point ->
-                val charge = sample(now, point)
-                // The simulated phone acquires each reply the moment the car stamps it.
-                BleRecord(acquired_at = charge.timestamp, charge_state = charge)
-            }
+    }
+
+    private fun chargeRecord(
+        now: Long,
+        point: Point,
+    ): BleRecord {
+        val charge = sample(now, point)
+        // The simulated phone acquires each reply the moment the car stamps it.
+        return BleRecord(acquired_at = charge.timestamp, charge_state = charge)
+    }
+
+    /**
+     * One DriveState per reading, stamped like the charge reply. The odometer
+     * steps up at every driving reading and at the first one after a drive,
+     * and ends at the simulated car's live odometer.
+     */
+    private fun driveRecords(
+        now: Long,
+        points: List<Point>,
+    ): List<BleRecord> {
+        val moved = points.mapIndexed { index, point -> index > 0 && (point.driving || points[index - 1].driving) }
+        var odometer = ODOMETER_HUNDREDTHS_OF_A_MILE - moved.count { it } * DRIVE_STEP_HUNDREDTHS_OF_A_MILE
+        return points.mapIndexed { index, point ->
+            if (moved[index]) odometer += DRIVE_STEP_HUNDREDTHS_OF_A_MILE
+            val time = Instant.ofEpochMilli(now - point.minutesAgo * MINUTE)
+            val drive =
+                DriveState(
+                    shift_state = if (point.driving) ShiftState(D = Void()) else ShiftState(P = Void()),
+                    odometer_in_hundredths_of_a_mile = odometer,
+                    timestamp = time,
+                )
+            BleRecord(acquired_at = time, drive_state = drive)
+        }
     }
 
     /** Samples a straight run from [fromAgo] to [toAgo], inclusive of the start. */
@@ -99,6 +143,7 @@ internal object DemoHistory {
         toPercent: Int,
         stepMin: Long,
         state: ChargingStateKind,
+        driving: Boolean = false,
     ): List<Point> {
         val span = (fromAgo - toAgo).coerceAtLeast(1L)
         val points = mutableListOf<Point>()
@@ -112,6 +157,7 @@ internal object DemoHistory {
                     percent = percent,
                     state = state,
                     chargeStartPercent = if (state == ChargingStateKind.Charging) fromPercent else null,
+                    driving = driving,
                 )
             ago -= stepMin
         }
@@ -123,6 +169,7 @@ internal object DemoHistory {
                     percent = toPercent,
                     state = state,
                     chargeStartPercent = if (state == ChargingStateKind.Charging) fromPercent else null,
+                    driving = driving,
                 )
         }
         return points

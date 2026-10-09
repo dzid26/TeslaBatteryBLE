@@ -45,8 +45,9 @@ Light and dark themes, side by side.
   you allow autostart for the app or set its battery usage to unrestricted. After a force stop, Android keeps
   the app stopped until you open it again.
 - **History graph** (6 h / 24 h / 7 d / all) with since-last-charge stats;
-  every measurement is a dot (dense samples form a thick band) and the
-  projected charge completion is dashed
+  every measurement is a dot (dense samples form a thick band), and dashed
+  lines project the charge completion or, while parked, the parked drain half
+  the range ahead (stretches where the odometer moved are left out)
 - **Simulated car** in debug builds for development without a vehicle or hardware (demo/screenshot mode)
 
 Everything is computed on-device. The app has no internet permission.

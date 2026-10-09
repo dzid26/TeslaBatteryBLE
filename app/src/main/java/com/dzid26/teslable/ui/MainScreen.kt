@@ -69,6 +69,7 @@ import com.dzid26.teslable.ble.batteryPercent
 import com.dzid26.teslable.ble.connectionDisplay
 import com.dzid26.teslable.core.history.BatterySample
 import com.dzid26.teslable.core.protocol.asleep
+import com.dzid26.teslable.history.HistorySamples
 import kotlinx.coroutines.delay
 
 /**
@@ -78,7 +79,7 @@ import kotlinx.coroutines.delay
 @Composable
 fun MainScreen(
     state: BleUiState,
-    history: List<BatterySample>,
+    history: HistorySamples,
     permissionsGranted: Boolean,
     locationServicesEnabled: Boolean,
     onRequestPermissions: () -> Unit,
@@ -131,7 +132,8 @@ fun MainScreen(
             vehicle = vehicle,
             advert = advert,
             address = address,
-            history = history,
+            history = history.battery,
+            driveHistory = history.drive,
             onBack = { viewingBleName = null },
             onPair = { onPairKey(address) },
             onRefresh = {
@@ -150,7 +152,7 @@ fun MainScreen(
     } else {
         ConnectionsScreen(
             state = state,
-            history = history,
+            history = history.battery,
             permissionsGranted = permissionsGranted,
             locationServicesEnabled = locationServicesEnabled,
             onRequestPermissions = onRequestPermissions,
