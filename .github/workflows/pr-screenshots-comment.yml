@@ -1,13 +1,13 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 name: PR screenshots comment
 
-# Post the screenshots captured by "PR screenshots" as a sheet in a pull
+# Post the screenshots captured by "PR screenshots" as light and dark rows in a pull
 # request comment. The capture builds pull request code, so it runs without
 # secrets and hands over only the `pr-screenshots` artifact: six PNGs, the PR
 # number and the short SHA. This workflow runs the default branch's copy of
 # itself and of the scripts, never checks out or runs pull request code, and
 # treats the artifact as untrusted input. The upload token comes from the
-# `release` environment. The sheet is hosted as a user attachment, so neither
+# `release` environment. The shots are hosted as user attachments, so neither
 # the PR nor the releases carry image assets. The comment also links the debug
 # APK that Android CI built for the same commit, when there is one.
 on:
@@ -24,7 +24,7 @@ concurrency:
 
 jobs:
   comment:
-    name: Post the screenshot sheet
+    name: Post the screenshots
     if: >-
       github.event.workflow_run.event == 'pull_request' &&
       github.event.workflow_run.conclusion == 'success'
@@ -53,7 +53,7 @@ jobs:
 
       # Accept only a numeric PR number for the pull request the capture ran
       # for, the short SHA of the captured commit, and the six expected PNGs,
-      # which are copied to pr-sheet/.
+      # which are copied to pr-shots/.
       - name: Validate the artifact
         id: meta
         env:
@@ -62,30 +62,27 @@ jobs:
           HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
           HEAD_REPO: ${{ github.event.workflow_run.head_repository.full_name }}
         run: |
-          bash .github/scripts/validate-pr-artifact.sh "$RUNNER_TEMP/pr-screenshots" "$RUNNER_TEMP/pr-sheet" \
+          bash .github/scripts/validate-pr-artifact.sh "$RUNNER_TEMP/pr-screenshots" "$RUNNER_TEMP/pr-shots" \
             02-scanning.png 03-car.png 05-settings.png \
             02-scanning-dark.png 03-car-dark.png 05-settings-dark.png
 
-      - name: Install ImageMagick
-        run: sudo apt-get install -y imagemagick
-
-      - name: Compose the screenshot sheet
-        env:
-          SHOTS_DIR: ${{ runner.temp }}/pr-sheet
-        run: bash .github/scripts/build-screenshot-sheet.sh "$SHOTS_DIR" "$RUNNER_TEMP/screenshot-sheet.png"
-
-      # Host the sheet as a user attachment, so no image asset lives on the PR
+      # Host each PNG as a user attachment, so no image asset lives on the PR
       # or the releases.
-      - name: Upload the screenshot sheet
-        id: sheet
+      - name: Upload the screenshots
+        id: shots
         env:
           GH_TOKEN: ${{ github.token }}
           ATTACHMENTS_TOKEN: ${{ secrets.ATTACHMENTS_TOKEN }}
           SHORT_SHA: ${{ steps.meta.outputs.short }}
+          SHOTS_DIR: ${{ runner.temp }}/pr-shots
         run: |
           set -euo pipefail
-          url="$(bash .github/scripts/upload-screenshot.sh "$RUNNER_TEMP/screenshot-sheet.png" "screenshot-sheet-$SHORT_SHA.png")"
-          echo "url=$url" >> "$GITHUB_OUTPUT"
+          for pair in scan:02-scanning car:03-car settings:05-settings               scan_dark:02-scanning-dark car_dark:03-car-dark settings_dark:05-settings-dark; do
+            key="${pair%%:*}"
+            name="${pair#*:}"
+            url="$(bash .github/scripts/upload-screenshot.sh "$SHOTS_DIR/$name.png" "$name-$SHORT_SHA.png")"
+            echo "$key=$url" >> "$GITHUB_OUTPUT"
+          done
 
       # Link the debug APK that Android CI built for the same commit. The run is
       # looked up by the event's head SHA, never by artifact content. The line
@@ -135,7 +132,13 @@ jobs:
             <!-- pr-screenshots -->
             ## Screenshots
 
-            ![App screenshots: light and dark](${{ steps.sheet.outputs.url }})
+            **Light**
+
+            <p><img src="${{ steps.shots.outputs.scan }}" alt="Scanning for nearby cars (light)" width="32%"><img src="${{ steps.shots.outputs.car }}" alt="Car detail with the battery reading (light)" width="32%"><img src="${{ steps.shots.outputs.settings }}" alt="Settings (light)" width="32%"></p>
+
+            **Dark**
+
+            <p><img src="${{ steps.shots.outputs.scan_dark }}" alt="Scanning for nearby cars (dark)" width="32%"><img src="${{ steps.shots.outputs.car_dark }}" alt="Car detail with the battery reading (dark)" width="32%"><img src="${{ steps.shots.outputs.settings_dark }}" alt="Settings (dark)" width="32%"></p>
 
             Captured from the demo build at ${{ steps.meta.outputs.short }}.
 

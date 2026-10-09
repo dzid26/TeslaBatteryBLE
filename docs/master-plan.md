@@ -62,7 +62,7 @@ A trustworthy shell around the existing protocol work. No user-facing features.
 - [x] CI gates: Android lint, app unit tests, concurrency cancel, least-privilege permissions, Dependabot.
 - [x] CI hardening: pinned action SHAs (#16); ktlint + detekt gates (#19).
 - [ ] Required checks on `main` (branch protection deliberately deferred while agents push directly).
-- [x] Release engineering: owner keystore + `SIGNING_*` CI secrets; tag releases ship `TeslaBatteryBLE-<tag>.apk`; every release captures screenshots from the simulated car in CI and attaches one sheet; release checklist documented; a draft "Next release" tracks un-released changes and is published by the tag release.
+- [x] Release engineering: owner keystore + `SIGNING_*` CI secrets; tag releases ship `TeslaBatteryBLE-<tag>.apk`; every release captures screenshots from the simulated car in CI and attaches them as light and dark rows; release checklist documented; a draft "Next release" tracks un-released changes and is published by the tag release.
 - [x] Docs skeleton: `docs/adr/` (ADR-0001 moved), `docs/protocol/` (transport, session/pairing, domains).
 - [x] `AGENTS.md` for future sessions.
 
