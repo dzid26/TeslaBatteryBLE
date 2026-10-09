@@ -110,6 +110,11 @@ ticks does not turn a 10 s cadence into 20 s.
   1 or 10 minute hold is not restarted, because reads are not status changes).
   A car that stays awake for another reason the status does not show gets one
   reading every 20 minutes; one that would have slept is never touched by it.
+- Measured on 2026-10-09 (`docs/research/real-car-log-2026-10-09.md`): a read
+  keeps the car awake only about 0.5-2.5 minutes past it, not the ~10 minutes
+  assumed above, and a BLE wake with one read sleeps after about 2 minutes. The
+  design holds, and the cost of the hold is smaller than estimated: the car
+  sleeps a couple of minutes after the hold ends, not 10 or more.
 - Each read is four requests now (charge, drive, closures, climate) instead of
   two (ADR-0008), on the same cadence.
 - Sentry and climate are only seen on a read, so one that starts between reads
