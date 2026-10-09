@@ -8,6 +8,8 @@ import com.squareup.wire.ofEpochSecond
 import com.tesla.generated.carserver.common.LatLong
 import com.tesla.generated.carserver.common.Void
 import com.tesla.generated.carserver.vehicle.ChargeState
+import com.tesla.generated.carserver.vehicle.ClimateState
+import com.tesla.generated.carserver.vehicle.ClosuresState
 import com.tesla.generated.carserver.vehicle.DriveState
 import com.tesla.generated.carserver.vehicle.ShiftState
 import com.tesla.generated.vcsec.ClosureState_E
@@ -75,8 +77,8 @@ class BleRecordMappingTest {
     @Test
     fun `envelope fields follow a reading's order on the wire`() {
         // Field numbers are the stored format (ADR-0008): time, VCSEC status,
-        // charge, drive, then the signal strength (5) and the connection event
-        // (6) added later. The logs are append-only, so renumbering would orphan
+        // charge, drive, then the signal strength (5), the connection event
+        // (6), closures (7) and climate (8) added later. The logs are append-only, so renumbering would orphan
         // every record already written. The first byte of each encoding is the
         // field's tag.
         fun tag(record: BleRecord) = record.encode().first().toInt()
@@ -89,6 +91,8 @@ class BleRecordMappingTest {
         assertEquals(4 shl 3 or lengthDelimited, tag(BleRecord(drive_state = DriveState())))
         assertEquals(5 shl 3 or varint, tag(BleRecord(rssi = -60)))
         assertEquals(6 shl 3 or lengthDelimited, tag(BleRecord(connection_event = connected)))
+        assertEquals(7 shl 3 or lengthDelimited, tag(BleRecord(closures_state = ClosuresState())))
+        assertEquals(8 shl 3 or lengthDelimited, tag(BleRecord(climate_state = ClimateState())))
     }
 
     @Test
@@ -257,6 +261,33 @@ class BleRecordMappingTest {
     }
 
     @Test
+    fun `closures and climate records round-trip through the log codec whole`() {
+        val closures = ClosuresState(sentry_mode_state = ClosuresState.SentryModeState(Armed = Void()), locked = true)
+        val climate =
+            ClimateState(
+                is_climate_on = true,
+                climate_keeper_mode = ClimateState.ClimateKeeperMode(Dog = Void()),
+                inside_temp_celsius = 21.5f,
+                timestamp = ofEpochSecond(3_000, 0),
+            )
+        val records =
+            listOf(
+                BleRecord(acquired_at = ofEpochSecond(3_001, 0), rssi = -61, closures_state = closures),
+                BleRecord(acquired_at = ofEpochSecond(3_002, 0), rssi = -62, climate_state = climate),
+            )
+        val decoded = ProtoLog.decode(ProtoLog.encode(records), BleRecord.ADAPTER)
+        assertEquals(records, decoded)
+        assertEquals(closures, decoded[0].closures_state)
+        assertEquals(climate, decoded[1].climate_state)
+        // No read model yet: neither maps onto a sample.
+        decoded.forEach {
+            assertNull(it.toBatterySample("car"))
+            assertNull(it.toStatusSample("car"))
+            assertNull(it.toDriveSample("car"))
+        }
+    }
+
+    @Test
     fun `a record without a signal strength reads it as absent`() {
         // A record from before rssi existed, or from a phone with no reading, has no field 5.
         val withoutSignal = BleRecord(acquired_at = ofEpochSecond(5, 0), vehicle_status = asleep)
@@ -269,9 +300,9 @@ class BleRecordMappingTest {
 
     @Test
     fun `a payload kind from a newer version reads as a record without a known payload`() {
-        // A newer writer's record: field 7, a payload kind added after connection_event, beside acquired_at.
-        val fieldSeven = byteArrayOf(0x3A, 0x02, 0x08, 0x01)
-        val record = BleRecord.ADAPTER.decode(BleRecord(acquired_at = ofEpochSecond(5, 0)).encode() + fieldSeven)
+        // A newer writer's record: field 9, a payload kind added after climate_state, beside acquired_at.
+        val fieldNine = byteArrayOf(0x4A, 0x02, 0x08, 0x01)
+        val record = BleRecord.ADAPTER.decode(BleRecord(acquired_at = ofEpochSecond(5, 0)).encode() + fieldNine)
         assertEquals(ofEpochSecond(5, 0), record.acquired_at)
         assertNull(record.toBatterySample("car"))
         assertNull(record.toStatusSample("car"))

@@ -129,6 +129,78 @@ class InfotainmentPollPolicyTest {
     }
 
     @Test
+    fun sentryModeReadsEveryTenSeconds() {
+        freshStartAndFirstRead()
+        goIdle()
+        policy.onClosuresReading(sentryOn = true)
+        repeat(200) { assertTrue(tick(), "tick $it") }
+    }
+
+    @Test
+    fun climateOnReadsEveryTenSeconds() {
+        freshStartAndFirstRead()
+        goIdle()
+        policy.onClimateReading(climateOn = true)
+        repeat(200) { assertTrue(tick(), "tick $it") }
+    }
+
+    @Test
+    fun turningSentryOffEndsActivityRightAway() {
+        freshStartAndFirstRead()
+        goIdle()
+        policy.onClosuresReading(sentryOn = true)
+        assertTrue(tick())
+        policy.onClosuresReading(sentryOn = false)
+        assertFalse(tick())
+        assertTrue(readsOver(15 * 60_000L).isEmpty())
+    }
+
+    @Test
+    fun turningClimateOffEndsActivityRightAway() {
+        freshStartAndFirstRead()
+        goIdle()
+        policy.onClimateReading(climateOn = true)
+        assertTrue(tick())
+        policy.onClimateReading(climateOn = false)
+        assertFalse(tick())
+        assertTrue(readsOver(15 * 60_000L).isEmpty())
+    }
+
+    @Test
+    fun sentryOrClimateKeepsReadingUntilBothAreOff() {
+        freshStartAndFirstRead()
+        goIdle()
+        policy.onClosuresReading(sentryOn = true)
+        policy.onClimateReading(climateOn = true)
+        policy.onClosuresReading(sentryOn = false)
+        assertTrue(tick(), "climate alone is still active")
+        policy.onClimateReading(climateOn = false)
+        assertFalse(tick(), "both off")
+    }
+
+    @Test
+    fun sleepEndsSentryAndClimateActivity() {
+        freshStartAndFirstRead()
+        policy.onClosuresReading(sentryOn = true)
+        policy.onClimateReading(climateOn = true)
+        assertFalse(tick(status(asleep = true)))
+        // After waking, the stale flags must not keep reads going: only the hold is left.
+        assertTrue(tick(), "woke up, the hold starts")
+        assertEquals(ticks(5), readsOver(15 * 60_000L))
+    }
+
+    @Test
+    fun aFreshStartForgetsSentryAndClimate() {
+        freshStartAndFirstRead()
+        goIdle()
+        policy.onClosuresReading(sentryOn = true)
+        policy.onClimateReading(climateOn = true)
+        policy.onFreshStart(now)
+        assertTrue(policy.onStatus(status(), true, now))
+        assertAbsentHoldThenSilence()
+    }
+
+    @Test
     fun aFreshStartHoldsForOneMinuteWhenNobodyIsPresent() {
         freshStartAndFirstRead()
         assertAbsentHoldThenSilence()

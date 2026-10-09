@@ -14,6 +14,8 @@ import com.dzid26.teslable.core.history.toBatterySample
 import com.dzid26.teslable.core.history.toDriveSample
 import com.dzid26.teslable.core.history.toStatusSample
 import com.tesla.generated.carserver.vehicle.ChargeState
+import com.tesla.generated.carserver.vehicle.ClimateState
+import com.tesla.generated.carserver.vehicle.ClosuresState
 import com.tesla.generated.carserver.vehicle.DriveState
 import com.tesla.generated.vcsec.VehicleStatus
 import kotlinx.coroutines.CoroutineScope
@@ -42,6 +44,9 @@ import java.time.Instant
  *   ones with the car's own `ChargeState.timestamp` and a level ([samples]);
  * - `<vehicleId>.drive.pblog`: every DriveState reply, raw; [driveSamples]
  *   holds the ones with the car's own `DriveState.timestamp`;
+ * - `<vehicleId>.closures.pblog`: every ClosuresState reply (it holds the
+ *   sentry mode state), raw; log only, nothing reads it back yet;
+ * - `<vehicleId>.climate.pblog`: every ClimateState reply, raw; log only;
  * - `<vehicleId>.connection.pblog`: when the connection to the car became
  *   ready or an established one ended. Log only: nothing reads it back yet.
  *
@@ -60,6 +65,8 @@ class HistoryStore(
     private val chargeLogs = VehicleLogs(historyDir, CHARGE_LOG_SUFFIX)
     private val statusLogs = VehicleLogs(historyDir, STATUS_LOG_SUFFIX)
     private val driveLogs = VehicleLogs(historyDir, DRIVE_LOG_SUFFIX)
+    private val closuresLogs = VehicleLogs(historyDir, CLOSURES_LOG_SUFFIX)
+    private val climateLogs = VehicleLogs(historyDir, CLIMATE_LOG_SUFFIX)
     private val connectionLogs = VehicleLogs(historyDir, CONNECTION_LOG_SUFFIX)
     private val _samples = MutableStateFlow<List<BatterySample>>(emptyList())
     val samples: StateFlow<List<BatterySample>> = _samples.asStateFlow()
@@ -81,9 +88,11 @@ class HistoryStore(
                 _samples.value = readSamples()
                 _statusSamples.value = readStatusSamples()
                 _driveSamples.value = readDriveSamples()
-                // Connection events have no read model yet. Reading the files
-                // only refreshes the record counts the cap trims by, so it
-                // holds across restarts.
+                // Closures, climate and connection records have no read model
+                // yet. Reading the files only refreshes the record counts the
+                // cap trims by, so it holds across restarts.
+                runCatching { closuresLogs.readAll() }
+                runCatching { climateLogs.readAll() }
                 runCatching { connectionLogs.readAll() }
             }
         }
@@ -162,6 +171,37 @@ class HistoryStore(
                 if (sample != null) _driveSamples.value = (_driveSamples.value + sample).takeLast(MAX_SAMPLES)
             }
         }
+    }
+
+    /**
+     * Logs one ClosuresState reply, verbatim (ADR-0008). It holds the sentry
+     * mode state next to the doors, windows and lock state. [acquiredAt] is the
+     * phone's clock when it arrived; [rssi] is the phone's latest RSSI for the
+     * car, or null when it has none. No read model yet.
+     */
+    fun recordClosures(
+        vehicleId: String,
+        closures: ClosuresState,
+        acquiredAt: Instant,
+        rssi: Int?,
+    ) {
+        val record = BleRecord(acquired_at = acquiredAt, rssi = rssi, closures_state = closures)
+        scope.launch { mutex.withLock { closuresLogs.append(vehicleId, record) } }
+    }
+
+    /**
+     * Logs one ClimateState reply, verbatim (ADR-0008). [acquiredAt] is the
+     * phone's clock when it arrived; [rssi] is the phone's latest RSSI for the
+     * car, or null when it has none. No read model yet.
+     */
+    fun recordClimate(
+        vehicleId: String,
+        climate: ClimateState,
+        acquiredAt: Instant,
+        rssi: Int?,
+    ) {
+        val record = BleRecord(acquired_at = acquiredAt, rssi = rssi, climate_state = climate)
+        scope.launch { mutex.withLock { climateLogs.append(vehicleId, record) } }
     }
 
     /**
@@ -247,6 +287,12 @@ class HistoryStore(
         /** `<vehicleId>.drive.pblog`: DriveState replies in [BleRecord]s, on the car's own timestamp (ADR-0008). */
         const val DRIVE_LOG_SUFFIX = ".drive.pblog"
 
+        /** `<vehicleId>.closures.pblog`: ClosuresState replies in [BleRecord]s, with `acquired_at` (ADR-0008). */
+        const val CLOSURES_LOG_SUFFIX = ".closures.pblog"
+
+        /** `<vehicleId>.climate.pblog`: ClimateState replies in [BleRecord]s, with `acquired_at` (ADR-0008). */
+        const val CLIMATE_LOG_SUFFIX = ".climate.pblog"
+
         /** `<vehicleId>.connection.pblog`: connection events in [BleRecord]s, timed by `acquired_at` (ADR-0008). */
         const val CONNECTION_LOG_SUFFIX = ".connection.pblog"
         const val MAX_SAMPLES = 20_000
@@ -255,7 +301,7 @@ class HistoryStore(
 
 /**
  * One kind of per-vehicle log: `<vehicleId><suffix>` files in [dir], holding
- * [BleRecord]s. Each kind (charge, VCSEC status, drive, connection) is one
+ * [BleRecord]s. Each kind (charge, VCSEC status, drive, closures, climate, connection) is one
  * instance, and all share the same cap and trim. Callers hold the store's mutex.
  */
 private class VehicleLogs(

@@ -50,12 +50,13 @@ identity), `docs/requirements/multi-phone.md`
   - `rssi` (field 5, `optional sint32`): the phone's latest RSSI reading for
     the car at that moment, in dBm, absent when the phone had none;
   - a `payload` oneof with either the car's raw reply, verbatim, nothing
-    filtered: `vehicle_status` (field 2), `charge_state` (field 3) or
-    `drive_state` (field 4); or a `connection_event` (field 6,
-    `ConnectionEvent`). Fields are declared in a reading's order: time,
-    signal strength, connection, VCSEC status, charge, drive. Their numbers
-    are the stored format and stay as assigned; `rssi` and `connection_event`
-    took the next two free ones.
+    filtered: `vehicle_status` (field 2), `charge_state` (field 3),
+    `drive_state` (field 4), `closures_state` (field 7) or `climate_state`
+    (field 8); or a `connection_event` (field 6, `ConnectionEvent`). Fields
+    are declared in a reading's order: time, signal strength, connection, VCSEC
+    status, charge, drive, closures, climate. Their numbers are the stored
+    format and stay as assigned; `rssi`, `connection_event`, `closures_state`
+    and `climate_state` took the next free ones.
 
   Tesla's vendored protos (`core/src/main/proto`, pinned by `TESLA_COMMIT`)
   stay untouched; ours sit in a second Wire source root, so a re-vendor never
@@ -96,6 +97,8 @@ identity), `docs/requirements/multi-phone.md`
   - `<vehicleId>.charge.pblog` for charge replies;
   - `<vehicleId>.vcsec.pblog` for VCSEC status replies;
   - `<vehicleId>.drive.pblog` for DriveState replies;
+  - `<vehicleId>.closures.pblog` for ClosuresState replies;
+  - `<vehicleId>.climate.pblog` for ClimateState replies;
   - `<vehicleId>.connection.pblog` for connection events.
 
   Each kind has its own suffix and none ends with another, so a reader never
@@ -133,6 +136,20 @@ identity), `docs/requirements/multi-phone.md`
   stripped or deduplicated. The log stays on the phone (`PRIVACY.md`), and the
   in-memory debug log shows only a change of shift state, never the location,
   route or destination.
+- **Closures and climate are logged whole too** (ADR-0009: Sentry mode and
+  climate count as active). Tesla's protos have a `VehicleState` message, but
+  it holds only the guest mode and no `GetVehicleData` category returns it.
+  The sentry mode state lives in `ClosuresState` (next to the doors, windows,
+  lock state, user presence and valet flags), so that is the category the app
+  requests and logs, as `closures_state`; `ClimateState` is `climate_state`.
+  The controller sends them after each drive reply, in the same awake-only,
+  existing-session-only way: charge, drive, closures, climate. Both replies
+  go into their files verbatim. Neither holds a location, a route or any
+  text; the climate reply is temperatures, fan, heater and defrost settings
+  and the keeper mode, and it carries its own timestamp. They have no read
+  model yet; the derived flags `ClosuresState.sentryOn` and
+  `ClimateState.climateOn` in `StateViews.kt` only feed the poll policy and
+  the debug log (a change of either).
 - **Read models.** `BatterySample`, `StatusSample` and `DriveSample` are
   derived on load from the records (`BleRecord.toBatterySample`,
   `BleRecord.toStatusSample`, `BleRecord.toDriveSample`); nothing is written
@@ -210,8 +227,10 @@ identity), `docs/requirements/multi-phone.md`
   exception, and its odometer separates drives that no phone saw. Detecting
   drives from it, for the parked-drain projection, is not built yet.
 - **Traffic.** While the car is awake the drive request doubles the
-  Infotainment traffic: one more request per charge poll. The poll cadence
-  is tracked in #112 and #113.
+  Infotainment traffic: one more request per charge poll. The closures and
+  climate requests make it four requests per read (charge, drive, closures,
+  climate), still only on the reads ADR-0009 allows. The poll cadence is
+  tracked in #112 and #113.
 - **Size.** A drive record grows while a route is active (destination text,
   route fields), but the 20k cap per file still bounds it. `rssi` adds two or
   three bytes to a record, and the connection file gains two records per

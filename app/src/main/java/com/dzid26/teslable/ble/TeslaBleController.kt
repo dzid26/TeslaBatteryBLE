@@ -10,7 +10,6 @@ import com.dzid26.teslable.core.history.ConnectionEvent
 import com.dzid26.teslable.core.protocol.AntiReplayWindow
 import com.dzid26.teslable.core.protocol.InfotainmentPollPolicy
 import com.dzid26.teslable.core.protocol.InfotainmentSessionGate
-import com.dzid26.teslable.core.protocol.ShiftStateKind
 import com.dzid26.teslable.core.protocol.TeslaCommands
 import com.dzid26.teslable.core.protocol.TeslaCrypto
 import com.dzid26.teslable.core.protocol.TeslaKeyPair
@@ -21,7 +20,6 @@ import com.dzid26.teslable.core.protocol.TeslaVcsec
 import com.dzid26.teslable.core.protocol.asleep
 import com.dzid26.teslable.core.protocol.chargingStateKind
 import com.dzid26.teslable.core.protocol.locked
-import com.dzid26.teslable.core.protocol.shiftStateKind
 import com.dzid26.teslable.core.protocol.userPresent
 import com.dzid26.teslable.history.HistoryStore
 import com.tesla.generated.universalmessage.Domain
@@ -648,7 +646,7 @@ class TeslaBleController(
         val window: AntiReplayWindow = AntiReplayWindow(),
     )
 
-    private enum class CommandKind { WAKE, CHARGE, DRIVE }
+    private enum class CommandKind { WAKE, CHARGE, DRIVE, CLOSURES, CLIMATE }
 
     /**
      * Everything that belongs to one car: the transport, sessions, pending
@@ -688,8 +686,15 @@ class TeslaBleController(
         /** Whether a due read is waiting for the Infotainment handshake; never left set once it is over. */
         private val infotainmentGate = InfotainmentSessionGate()
 
-        /** The shift state last written to the debug log, so only a change is logged again. */
-        private var lastShiftState: ShiftStateKind? = null
+        /** Logs and feeds the policy with the drive, closures and climate replies (ADR-0008, ADR-0009). */
+        private val stateReplies =
+            InfotainmentStateReplies(
+                vehicleId = bleName,
+                historyStore = historyStore,
+                policy = infotainmentPolicy,
+                rssi = { latestRssi(address) },
+                log = { log("${name()}: $it") },
+            )
 
         val poll =
             object : Runnable {
@@ -1113,21 +1118,17 @@ class TeslaBleController(
         }
 
         /**
-         * Asks for the DriveState after a charge reply, only while the car is
-         * awake and an Infotainment session already exists: it never starts a
-         * session or wakes the car.
+         * Asks for the next state category after the previous reply (drive
+         * after charge, closures after drive, climate after closures), only
+         * while the car is awake and an Infotainment session already exists:
+         * it never starts a session or wakes the car.
          */
-        private fun requestDriveState() {
-            val awake =
-                _state.value.connections[address]
-                    ?.status
-                    ?.asleep == false
-            if (!awake || !sessions.containsKey(Domain.DOMAIN_INFOTAINMENT)) return
-            sendAuthenticated(
-                domain = Domain.DOMAIN_INFOTAINMENT,
-                payload = TeslaCommands.buildDriveStateRequest(),
-                kind = CommandKind.DRIVE,
-            )
+        private fun requestFollowUp(
+            payload: ByteArray,
+            kind: CommandKind,
+        ) {
+            if (!isAwake() || !sessions.containsKey(Domain.DOMAIN_INFOTAINMENT)) return
+            sendAuthenticated(domain = Domain.DOMAIN_INFOTAINMENT, payload = payload, kind = kind)
         }
 
         private fun sendAuthenticated(
@@ -1198,63 +1199,45 @@ class TeslaBleController(
                     log("${name()}: wake ${status?.name ?: "response received"}")
                 }
 
-                CommandKind.CHARGE -> {
-                    val charge = runCatching { TeslaCommands.parseChargeState(plaintext) }.getOrNull()
-                    if (charge != null) {
-                        val previous = _state.value.connections[address]?.charge
-                        updateConnection(address) {
-                            it.copy(charge = charge, chargeAtMillis = acquiredAt.toEpochMilli())
-                        }
-                        historyStore.record(bleName, charge, acquiredAt, latestRssi(address))
-                        infotainmentPolicy.onChargeReading(charge.chargingStateKind)
-                        if (previous?.battery_level != charge.battery_level ||
-                            previous?.chargingStateKind != charge.chargingStateKind
-                        ) {
-                            log(
-                                "${name()}: SOC ${charge.battery_level}% " +
-                                    "(${charge.chargingStateKind?.name ?: "unknown"})",
-                            )
-                        }
-                        requestDriveState()
-                    } else {
-                        val status = runCatching { TeslaCommands.parseActionStatus(plaintext) }.getOrNull()
-                        log(
-                            "${name()}: charge response missing data" +
-                                (status?.let { " ($it)" } ?: ""),
-                        )
-                    }
+                CommandKind.CHARGE -> handleChargeResponse(plaintext, acquiredAt)
+
+                CommandKind.DRIVE -> {
+                    stateReplies.onDrive(plaintext, acquiredAt)
+                    requestFollowUp(TeslaCommands.buildClosuresStateRequest(), CommandKind.CLOSURES)
                 }
 
-                CommandKind.DRIVE -> handleDriveResponse(plaintext, acquiredAt)
+                CommandKind.CLOSURES -> {
+                    stateReplies.onClosures(plaintext, acquiredAt)
+                    requestFollowUp(TeslaCommands.buildClimateStateRequest(), CommandKind.CLIMATE)
+                }
+
+                CommandKind.CLIMATE -> stateReplies.onClimate(plaintext, acquiredAt)
             }
             return true
         }
 
-        /**
-         * Hands a DriveState reply to the history store, which logs it
-         * verbatim. Only a shift-state change reaches the debug log: never the
-         * location, route or destination.
-         */
-        private fun handleDriveResponse(
+        private fun handleChargeResponse(
             plaintext: ByteArray,
             acquiredAt: Instant,
         ) {
-            val drive = runCatching { TeslaCommands.parseDriveState(plaintext) }.getOrNull()
-            if (drive == null) {
+            val charge = runCatching { TeslaCommands.parseChargeState(plaintext) }.getOrNull()
+            if (charge == null) {
                 val status = runCatching { TeslaCommands.parseActionStatus(plaintext) }.getOrNull()
-                log(
-                    "${name()}: drive response missing data" +
-                        (status?.let { " ($it)" } ?: ""),
-                )
+                log("${name()}: charge response missing data" + (status?.let { " ($it)" } ?: ""))
                 return
             }
-            historyStore.recordDrive(bleName, drive, acquiredAt, latestRssi(address))
-            val shift = drive.shiftStateKind
-            infotainmentPolicy.onDriveReading(shift)
-            if (shift != lastShiftState) {
-                lastShiftState = shift
-                log("${name()}: shift state ${shift?.name ?: "unknown"}")
+            val previous = _state.value.connections[address]?.charge
+            updateConnection(address) {
+                it.copy(charge = charge, chargeAtMillis = acquiredAt.toEpochMilli())
             }
+            historyStore.record(bleName, charge, acquiredAt, latestRssi(address))
+            infotainmentPolicy.onChargeReading(charge.chargingStateKind)
+            if (previous?.battery_level != charge.battery_level ||
+                previous?.chargingStateKind != charge.chargingStateKind
+            ) {
+                log("${name()}: SOC ${charge.battery_level}% (${charge.chargingStateKind?.name ?: "unknown"})")
+            }
+            requestFollowUp(TeslaCommands.buildDriveStateRequest(), CommandKind.DRIVE)
         }
 
         fun pairKey() {
