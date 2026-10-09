@@ -67,6 +67,11 @@ concurrency:
 # environment and builds the signed APK itself. `draft` (main) needs no secrets.
 jobs:
   build:
+    # Release runs skip this job: the release job builds and signs the app
+    # itself, and the commit was already tested by the CI run on main.
+    if: |
+      !(startsWith(github.ref, 'refs/tags/') ||
+        (github.event_name == 'workflow_dispatch' && (inputs.release || inputs.tag != '')))
     permissions:
       contents: read
     outputs:
@@ -146,7 +151,6 @@ jobs:
 
   release:
     name: Tag release
-    needs: build
     if: |
       startsWith(github.ref, 'refs/tags/') ||
       (github.event_name == 'workflow_dispatch' && (inputs.release || inputs.tag != ''))
