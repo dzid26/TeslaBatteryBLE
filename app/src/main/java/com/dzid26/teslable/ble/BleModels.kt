@@ -146,20 +146,16 @@ fun batteryPercent(
     }
 }
 
-/** Minute granularity for the age shown next to a stale percentage. */
-private const val AGE_BUCKET_MINUTES = 10
-
 /**
  * How long ago a reading was taken, worded the same on the notification and the
- * car view: "just now" while it is under [STALE_READING_MS] old, then coarse
- * buckets ("10m ago", "2h ago", "3d ago") so the notification re-posts at most
- * every [AGE_BUCKET_MINUTES] minutes.
+ * car view: "just now" while it is under [STALE_READING_MS] old, then whole
+ * minutes ("7m ago") up to an hour, then whole hours ("2h ago") and days ("3d ago").
  */
 fun readingAgeText(ageMillis: Long): String {
     val minutes = ageMillis / 60_000
     return when {
         ageMillis < STALE_READING_MS -> "just now"
-        minutes < 60 -> "${(minutes / AGE_BUCKET_MINUTES).coerceAtLeast(1) * AGE_BUCKET_MINUTES}m ago"
+        minutes < 60 -> "${minutes}m ago"
         minutes < 24 * 60 -> "${minutes / 60}h ago"
         else -> "${minutes / (24 * 60)}d ago"
     }

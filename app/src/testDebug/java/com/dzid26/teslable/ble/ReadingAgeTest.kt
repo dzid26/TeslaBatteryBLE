@@ -26,14 +26,13 @@ class ReadingAgeTest {
     }
 
     @Test
-    fun `minutes round down to ten-minute buckets, the first one opening at the stale boundary`() {
-        // Five to nineteen minutes all read "10m": the label first appears when
-        // the reading turns stale, and the bucket then holds for 10 more minutes.
-        assertEquals("10m ago", readingAgeText(STALE_READING_MS))
-        assertEquals("10m ago", readingAgeText(10 * minute))
-        assertEquals("10m ago", readingAgeText(20 * minute - 1))
-        assertEquals("20m ago", readingAgeText(20 * minute))
-        assertEquals("50m ago", readingAgeText(hour - 1))
+    fun `minutes read as whole minutes, the first label opening at the stale boundary`() {
+        assertEquals("5m ago", readingAgeText(STALE_READING_MS))
+        assertEquals("5m ago", readingAgeText(6 * minute - 1))
+        assertEquals("6m ago", readingAgeText(6 * minute))
+        assertEquals("7m ago", readingAgeText(7 * minute))
+        assertEquals("7m ago", readingAgeText(8 * minute - 1))
+        assertEquals("59m ago", readingAgeText(hour - 1))
     }
 
     @Test
