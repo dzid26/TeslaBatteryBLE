@@ -69,9 +69,7 @@ jobs:
   build:
     permissions:
       contents: read
-    # Pinned: the emulator, KVM and adb steps are not yet validated on ubuntu-latest
-    # (migrating to Ubuntu 26 on 2026-10-19).
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -153,7 +151,9 @@ jobs:
     permissions:
       contents: write
       actions: write # dispatch the Pages deploy after the screenshot commit
-    runs-on: ubuntu-latest
+    # Pinned: the emulator, KVM and adb steps are not yet validated on ubuntu-latest
+    # (migrating to Ubuntu 26 on 2026-10-19).
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
