@@ -15,11 +15,11 @@ SHOTS="02-scanning.png 03-car.png 05-settings.png 02-scanning-dark.png 03-car-da
 
 # A manual release states the flag outright; a pushed tag derives it from the name.
 if [ -n "${RELEASE_PRERELEASE:-}" ]; then
-  PRE_FLAG="--prerelease=$RELEASE_PRERELEASE"
+  PRE_FLAG=("--prerelease=$RELEASE_PRERELEASE")
 elif [ "$TAG" != "${TAG%-*}" ]; then
-  PRE_FLAG="--prerelease"
+  PRE_FLAG=(--prerelease)
 else
-  PRE_FLAG=""
+  PRE_FLAG=()
 fi
 
 [ -f "$APK" ] || { echo "missing $APK (the release job stages it)" >&2; exit 1; }
@@ -78,13 +78,13 @@ if [ -n "$DRAFT_ID" ]; then
   gh api -X PATCH "repos/$REPO/releases/$DRAFT_ID" \
     -f tag_name="$TAG" -f name="$TAG" -F draft=false > /dev/null
   # A pushed tag leaves the draft's pre-release checkbox as the owner set it.
-  if [ -z "${RELEASE_PRERELEASE:-}" ]; then PRE_FLAG=""; fi
+  if [ -z "${RELEASE_PRERELEASE:-}" ]; then PRE_FLAG=(); fi
 fi
 
 if gh release view "$TAG" > /dev/null 2>&1; then
-  gh release edit "$TAG" --title "$TAG" --notes-file "$NOTES" $PRE_FLAG
+  gh release edit "$TAG" --title "$TAG" --notes-file "$NOTES" "${PRE_FLAG[@]}"
 else
-  gh release create "$TAG" --title "$TAG" --notes-file "$NOTES" $PRE_FLAG
+  gh release create "$TAG" --title "$TAG" --notes-file "$NOTES" "${PRE_FLAG[@]}"
 fi
 
 # Uploads are flaky; retry before failing the release.
