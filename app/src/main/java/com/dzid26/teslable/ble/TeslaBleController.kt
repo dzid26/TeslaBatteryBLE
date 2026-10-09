@@ -1239,7 +1239,7 @@ class TeslaBleController(
             if (previous?.battery_level != charge.battery_level ||
                 previous?.chargingStateKind != charge.chargingStateKind
             ) {
-                log("${name()}: SOC ${charge.battery_level}% (${charge.chargingStateKind?.name ?: "unknown"})")
+                log("${name()}: SOC ${charge.battery_level}% (${charge.chargingStateKind?.let(::chargingStateText) ?: "unknown"})")
             }
             requestFollowUp(TeslaCommands.buildDriveStateRequest(), CommandKind.DRIVE)
         }
