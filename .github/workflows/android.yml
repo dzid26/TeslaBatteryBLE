@@ -27,16 +27,16 @@ on:
   workflow_dispatch:
     inputs:
       release:
-        description: 'Cut a release (tag and pre-release flag from the draft unless set below)'
+        description: 'Release now: build the APK and publish the draft release'
         required: false
         type: boolean
         default: false
       tag:
-        description: 'Release tag to create, e.g. v0.4.0 or v0.4.0-beta.3 (overrides the draft''s tag)'
+        description: 'Version tag, e.g. v0.4.1 or v0.4.1-beta.1 (leave empty to use the tag typed in the draft)'
         required: false
         type: string
       prerelease:
-        description: 'Pre-release flag; only used together with a tag above'
+        description: 'Mark as pre-release (only if a tag is entered here; otherwise the draft''s checkbox is used)'
         required: false
         type: boolean
         default: false
