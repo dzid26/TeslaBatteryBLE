@@ -69,7 +69,9 @@ jobs:
   build:
     permissions:
       contents: read
-    runs-on: ubuntu-latest
+    # Pinned: the emulator, KVM and adb steps are not yet validated on ubuntu-latest
+    # (migrating to Ubuntu 26 on 2026-10-19).
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -369,6 +371,19 @@ jobs:
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version-file: /tmp/vehicle-command/go.mod
+          # setup-go would key its cache on a go.sum that lives outside the
+          # workspace, so it is cached explicitly below.
+          cache: false
+
+      # Keyed on the pinned oracle commit: the Go modules and build cache only
+      # change when TESLA_COMMIT is bumped.
+      - name: Cache the Go modules and build cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: go-${{ runner.os }}-${{ hashFiles('core/src/main/proto/TESLA_COMMIT') }}
 
       - name: Generate fixtures from the Go runtime
         run: |
