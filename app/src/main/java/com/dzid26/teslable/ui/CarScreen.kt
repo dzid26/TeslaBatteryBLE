@@ -229,12 +229,17 @@ internal fun CarScreen(
 }
 
 @Composable
-private fun HeroCard(
+internal fun HeroCard(
     connection: TeslaConnection?,
     advert: TeslaAdvert?,
     vehicle: Vehicle?,
     history: List<BatterySample>,
     statusHistory: List<StatusSample>,
+    // Injectable for the Paparazzi snapshots; production call sites use the
+    // default, which is the same ticking clock as before.
+    nowMillis: Long = rememberNowMillis(connection?.chargeAtMillis),
+    // Injectable for the Paparazzi snapshots; null keeps the timed spinner.
+    spinnerOverride: Boolean? = null,
 ) {
     val context = LocalContext.current
     val display = connectionDisplay(connection, advert, vehicle = vehicle)
@@ -242,7 +247,6 @@ private fun HeroCard(
     // With no live reading, the newest stored sample still answers "how full
     // is the car?" at a glance; the caption makes its age explicit.
     val lastKnown = history.lastOrNull()
-    val nowMillis = rememberNowMillis(connection?.chargeAtMillis)
     val reading = batteryPercent(connection, lastKnown, nowMillis)
     val durations = remember(statusHistory, nowMillis) { statusDurations(statusHistory, vehicle?.bleName.orEmpty(), nowMillis) }
     val keySlot = connection?.keySlot ?: vehicle?.keySlot
@@ -310,7 +314,7 @@ private fun HeroCard(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                ReadingSpinner(connection)
+                ReadingSpinner(connection, forceVisible = spinnerOverride)
                 reading?.ageLabel(nowMillis, connection)?.let { age ->
                     Text(
                         text = age,

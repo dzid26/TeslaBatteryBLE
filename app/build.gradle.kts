@@ -4,6 +4,7 @@ import java.util.Properties
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.paparazzi)
     alias(libs.plugins.ktlint)
     alias(libs.plugins.detekt)
 }
@@ -178,6 +179,7 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.leakcanary.android)
     testImplementation(libs.junit)
+    testImplementation(libs.paparazzi)
 }
 
 // Generated code (BuildConfig, etc.) follows its own conventions. The task
