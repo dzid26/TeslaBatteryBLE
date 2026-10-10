@@ -75,24 +75,27 @@ internal object DemoHistory {
                 addAll(segment(2700, 2580, 63, 55, 15, ChargingStateKind.Disconnected, driving = true))
                 // Parked: 55 -> 54.
                 addAll(segment(2580, 2460, 55, 54, 60, ChargingStateKind.Disconnected))
-                // First charge of the window: a two-hour AC session to 66.
-                addAll(segment(2460, 2340, 54, 66, 10, ChargingStateKind.Charging))
-                // Drive to work: 66 -> 58.
-                addAll(segment(2340, 2220, 66, 58, 15, ChargingStateKind.Disconnected, driving = true))
-                // Parked: 58 -> 57.
-                addAll(segment(2220, 2100, 58, 57, 60, ChargingStateKind.Disconnected))
-                // Second charge: a two-hour session to 69.
-                addAll(segment(2100, 1980, 57, 69, 10, ChargingStateKind.Charging))
-                // Drive home: 69 -> 60.
-                addAll(segment(1980, 1860, 69, 60, 15, ChargingStateKind.Disconnected, driving = true))
-                // Parked overnight: 60 -> 58.
-                addAll(segment(1860, 1440, 60, 58, 60, ChargingStateKind.Disconnected))
-                // Third charge: the four-hour AC session to the limit.
-                addAll(segment(1440, 1200, 58, 85, 10, ChargingStateKind.Charging))
-                // Complete at the limit, then the slow parked drain to 78%.
-                add(Point(1200, 85, ChargingStateKind.Complete))
-                addAll(segment(1140, 360, 84, 80, 60, ChargingStateKind.Disconnected))
-                addAll(segment(360, 10, 80, 78, 30, ChargingStateKind.Disconnected))
+                // First charge of the window: a one-hour AC session to 60.
+                addAll(segment(2460, 2400, 54, 60, 10, ChargingStateKind.Charging))
+                // Drive to work: 60 -> 52.
+                addAll(segment(2400, 2280, 60, 52, 15, ChargingStateKind.Disconnected, driving = true))
+                // Parked: 52 -> 51.
+                addAll(segment(2280, 2160, 52, 51, 60, ChargingStateKind.Disconnected))
+                // Second charge: a two-hour session to 63.
+                addAll(segment(2160, 2040, 51, 63, 10, ChargingStateKind.Charging))
+                // Drive home: 63 -> 54.
+                addAll(segment(2040, 1920, 63, 54, 15, ChargingStateKind.Disconnected, driving = true))
+                // Parked overnight: 54 -> 52.
+                addAll(segment(1920, 1560, 54, 52, 60, ChargingStateKind.Disconnected))
+                // Third charge: the five-hour AC session to the limit.
+                addAll(segment(1560, 1260, 52, 85, 10, ChargingStateKind.Charging))
+                // Complete at the limit, then the slow parked drain to 75%.
+                add(Point(1260, 85, ChargingStateKind.Complete))
+                addAll(segment(1200, 90, 84, 75, 60, ChargingStateKind.Disconnected))
+                // Plugged in for a short, slow top-up at a third of the AC rate:
+                // the live reads continue this run, so the chart shows charging
+                // samples and the projected limit line.
+                addAll(segment(90, 10, 75, 78, 10, ChargingStateKind.Charging))
             }
         // A segment's end and the next segment's start share a timestamp; keep
         // the newer one so a charge session starts on its own first sample.
