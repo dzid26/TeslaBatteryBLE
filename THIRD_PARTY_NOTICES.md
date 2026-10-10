@@ -19,6 +19,13 @@ only (AGPL-3.0-only). See [LICENSE](LICENSE).
 - The AGPL-licensed C++ implementations (pmdroid, yoziru/PedroKTFC lineage)
   were used to understand behavior only.
 
+## Obtainium badge — GPL-3.0
+
+- `website/images/obtainium-badge.png` is the "Get it on Obtainium" badge
+  from [ImranR98/Obtainium](https://github.com/ImranR98/Obtainium)
+  (GPL-3.0), self-hosted per their
+  [deep-links doc](https://wiki.obtainium.imranr.dev/deep_links/).
+
 Full license texts for bundled dependencies (Wire, AndroidX, Kotlin, etc.)
 ship with release artifacts and appear in the app's open-source licenses
 screen; tracking is in [docs/master-plan.md](docs/master-plan.md).

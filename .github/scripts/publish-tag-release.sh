@@ -41,6 +41,10 @@ git fetch --tags origin
 PREV_TAG="$(git describe --tags --abbrev=0 --match 'v*' "$TAG^" 2>/dev/null || true)"
 
 {
+  echo "## Download"
+  echo
+  echo "**[TeslaBatteryBLE-$TAG.apk](https://github.com/$REPO/releases/download/$TAG/TeslaBatteryBLE-$TAG.apk)**"
+  echo
   if [ -n "$PREV_TAG" ]; then
     echo "Changes since [$PREV_TAG](https://github.com/$REPO/releases/tag/$PREV_TAG):"
   else
