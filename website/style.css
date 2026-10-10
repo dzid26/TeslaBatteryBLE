@@ -149,6 +149,14 @@ header h1 {
   color: var(--text);
 }
 
+/* Third-party store badge: same height as the buttons (the global
+   img { height: auto } rule would otherwise render it full-size). */
+.store-badge {
+  display: block;
+  height: 3.25rem;
+  width: auto;
+}
+
 section h2 {
   font-size: clamp(1.5rem, 4vw, 2rem);
   margin: 0 0 1rem;
