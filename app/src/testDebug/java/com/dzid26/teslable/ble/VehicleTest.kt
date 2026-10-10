@@ -7,7 +7,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class VehicleTest {
-    // Verified on a real car: this VIN advertises as this BLE name.
     private val vin = "5YJ3E1EA7KF000001"
     private val bleName = "S3acc31774a738ea0C"
 
