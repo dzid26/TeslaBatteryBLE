@@ -4,11 +4,12 @@ name: PR paparazzi
 # Fast JVM snapshots of the two battery cards (cars-list VehicleCard, car-view
 # HeroCard), light AND dark, one image per state. This workflow builds pull
 # request code, so it runs without secrets and with a read-only token: it
-# records the 24 snapshots for the AFTER commit (HEAD), then for the BEFORE
-# commit (HEAD~1, the pushed commit's parent), byte-compares the PNGs, and
-# uploads only the differing ones (before/after pairs, or after-only when a
-# snapshot is new or the parent predates Paparazzi) plus the PR number and the
-# short SHAs as the `pr-paparazzi` artifact.
+# records the 24 snapshots for the AFTER commit and the BEFORE commit (the
+# pushed commit's parent) through .github/scripts/paparazzi-diff.sh — the
+# same script reviewers run locally — byte-compares the PNGs, and uploads
+# only the differing ones (before/after pairs, or after-only when a snapshot
+# is new or the parent predates Paparazzi) plus the PR number and the short
+# SHAs as the `pr-paparazzi` artifact.
 # pr-paparazzi-comment.yml posts the diffs from the default branch. One
 # comment per ready revision (tagged by SHA), so flipping a PR back to ready
 # after rework posts the next round's diffs instead of overwriting the
@@ -56,63 +57,16 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x gradlew
 
-      # Paparazzi writes its PNGs as <package>_<class>_<method>_<name>.png;
-      # only the trailing <card>_<state>_<theme>.png (hyphenated, never
-      # underscores) is kept, so before/after runs compare by state even if
-      # the test method around it was renamed.
-      - name: Record the after snapshots
+      # The shared diff script: records AFTER (the PR head) and BEFORE (its
+      # parent commit, not the merge base) and prints which snapshots differ.
+      # The script restores this checkout itself, even on failure.
+      - name: Record and diff the snapshots
+        id: diff
         run: |
           set -euo pipefail
-          shopt -s nullglob
-          rm -rf app/src/test/snapshots
-          ./gradlew :app:recordPaparazziDebug --console=plain
-          mkdir -p "$RUNNER_TEMP/after"
-          count=0
-          for file in app/src/test/snapshots/images/*.png; do
-            base="$(basename "$file")"
-            if [[ "$base" =~ (vehicle-card|hero-card)_[a-z-]+_(light|dark)\.png$ ]]; then
-              cp "$file" "$RUNNER_TEMP/after/${BASH_REMATCH[0]}"
-              count=$((count + 1))
-            else
-              echo "::warning::unexpected snapshot name: $base"
-            fi
-          done
-          [ "$count" -gt 0 ] || { echo "::error::no card snapshots were recorded"; exit 1; }
-          echo "Recorded $count after snapshots."
-          git rev-parse HEAD > "$RUNNER_TEMP/after-full"
-          git rev-parse --short HEAD > "$RUNNER_TEMP/after-sha"
-          echo "AFTER_FULL=$(cat "$RUNNER_TEMP/after-full")" >> "$GITHUB_ENV"
-
-      - name: Record the before snapshots
-        id: before
-        continue-on-error: true
-        run: |
-          set -euo pipefail
-          shopt -s nullglob
-          git checkout --quiet HEAD~1
-          rm -rf app/src/test/snapshots
-          ./gradlew :app:recordPaparazziDebug --console=plain
-          mkdir -p "$RUNNER_TEMP/before"
-          count=0
-          for file in app/src/test/snapshots/images/*.png; do
-            base="$(basename "$file")"
-            if [[ "$base" =~ (vehicle-card|hero-card)_[a-z-]+_(light|dark)\.png$ ]]; then
-              cp "$file" "$RUNNER_TEMP/before/${BASH_REMATCH[0]}"
-              count=$((count + 1))
-            else
-              echo "::warning::unexpected snapshot name: $base"
-            fi
-          done
-          [ "$count" -gt 0 ] || { echo "::error::no card snapshots were recorded"; exit 1; }
-          echo "Recorded $count before snapshots."
-          git rev-parse --short HEAD > "$RUNNER_TEMP/before-sha"
-
-      - name: Check out the after commit back
-        if: always()
-        run: |
-          set -euo pipefail
-          git checkout --quiet "$AFTER_FULL"
-          rm -rf app/src/test/snapshots
+          after_sha="${{ github.event.pull_request.head.sha || github.sha }}"
+          bash .github/scripts/paparazzi-diff.sh "$after_sha~1" "$after_sha" \
+            "$RUNNER_TEMP/before" "$RUNNER_TEMP/after" | tee "$RUNNER_TEMP/diff-report.txt"
 
       # Hand-off to pr-paparazzi-comment.yml: the differing PNGs as
       # after/<name>.png plus before/<name>.png when the snapshot existed
@@ -124,35 +78,30 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
-          shopt -s nullglob
-          mkdir -p pr-paparazzi/after pr-paparazzi/before
-          changed=0
-          for after in "$RUNNER_TEMP"/after/*.png; do
-            name="$(basename "$after")"
-            before="$RUNNER_TEMP/before/$name"
-            if [ ! -f "$before" ]; then
-              echo "new snapshot: $name"
-              cp "$after" pr-paparazzi/after/
-              changed=$((changed + 1))
-            elif ! cmp -s "$after" "$before"; then
-              echo "changed snapshot: $name"
-              cp "$after" pr-paparazzi/after/
-              cp "$before" pr-paparazzi/before/
-              changed=$((changed + 1))
-            fi
-          done
+          report="$RUNNER_TEMP/diff-report.txt"
+          after_sha="$(sed -n 's/^after_sha //p' "$report")"
+          before_sha="$(sed -n 's/^before_sha //p' "$report")"
+          [ -n "$after_sha" ] && [ -n "$before_sha" ] ||
+            { echo "::error::the diff report is missing SHAs" >&2; exit 1; }
           # The before record is best-effort: when the parent commit predates
           # Paparazzi (or its record failed) every after snapshot is new and
           # the comment shows after-only images.
-          [ "${{ steps.before.outcome }}" = "success" ] || echo "::warning::before snapshots unavailable; all after snapshots count as new"
-          printf '%s\n' "$PR_NUMBER" > pr-paparazzi/pr-number
-          cat "$RUNNER_TEMP/after-sha" > pr-paparazzi/short-sha
-          if [ -f "$RUNNER_TEMP/before-sha" ]; then
-            cat "$RUNNER_TEMP/before-sha" > pr-paparazzi/before-sha
-          else
-            printf 'none\n' > pr-paparazzi/before-sha
+          if [ "$before_sha" = "none" ]; then
+            echo "::warning::before snapshots unavailable; all after snapshots count as new"
           fi
-          if [ "$changed" -eq 0 ]; then
+          mkdir -p pr-paparazzi/after pr-paparazzi/before
+          changed=0
+          while IFS= read -r name; do
+            cp "$RUNNER_TEMP/after/$name" pr-paparazzi/after/
+            if [ -f "$RUNNER_TEMP/before/$name" ]; then
+              cp "$RUNNER_TEMP/before/$name" pr-paparazzi/before/
+            fi
+            changed=$((changed + 1))
+          done < <(sed -n 's/^changed //p' "$report")
+          printf '%s\n' "$PR_NUMBER" > pr-paparazzi/pr-number
+          printf '%s\n' "$after_sha" > pr-paparazzi/short-sha
+          printf '%s\n' "$before_sha" > pr-paparazzi/before-sha
+          if grep -q '^unchanged$' "$report"; then
             touch pr-paparazzi/unchanged
             echo "No card snapshot changed."
           else
