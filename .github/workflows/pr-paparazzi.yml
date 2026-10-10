@@ -19,7 +19,8 @@ name: PR paparazzi
 # layout changes surface as posted diffs, never as CI failures.
 # Pushes to the default branch record the full set as the
 # `paparazzi-main-snapshots` artifact instead: a baseline reference (not a
-# diff — a main push has no before/after), built from trusted code.on:
+# diff — a main push has no before/after), built from trusted code.
+on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
     paths:

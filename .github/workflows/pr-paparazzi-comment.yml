@@ -164,7 +164,9 @@ jobs:
           {
             printf '<!-- pr-paparazzi -->\n## Snapshots\n\n'
             stems="$(for f in "$SHOTS_DIR"/after/*.png; do
-              basename "$f" | sed -E 's/_((light)|(dark))\.png$//'
+              name="${f##*/}"
+              name="${name%_light.png}"
+              printf '%s\n' "${name%_dark.png}"
             done | sort -u)"
             if [ -z "$stems" ]; then
               if [ "$BEFORE_SHA" = "none" ]; then
