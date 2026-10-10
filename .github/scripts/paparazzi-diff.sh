@@ -67,9 +67,9 @@ finish() {
 }
 trap finish EXIT
 
-# Check out <ref>, record its snapshots, and copy the 24 card PNGs (kept by
-# their trailing <card>_<state>_<theme> name) into <dir>. Prints how many
-# were recorded; anything else goes to stderr.
+# Check out <ref>, record its snapshots, and copy the card and screen PNGs
+# (kept by their trailing <card>_<state>_<theme> or <screen>_<theme> name)
+# into <dir>. Prints how many were recorded; anything else goes to stderr.
 render() {
     local ref="$1" dir="$2"
     git checkout --quiet "$ref"
@@ -80,7 +80,7 @@ render() {
     shopt -s nullglob
     for file in app/src/test/snapshots/images/*.png; do
         base="$(basename "$file")"
-        if [[ "$base" =~ (vehicle-card|hero-card)_[a-z-]+_(light|dark)\.png$ ]]; then
+        if [[ "$base" =~ ((vehicle-card|hero-card)_[a-z-]+|screen-[a-z-]+)_(light|dark)\.png$ ]]; then
             cp "$file" "$dir/${BASH_REMATCH[0]}"
             count=$((count + 1))
         else

@@ -2,9 +2,10 @@
 name: PR paparazzi
 
 # Fast JVM snapshots of the two battery cards (cars-list VehicleCard, car-view
-# HeroCard), light AND dark, one image per state. This workflow builds pull
+# HeroCard, 6 states each) and the three full screens (cars list, car view,
+# settings, one representative state each), light AND dark. This workflow builds pull
 # request code, so it runs without secrets and with a read-only token: it
-# records the 24 snapshots for the AFTER commit and the BEFORE commit (the
+# records the 30 snapshots for the AFTER commit and the BEFORE commit (the
 # pushed commit's parent) through .github/scripts/paparazzi-diff.sh — the
 # same script reviewers run locally — byte-compares the PNGs, and uploads
 # only the differing ones (before/after pairs, or after-only when a snapshot
@@ -18,8 +19,7 @@ name: PR paparazzi
 # layout changes surface as posted diffs, never as CI failures.
 # Pushes to the default branch record the full set as the
 # `paparazzi-main-snapshots` artifact instead: a baseline reference (not a
-# diff — a main push has no before/after), built from trusted code.
-on:
+# diff — a main push has no before/after), built from trusted code.on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
     paths:
@@ -147,8 +147,9 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x gradlew
 
-      # Same trailing <card>_<state>_<theme> names as paparazzi-diff.sh keeps,
-      # so a downloaded baseline compares file-for-file with a local record.
+      # Same trailing <card>_<state>_<theme> / <screen>_<theme> names as
+      # paparazzi-diff.sh keeps, so a downloaded baseline compares
+      # file-for-file with a local record.
       - name: Record the snapshots
         run: |
           set -euo pipefail
@@ -159,7 +160,7 @@ jobs:
           count=0
           for file in app/src/test/snapshots/images/*.png; do
             base="$(basename "$file")"
-            if [[ "$base" =~ (vehicle-card|hero-card)_[a-z-]+_(light|dark)\.png$ ]]; then
+            if [[ "$base" =~ ((vehicle-card|hero-card)_[a-z-]+|screen-[a-z-]+)_(light|dark)\.png$ ]]; then
               cp "$file" "main-snapshots/${BASH_REMATCH[0]}"
               count=$((count + 1))
             else

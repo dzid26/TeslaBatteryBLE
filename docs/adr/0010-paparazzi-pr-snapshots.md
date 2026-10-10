@@ -18,12 +18,13 @@ Date: 2026-10-10
 
 ## Decision
 
-- Pull requests render the two battery cards as Paparazzi JVM snapshots
-  (`app.cash.paparazzi` 2.0.0-alpha05, first version validated against this
-  repo's AGP 9 / SDK 37 / JDK 21 setup), light AND dark, one image per
-  state: fresh, stale with age, asleep, disconnected, reading spinner, no
-  reading. 24 PNGs total, named `<card>_<state>_light.png` /
-  `<card>_<state>_dark.png` (theme is always the last segment).
+- Pull requests render the battery cards AND the full screens as Paparazzi JVM
+  snapshots (`app.cash.paparazzi` 2.0.0-alpha05): the two cards in 6 states
+  each (fresh, stale with age, asleep, disconnected, reading spinner, no
+  reading) plus the cars list, the car view and Settings in one representative
+  state each (a connected car with a fresh reading and seeded history) —
+  light AND dark, 30 PNGs total. Full screens render one representative state;
+  state coverage still comes from the card matrix.
 - `pr-paparazzi.yml` records the snapshots for the AFTER commit (HEAD) and
   the BEFORE commit (HEAD~1, the pushed commit's parent — not the merge
   base), byte-compares them, and uploads only the differing PNGs (plus the PR
@@ -38,7 +39,8 @@ Date: 2026-10-10
   per-SHA comment. Light by default: each changed state shows its light
   image (before/after pair, or after-only when new); the dark image follows
   in a `<details>` block only when the dark render differs too, or on its own
-  when only dark differs (a theme-specific change).
+  when only dark differs (a theme-specific change). A footer in every comment
+  points at the manual emulator run (`PR screenshots` workflow).
 - No committed goldens: layout changes surface as posted diffs, never as CI
   failures, so `verify.sh` gains no Paparazzi gate. The tradeoff is
   deliberate — a failing pixel gate would block unrelated work on every font
@@ -54,10 +56,12 @@ Date: 2026-10-10
   calls that script so local and CI never drift.
 - Pushes to the default branch record the full set as the
   `paparazzi-main-snapshots` artifact: a baseline reference, not a diff.
-- Testability seams on the cards (`internal` visibility, an injectable
-  `nowMillis` defaulting to the existing ticking clock, a deterministic
-  spinner override) do not change production behavior: every production call
-  site uses the defaults.
+- Testability seams on the cards and screens (`internal` visibility, an
+  injectable `nowMillis` defaulting to the existing ticking clock or wall-clock
+  read, a deterministic spinner override, a fixed Settings version string)
+  do not change production behavior: every production call site uses the
+  defaults. The fixed version keeps Settings from flagging as changed on
+  every commit (the real version names the commit).
 - Snapshots wrap the cards in a fixed `lightColorScheme` / `darkColorScheme`,
   never the dynamic color: Paparazzi has no real context for it, so dynamic
   color would render nondeterministically.

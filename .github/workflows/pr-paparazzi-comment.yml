@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 name: PR paparazzi comment
 
-# Post the card-snapshot diffs rendered by "PR paparazzi" as a pull request
+# Post the card- and screen-snapshot diffs rendered by "PR paparazzi" as a pull request
 # comment. The render builds pull request code, so it runs without secrets
 # and hands over only the `pr-paparazzi` artifact: the differing PNGs as
 # after/<name>.png (plus before/<name>.png when the snapshot existed before),
@@ -92,7 +92,7 @@ jobs:
           for side in after before; do
             for file in "$ARTIFACT"/"$side"/*.png; do
               name="$(basename "$file")"
-              [[ "$name" =~ ^(vehicle-card|hero-card)_[a-z-]+_(light|dark)\.png$ ]] \
+              [[ "$name" =~ ^((vehicle-card|hero-card)_[a-z-]+|screen-[a-z-]+)_(light|dark)\.png$ ]] \
                 || fail "unexpected snapshot name: $name"
               regular "$file" || fail "the artifact has no $side/$name"
               if [ "$(head -c 8 "$file" | od -An -tx1 | tr -d ' \n')" != 89504e470d0a1a0a ]; then
@@ -102,7 +102,7 @@ jobs:
               count=$((count + 1))
             done
           done
-          [ "$count" -le 48 ] || fail "too many snapshots in the artifact"
+          [ "$count" -le 60 ] || fail "too many snapshots in the artifact"
           if [ ! -f "$ARTIFACT/unchanged" ] && [ "$(find "$SHOTS/after" -name '*.png' | wc -l)" -eq 0 ]; then
             fail "the artifact has no changed snapshots and no unchanged marker"
           fi
@@ -134,6 +134,16 @@ jobs:
               hero-card_*) printf 'Car-view card' ;;
             esac
           }
+          # Cards group by state ("Cars-list card · fresh"); screens render
+          # one representative state, so the screen name is the whole title.
+          shot_title() {
+            case "$1" in
+              screen-cars-list*) printf 'Cars-list screen' ;;
+              screen-car-detail*) printf 'Car-view screen' ;;
+              screen-settings*) printf 'Settings screen' ;;
+              *) printf '%s · %s' "$(card_label "$1")" "${1##*_}" ;;
+            esac
+          }
           # One theme image: upload it and print its figure (pair when the
           # before render exists, after-only when the snapshot is new).
           post_theme() {
@@ -152,27 +162,26 @@ jobs:
           }
           MSG="$RUNNER_TEMP/message.md"
           {
-            printf '<!-- pr-paparazzi -->\n## Card snapshots\n\n'
+            printf '<!-- pr-paparazzi -->\n## Snapshots\n\n'
             stems="$(for f in "$SHOTS_DIR"/after/*.png; do
               basename "$f" | sed -E 's/_((light)|(dark))\.png$//'
             done | sort -u)"
             if [ -z "$stems" ]; then
               if [ "$BEFORE_SHA" = "none" ]; then
-                printf 'No visual change in the card snapshots at %s.\n' "$SHORT_SHA"
+                printf 'No visual change in the snapshots at %s.\n' "$SHORT_SHA"
               else
-                printf 'No visual change in the card snapshots at %s (vs %s).\n' "$SHORT_SHA" "$BEFORE_SHA"
+                printf 'No visual change in the snapshots at %s (vs %s).\n' "$SHORT_SHA" "$BEFORE_SHA"
               fi
             else
               if [ "$BEFORE_SHA" = "none" ]; then
-                printf 'Changed cards at %s (no before snapshots: the parent predates Paparazzi).\n\n' "$SHORT_SHA"
+                printf 'Changed snapshots at %s (no before snapshots: the parent predates Paparazzi).\n\n' "$SHORT_SHA"
               else
-                printf 'Changed cards at %s (vs %s).\n\n' "$SHORT_SHA" "$BEFORE_SHA"
+                printf 'Changed snapshots at %s (vs %s).\n\n' "$SHORT_SHA" "$BEFORE_SHA"
               fi
               while IFS= read -r stem; do
                 [ -n "$stem" ] || continue
-                state="${stem##*_}"
                 if [ -f "$SHOTS_DIR/after/${stem}_light.png" ]; then
-                  printf '### %s · %s\n\n' "$(card_label "$stem")" "$state"
+                  printf '### %s\n\n' "$(shot_title "$stem")"
                   post_theme "$stem" light
                   if [ -f "$SHOTS_DIR/after/${stem}_dark.png" ]; then
                     printf '<details><summary>Dark theme also changed</summary>\n\n'
@@ -180,12 +189,13 @@ jobs:
                     printf '</details>\n\n'
                   fi
                 else
-                  printf '### %s · %s · dark only\n\n' "$(card_label "$stem")" "$state"
+                  printf '### %s · dark only\n\n' "$(shot_title "$stem")"
                   post_theme "$stem" dark
                 fi
               done <<< "$stems"
-              printf 'Snapshots are light- and dark-theme JVM renders of the two battery cards, one image per state.\n'
+              printf 'Snapshots are light- and dark-theme JVM renders of the battery cards and screens.\n'
             fi
+            printf '\nFull-screen emulator shots: Actions → `PR screenshots` → Run workflow, choosing the head branch of this PR.\n'
           } > "$MSG"
           {
             echo "message<<COMMENT_EOF"

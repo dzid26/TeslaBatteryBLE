@@ -2,6 +2,7 @@
 package com.dzid26.teslable.ui
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
@@ -10,9 +11,13 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import app.cash.paparazzi.Paparazzi
+import com.dzid26.teslable.ble.BleUiState
 import com.dzid26.teslable.ble.ConnectionPhase
+import com.dzid26.teslable.ble.LogEntry
+import com.dzid26.teslable.ble.PairingKeyStore
 import com.dzid26.teslable.ble.TeslaAdvert
 import com.dzid26.teslable.ble.TeslaConnection
 import com.dzid26.teslable.ble.Vehicle
@@ -38,6 +43,14 @@ import org.junit.Test
  * unit-test patterns (a fixed NOW, the same [TeslaConnection]/[ChargeState]/
  * [VehicleStatus] shapes), and the cards get a fixed clock plus a forced
  * spinner so the images are deterministic.
+ *
+ * The three full screens ([ConnectionsScreen], [CarScreen], [SettingsScreen])
+ * ride the same flow with one representative state each (a connected car with
+ * a fresh reading and seeded history, like the old emulator set); state
+ * coverage still comes from the card matrix. The screens get the same fixed
+ * clock (threaded through to the cards and the history chart); everything
+ * else on them is inert under Paparazzi (no-op callbacks, no back presses,
+ * no store writes).
  */
 class CardSnapshots {
     @get:Rule
@@ -220,6 +233,61 @@ class CardSnapshots {
         }
     }
 
+    @Test
+    fun screenCarsList() {
+        snapScreen("screen-cars-list") {
+            ConnectionsScreen(
+                state = screenState,
+                history = screenSamples,
+                permissionsGranted = true,
+                locationServicesEnabled = true,
+                onRequestPermissions = {},
+                onToggleScan = {},
+                onToggleTracking = {},
+                onOpen = { _, _ -> },
+                onEditVin = {},
+                onWake = {},
+                onOpenSettings = {},
+                nowMillis = NOW,
+            )
+        }
+    }
+
+    @Test
+    fun screenCarDetail() {
+        snapScreen("screen-car-detail") {
+            CarScreen(
+                state = screenState,
+                vehicle = vehicle,
+                advert = advert,
+                address = ADDRESS,
+                history = screenSamples,
+                driveHistory = emptyList(),
+                statusHistory = emptyList(),
+                onBack = {},
+                onPair = {},
+                onRefresh = {},
+                onOpenSettings = {},
+                onToggleTracking = {},
+                nowMillis = NOW,
+            )
+        }
+    }
+
+    @Test
+    fun screenSettings() {
+        snapScreen("screen-settings") {
+            SettingsScreen(
+                keyStore = PairingKeyStore(LocalContext.current),
+                vehicles = listOf(vehicle),
+                onClearPairingCache = {},
+                onOpenAbout = {},
+                onBack = {},
+                versionName = "0.0.0-snapshot",
+            )
+        }
+    }
+
     /**
      * One state, two images: the card in the fixed light scheme and in the
      * fixed dark scheme. The theme is always the last name segment, so the
@@ -237,48 +305,23 @@ class CardSnapshots {
         }
     }
 
-    private fun liveConnection(
-        readAt: Long? = null,
-        status: VehicleStatus? = awake,
-        charge: ChargeState? = liveCharge,
-        readInFlight: Boolean = false,
-    ) = TeslaConnection(
-        address = ADDRESS,
-        name = BLE_NAME,
-        phase = ConnectionPhase.READY,
-        status = status,
-        charge = charge,
-        chargeAtMillis = readAt,
-        readInFlight = readInFlight,
-    )
-
-    private fun listRow(
-        connection: TeslaConnection?,
-        lastKnown: BatterySample? = null,
-    ) = VehicleRow(
-        bleName = BLE_NAME,
-        address = ADDRESS,
-        title = vehicle.title,
-        vehicle = vehicle,
-        connection = connection,
-        advert = advert,
-        lastKnown = lastKnown,
-    )
-
-    private fun storedSample(readMinutesAgo: Long) =
-        BatterySample(
-            timestampMillis = NOW - readMinutesAgo * MINUTE,
-            batteryLevel = STORED_PERCENT,
-            chargingState = null,
-            chargeLimit = null,
-            vehicleId = BLE_NAME,
-            ratedRangeMiles = STORED_RANGE_MILES,
-            readAtMillis = NOW - readMinutesAgo * MINUTE,
-        )
+    /** One screen, two images: the full screen, light and dark. */
+    private fun snapScreen(
+        name: String,
+        content: @Composable () -> Unit,
+    ) {
+        paparazzi.snapshot(name + "_light") {
+            ScreenFrame(darkTheme = false, content = content)
+        }
+        paparazzi.snapshot(name + "_dark") {
+            ScreenFrame(darkTheme = true, content = content)
+        }
+    }
 
     companion object {
         private const val NOW = 1_760_000_000_000L
         private const val MINUTE = 60_000L
+        private const val HOUR = 3_600_000L
         private const val FRESH_MINUTES = 1L
         private const val ASLEEP_MINUTES = 3L
         private const val STALE_MINUTES = 12L
@@ -289,6 +332,57 @@ class CardSnapshots {
         private const val STORED_RANGE_MILES = 245.5f
         private const val ADDRESS = "AA:BB:CC:DD:EE:01"
         private const val BLE_NAME = "S1f094173C"
+
+        private fun liveConnection(
+            readAt: Long? = null,
+            status: VehicleStatus? = awake,
+            charge: ChargeState? = liveCharge,
+            readInFlight: Boolean = false,
+        ) = TeslaConnection(
+            address = ADDRESS,
+            name = BLE_NAME,
+            phase = ConnectionPhase.READY,
+            status = status,
+            charge = charge,
+            chargeAtMillis = readAt,
+            readInFlight = readInFlight,
+        )
+
+        private fun listRow(
+            connection: TeslaConnection?,
+            lastKnown: BatterySample? = null,
+        ) = VehicleRow(
+            bleName = BLE_NAME,
+            address = ADDRESS,
+            title = vehicle.title,
+            vehicle = vehicle,
+            connection = connection,
+            advert = advert,
+            lastKnown = lastKnown,
+        )
+
+        private fun storedSample(readMinutesAgo: Long) =
+            BatterySample(
+                timestampMillis = NOW - readMinutesAgo * MINUTE,
+                batteryLevel = STORED_PERCENT,
+                chargingState = null,
+                chargeLimit = null,
+                vehicleId = BLE_NAME,
+                ratedRangeMiles = STORED_RANGE_MILES,
+                readAtMillis = NOW - readMinutesAgo * MINUTE,
+            )
+
+        private fun historySample(
+            hoursAgo: Long,
+            percent: Int,
+        ) = BatterySample(
+            timestampMillis = NOW - hoursAgo * HOUR,
+            batteryLevel = percent,
+            chargingState = null,
+            chargeLimit = null,
+            vehicleId = BLE_NAME,
+            readAtMillis = NOW - hoursAgo * HOUR,
+        )
 
         private val liveCharge =
             ChargeState(
@@ -311,6 +405,21 @@ class CardSnapshots {
                 displayName = "Model 3",
             )
         private val advert = TeslaAdvert(name = BLE_NAME, address = ADDRESS, rssi = -70)
+        private val screenState =
+            BleUiState(
+                trackingEnabled = true,
+                devices = listOf(advert),
+                connections = mapOf(ADDRESS to liveConnection(readAt = NOW - FRESH_MINUTES * MINUTE)),
+                vehicles = listOf(vehicle),
+                log = listOf(LogEntry(vehicleId = BLE_NAME, message = "$BLE_NAME · Connected · 62%")),
+            )
+        private val screenSamples =
+            listOf(
+                historySample(6L, 72),
+                historySample(4L, 70),
+                historySample(2L, 68),
+                historySample(0L, 66),
+            )
     }
 }
 
@@ -334,6 +443,22 @@ private fun CardFrame(
             ) {
                 content()
             }
+        }
+    }
+}
+
+/**
+ * The full-screen frame: the same fixed schemes, with the screen filling the
+ * device frame as it does on the phone.
+ */
+@Composable
+private fun ScreenFrame(
+    darkTheme: Boolean,
+    content: @Composable () -> Unit,
+) {
+    MaterialTheme(colorScheme = if (darkTheme) darkColorScheme() else lightColorScheme()) {
+        Surface(modifier = Modifier.fillMaxSize()) {
+            content()
         }
     }
 }

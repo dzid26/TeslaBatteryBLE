@@ -53,6 +53,10 @@ fun SettingsScreen(
     onClearPairingCache: () -> Unit,
     onOpenAbout: () -> Unit,
     onBack: () -> Unit,
+    // Injectable for the Paparazzi snapshots: the version line would otherwise
+    // differ on every commit (it names the commit), flagging Settings as
+    // changed on every pull request. Production uses the real version.
+    versionName: String = BuildConfig.VERSION_NAME,
 ) {
     BackHandler { onBack() }
 
@@ -125,7 +129,7 @@ fun SettingsScreen(
                 onClearCache = { showClearCacheDialog = true },
             )
             Spacer(Modifier.height(16.dp))
-            AboutCard(onOpenAbout = onOpenAbout)
+            AboutCard(onOpenAbout = onOpenAbout, versionName = versionName)
         }
     }
 
@@ -279,7 +283,10 @@ private fun PairingCard(
 }
 
 @Composable
-private fun AboutCard(onOpenAbout: () -> Unit) {
+private fun AboutCard(
+    onOpenAbout: () -> Unit,
+    versionName: String,
+) {
     Card(
         modifier =
             Modifier
@@ -293,7 +300,7 @@ private fun AboutCard(onOpenAbout: () -> Unit) {
             )
             Spacer(Modifier.height(8.dp))
             Text(
-                text = "TeslaBatteryBLE version: ${BuildConfig.VERSION_NAME}",
+                text = "TeslaBatteryBLE version: $versionName",
                 style = MaterialTheme.typography.bodyMedium,
             )
             Spacer(Modifier.height(8.dp))

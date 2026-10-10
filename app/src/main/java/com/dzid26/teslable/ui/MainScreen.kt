@@ -257,7 +257,7 @@ private fun vehicleRows(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ConnectionsScreen(
+internal fun ConnectionsScreen(
     state: BleUiState,
     history: List<BatterySample>,
     permissionsGranted: Boolean,
@@ -269,6 +269,9 @@ private fun ConnectionsScreen(
     onEditVin: (String) -> Unit,
     onWake: (String) -> Unit,
     onOpenSettings: () -> Unit,
+    // Injectable for the Paparazzi snapshots; production call sites use the
+    // default, which keeps the same per-row ticking clocks as before.
+    nowMillis: Long? = null,
 ) {
     val rows = vehicleRows(state, history)
     // A fresh install has nothing to show, so start the scan it would ask for;
@@ -387,6 +390,7 @@ private fun ConnectionsScreen(
                         onEditVin = onEditVin,
                         onWake = onWake,
                         modifier = Modifier.weight(1f),
+                        nowMillis = nowMillis,
                     )
                     Spacer(Modifier.height(8.dp))
                     LogCard(state.log, maxContentHeight = logMaxHeight)
@@ -405,6 +409,7 @@ private fun VehicleList(
     onEditVin: (String) -> Unit,
     onWake: (String) -> Unit,
     modifier: Modifier = Modifier,
+    nowMillis: Long? = null,
 ) {
     if (rows.isEmpty()) {
         Column(
@@ -443,6 +448,7 @@ private fun VehicleList(
                     onOpen = { onOpen(row.bleName, row.address) },
                     onEditVin = { onEditVin(row.bleName) },
                     onWake = { onWake(row.bleName) },
+                    nowMillis = nowMillis ?: rememberNowMillis(row.connection?.chargeAtMillis),
                 )
             }
         }

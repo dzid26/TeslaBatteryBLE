@@ -107,6 +107,9 @@ internal fun CarScreen(
     onRefresh: () -> Unit,
     onOpenSettings: () -> Unit,
     onToggleTracking: (Boolean) -> Unit,
+    // Injectable for the Paparazzi snapshots; production call sites use the
+    // default, which keeps the same ticking clocks as before.
+    nowMillis: Long? = null,
 ) {
     BackHandler { onBack() }
     val connection = state.connections[address]
@@ -214,6 +217,7 @@ internal fun CarScreen(
                     vehicle = vehicle,
                     history = vehicleHistory,
                     statusHistory = vehicleStatuses,
+                    nowMillis = nowMillis ?: rememberNowMillis(connection?.chargeAtMillis),
                 )
                 // Once the app key is enrolled the hero carries its status; the
                 // card only exists for pairing, so it disappears when there is
@@ -221,7 +225,7 @@ internal fun CarScreen(
                 if (!paired) {
                     KeyCard(connection, vehicle, onPair)
                 }
-                BatteryHistoryCard(vehicleHistory, vehicleDrives)
+                BatteryHistoryCard(vehicleHistory, vehicleDrives, nowMillis = nowMillis ?: System.currentTimeMillis())
                 BatteryHealthCard(health)
             }
         }
@@ -537,9 +541,12 @@ private fun pairingDetailText(pairing: PairingPhase): String? =
 private fun BatteryHistoryCard(
     samples: List<BatterySample>,
     drives: List<DriveSample>,
+    // Injectable for the Paparazzi snapshots; production call sites use the
+    // default, which is the same wall-clock read as before.
+    nowMillis: Long = System.currentTimeMillis(),
 ) {
     var range by rememberSaveable { mutableStateOf(HistoryRange.DAY) }
-    val now = System.currentTimeMillis()
+    val now = nowMillis
     val visible = samples.within(range, now)
     val stats = chargeStats(samples)
 
