@@ -7,15 +7,14 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class VehicleTest {
-    // Verified on a real car: this VIN advertises as this BLE name.
-    private val vin = "5YJ3E7EBXKF523421"
-    private val bleName = "Se1f0941734830fe7C"
+    private val vin = "5YJ3E1EA7KF000001"
+    private val bleName = "S3acc31774a738ea0C"
 
     private fun vehicle(vin: String? = null) =
         Vehicle(
             bleName = bleName,
-            address = "18:04:ED:84:79:80",
-            gattName = "\uD83D\uDD11 Teslak",
+            address = "18:12:ED:33:33:80",
+            gattName = "\uD83D\uDD11 My Tesla",
             vin = vin,
         )
 
@@ -42,7 +41,7 @@ class VehicleTest {
 
     @Test
     fun titlePrefersUserThenCarName() {
-        assertEquals("\uD83D\uDD11 Teslak", vehicle().title)
+        assertEquals("\uD83D\uDD11 My Tesla", vehicle().title)
         assertEquals("Daily driver", vehicle().copy(displayName = "Daily driver").title)
     }
 

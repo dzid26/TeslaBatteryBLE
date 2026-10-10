@@ -209,7 +209,7 @@ private fun VinEditor(
 
 // ------------------------------------------------------------------ cars list
 
-private data class VehicleRow(
+internal data class VehicleRow(
     val bleName: String,
     val address: String,
     val title: String,
@@ -257,7 +257,7 @@ private fun vehicleRows(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ConnectionsScreen(
+internal fun ConnectionsScreen(
     state: BleUiState,
     history: List<BatterySample>,
     permissionsGranted: Boolean,
@@ -269,6 +269,9 @@ private fun ConnectionsScreen(
     onEditVin: (String) -> Unit,
     onWake: (String) -> Unit,
     onOpenSettings: () -> Unit,
+    // Injectable for the Paparazzi snapshots; production call sites use the
+    // default, which keeps the same per-row ticking clocks as before.
+    nowMillis: Long? = null,
 ) {
     val rows = vehicleRows(state, history)
     // A fresh install has nothing to show, so start the scan it would ask for;
@@ -387,6 +390,7 @@ private fun ConnectionsScreen(
                         onEditVin = onEditVin,
                         onWake = onWake,
                         modifier = Modifier.weight(1f),
+                        nowMillis = nowMillis,
                     )
                     Spacer(Modifier.height(8.dp))
                     LogCard(state.log, maxContentHeight = logMaxHeight)
@@ -405,6 +409,7 @@ private fun VehicleList(
     onEditVin: (String) -> Unit,
     onWake: (String) -> Unit,
     modifier: Modifier = Modifier,
+    nowMillis: Long? = null,
 ) {
     if (rows.isEmpty()) {
         Column(
@@ -443,6 +448,7 @@ private fun VehicleList(
                     onOpen = { onOpen(row.bleName, row.address) },
                     onEditVin = { onEditVin(row.bleName) },
                     onWake = { onWake(row.bleName) },
+                    nowMillis = nowMillis ?: rememberNowMillis(row.connection?.chargeAtMillis),
                 )
             }
         }
@@ -475,14 +481,18 @@ private fun PermissionCard(
 }
 
 @Composable
-private fun VehicleCard(
+internal fun VehicleCard(
     row: VehicleRow,
     onOpen: () -> Unit,
     onEditVin: () -> Unit,
     onWake: () -> Unit,
+    // Injectable for the Paparazzi snapshots; production call sites use the
+    // default, which is the same ticking clock as before.
+    nowMillis: Long = rememberNowMillis(row.connection?.chargeAtMillis),
+    // Injectable for the Paparazzi snapshots; null keeps the timed spinner.
+    spinnerOverride: Boolean? = null,
 ) {
     val display = connectionDisplay(row.connection, row.advert, vehicle = row.vehicle)
-    val nowMillis = rememberNowMillis(row.connection?.chargeAtMillis)
     val reading = batteryPercent(row.connection, row.lastKnown, nowMillis)
     val canWake =
         row.connection?.status?.asleep == true &&
@@ -540,7 +550,7 @@ private fun VehicleCard(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                ReadingSpinner(row.connection)
+                ReadingSpinner(row.connection, forceVisible = spinnerOverride)
                 reading?.ageLabel(nowMillis, row.connection)?.let { age ->
                     Text(
                         text = age,
@@ -703,9 +713,20 @@ internal fun rememberNowMillis(readAtMillis: Long? = null): Long {
 /**
  * A small spinner while an Infotainment read is in flight on a connected car. Once it shows it
  * stays at least [READ_SPINNER_MIN_VISIBLE_MS], since a read takes well under a second.
+ * [forceVisible] is a deterministic override for the Paparazzi snapshots: when non-null
+ * the timing is skipped and the spinner shows exactly when true.
  */
 @Composable
-internal fun ReadingSpinner(connection: TeslaConnection?) {
+internal fun ReadingSpinner(
+    connection: TeslaConnection?,
+    forceVisible: Boolean? = null,
+) {
+    if (forceVisible != null) {
+        if (forceVisible) {
+            CircularProgressIndicator(modifier = Modifier.size(13.dp), strokeWidth = 2.dp)
+        }
+        return
+    }
     val inFlight = connection?.readInFlight == true && connection.phase == ConnectionPhase.READY
     var visible by remember { mutableStateOf(false) }
     val shownAt = remember { longArrayOf(0L) }

@@ -1,0 +1,258 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+name: PR paparazzi comment
+
+# Post the card- and screen-snapshot diffs rendered by "PR paparazzi" as a pull request
+# comment. The render builds pull request code, so it runs without secrets
+# and hands over only the `pr-paparazzi` artifact: the differing PNGs as
+# after/<name>.png (plus before/<name>.png when the snapshot existed before),
+# the PR number, and the short SHAs of the after and before commits. This
+# workflow runs the default branch's copy of itself and of the scripts, never
+# checks out or runs pull request code, and treats the artifact as untrusted
+# input. The upload token comes from the `release` environment. The shots are
+# hosted as user attachments, so neither the PR nor the releases carry image
+# assets. The comment also links the debug APK that Android CI built for the
+# same commit, when there is one.
+on:
+  workflow_run:
+    workflows: ["PR paparazzi"]
+    types: [completed]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-paparazzi-comment-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: false
+
+jobs:
+  comment:
+    name: Post the card diffs
+    if: >-
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success'
+    environment: release
+    permissions:
+      actions: read        # download the render run's artifact; find the Android CI run's APK
+      contents: read       # check out the scripts; the upload helper reads the repo id
+      pull-requests: write # post/update the comment
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the default branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      # Outside the checkout, so nothing in the artifact lands next to the
+      # scripts.
+      - name: Download the diff
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: pr-paparazzi
+          path: ${{ runner.temp }}/pr-paparazzi
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+
+      # The artifact is untrusted: accept only a numeric PR number for the
+      # pull request the render ran for, the short SHA of the rendered
+      # commit, a hex before-SHA (or "none" when the parent predates
+      # Paparazzi), and PNGs with card-state-theme names and a PNG signature.
+      # Validated PNGs land in pr-shots/after and pr-shots/before.
+      - name: Validate the artifact
+        id: meta
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          HEAD_REPO: ${{ github.event.workflow_run.head_repository.full_name }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          fail() { echo "::error::$*"; exit 1; }
+          regular() { [ -f "$1" ] && [ ! -L "$1" ]; }
+          ARTIFACT="$RUNNER_TEMP/pr-paparazzi"
+          SHOTS="$RUNNER_TEMP/pr-shots"
+          for meta in pr-number short-sha before-sha; do
+            regular "$ARTIFACT/$meta" || fail "the artifact has no $meta file"
+          done
+          pr="$(head -c 32 "$ARTIFACT/pr-number")"
+          short="$(head -c 64 "$ARTIFACT/short-sha")"
+          before_sha="$(head -c 64 "$ARTIFACT/before-sha")"
+          [[ "$pr" =~ ^[1-9][0-9]{0,9}$ ]] || fail "the PR number in the artifact is not numeric"
+          [[ "$short" =~ ^[0-9a-f]{7,40}$ && "$HEAD_SHA" == "$short"* ]] \
+            || fail "the short SHA in the artifact does not match the run's commit"
+          [[ "$before_sha" == "none" || "$before_sha" =~ ^[0-9a-f]{7,40}$ ]] \
+            || fail "the before SHA in the artifact is not a hex SHA"
+          pr_head="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$pr" --jq '(.head.repo.full_name // "") + ":" + .head.ref')"
+          if [ -z "$HEAD_REPO" ] || [ "$pr_head" != "$HEAD_REPO:$HEAD_BRANCH" ]; then
+            fail "PR #$pr is not the pull request the run was for"
+          fi
+          mkdir -p "$SHOTS/after" "$SHOTS/before"
+          count=0
+          for side in after before; do
+            for file in "$ARTIFACT"/"$side"/*.png; do
+              name="$(basename "$file")"
+              [[ "$name" =~ ^((vehicle-card|hero-card)_[a-z-]+|screen-[a-z-]+)_(light|dark)\.png$ ]] \
+                || fail "unexpected snapshot name: $name"
+              regular "$file" || fail "the artifact has no $side/$name"
+              if [ "$(head -c 8 "$file" | od -An -tx1 | tr -d ' \n')" != 89504e470d0a1a0a ]; then
+                fail "$side/$name is not a PNG"
+              fi
+              cp "$file" "$SHOTS/$side/$name"
+              count=$((count + 1))
+            done
+          done
+          [ "$count" -le 60 ] || fail "too many snapshots in the artifact"
+          if [ ! -f "$ARTIFACT/unchanged" ] && [ "$(find "$SHOTS/after" -name '*.png' | wc -l)" -eq 0 ]; then
+            fail "the artifact has no changed snapshots and no unchanged marker"
+          fi
+          {
+            echo "pr=$pr"
+            echo "short=$short"
+            echo "before=$before_sha"
+          } >> "$GITHUB_OUTPUT"
+
+      # Host each PNG as a user attachment, so no image asset lives on the PR
+      # or the releases, and build the comment body. Light by default: each
+      # changed state shows its light image (before/after pair, or after-only
+      # when new); the dark image follows in a <details> block only when the
+      # dark render differs too, or on its own when only dark differs.
+      - name: Upload the shots and build the comment
+        id: shots
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ATTACHMENTS_TOKEN: ${{ secrets.ATTACHMENTS_TOKEN }}
+          SHORT_SHA: ${{ steps.meta.outputs.short }}
+          BEFORE_SHA: ${{ steps.meta.outputs.before }}
+          SHOTS_DIR: ${{ runner.temp }}/pr-shots
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          card_label() {
+            case "$1" in
+              vehicle-card_*) printf 'Cars-list card' ;;
+              hero-card_*) printf 'Car-view card' ;;
+            esac
+          }
+          # Cards group by state ("Cars-list card · fresh"); screens render
+          # one representative state, so the screen name is the whole title.
+          shot_title() {
+            case "$1" in
+              screen-cars-list*) printf 'Cars-list screen' ;;
+              screen-car-detail*) printf 'Car-view screen' ;;
+              screen-settings*) printf 'Settings screen' ;;
+              *) printf '%s · %s' "$(card_label "$1")" "${1##*_}" ;;
+            esac
+          }
+          # One theme image: upload it and print its figure (pair when the
+          # before render exists, after-only when the snapshot is new).
+          post_theme() {
+            local stem="$1" theme="$2"
+            local name="${stem}_${theme}.png"
+            local url before_url
+            url="$(bash .github/scripts/upload-screenshot.sh "$SHOTS_DIR/after/$name" "$name-$SHORT_SHA.png")"
+            if [ -f "$SHOTS_DIR/before/$name" ]; then
+              before_url="$(bash .github/scripts/upload-screenshot.sh "$SHOTS_DIR/before/$name" "before-$name-$BEFORE_SHA.png")"
+              printf '<p><img src="%s" alt="%s %s before" width="32%%"> <img src="%s" alt="%s %s after" width="32%%"></p>\n\n' \
+                "$before_url" "$stem" "$theme" "$url" "$stem" "$theme"
+              printf 'Before %s · after %s.\n\n' "$BEFORE_SHA" "$SHORT_SHA"
+            else
+              printf '<p><img src="%s" alt="%s %s after" width="32%%"></p>\n\n' "$url" "$stem" "$theme"
+            fi
+          }
+          MSG="$RUNNER_TEMP/message.md"
+          {
+            printf '<!-- pr-paparazzi -->\n## Snapshots\n\n'
+            stems="$(for f in "$SHOTS_DIR"/after/*.png; do
+              name="${f##*/}"
+              name="${name%_light.png}"
+              printf '%s\n' "${name%_dark.png}"
+            done | sort -u)"
+            if [ -z "$stems" ]; then
+              if [ "$BEFORE_SHA" = "none" ]; then
+                printf 'No visual change in the snapshots at %s.\n' "$SHORT_SHA"
+              else
+                printf 'No visual change in the snapshots at %s (vs %s).\n' "$SHORT_SHA" "$BEFORE_SHA"
+              fi
+            else
+              if [ "$BEFORE_SHA" = "none" ]; then
+                printf 'Changed snapshots at %s (no before snapshots: the parent predates Paparazzi).\n\n' "$SHORT_SHA"
+              else
+                printf 'Changed snapshots at %s (vs %s).\n\n' "$SHORT_SHA" "$BEFORE_SHA"
+              fi
+              while IFS= read -r stem; do
+                [ -n "$stem" ] || continue
+                if [ -f "$SHOTS_DIR/after/${stem}_light.png" ]; then
+                  printf '### %s\n\n' "$(shot_title "$stem")"
+                  post_theme "$stem" light
+                  if [ -f "$SHOTS_DIR/after/${stem}_dark.png" ]; then
+                    printf '<details><summary>Dark theme also changed</summary>\n\n'
+                    post_theme "$stem" dark
+                    printf '</details>\n\n'
+                  fi
+                else
+                  printf '### %s · dark only\n\n' "$(shot_title "$stem")"
+                  post_theme "$stem" dark
+                fi
+              done <<< "$stems"
+              printf 'Snapshots are light- and dark-theme JVM renders of the battery cards and screens.\n'
+            fi
+            printf "\nFull-screen emulator shots: Actions → \`PR screenshots\` → Run workflow, choosing the head branch of this PR.\n"
+          } > "$MSG"
+          {
+            echo "message<<COMMENT_EOF"
+            cat "$MSG"
+            echo "COMMENT_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      # Link the debug APK that Android CI built for the same commit. The run is
+      # looked up by the event's head SHA, never by artifact content. The line
+      # is optional: no run, a failed run or a lookup error leaves it out.
+      - name: Find the debug APK
+        id: apk
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          runs_url="https://github.com/$GITHUB_REPOSITORY/actions/runs"
+          line=""
+          if [[ ! "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::warning::unexpected head SHA; posting without the APK line"
+          elif ! run="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/android.yml/runs?head_sha=$HEAD_SHA&event=pull_request&per_page=1" \
+              --jq '.workflow_runs[0] // empty | "\(.id) \(.status) \(.conclusion // "none")"')"; then
+            echo "::warning::could not look up the Android CI run; posting without the APK line"
+          elif [ -z "$run" ]; then
+            echo "No Android CI run for this commit; posting without the APK line."
+          else
+            read -r run_id status conclusion <<< "$run"
+            if [[ ! "$run_id" =~ ^[0-9]+$ ]]; then
+              echo "::warning::unexpected Android CI run id; posting without the APK line"
+            elif [ "$status" != completed ]; then
+              line="Debug APK: still building in [Android CI]($runs_url/$run_id) (GitHub sign-in needed)"
+            elif [ "$conclusion" = success ]; then
+              artifact_id="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run_id/artifacts" \
+                --jq '[.artifacts[] | select(.name == "teslable-debug-apk" and (.expired | not))] | sort_by(.created_at) | last | .id // empty')" ||
+                artifact_id=""
+              if [[ "$artifact_id" =~ ^[0-9]+$ ]]; then
+                line="Debug APK: [zip from Android CI]($runs_url/$run_id/artifacts/$artifact_id) (GitHub sign-in needed)"
+              else
+                echo "Android CI run $run_id has no debug APK artifact; posting without the APK line."
+              fi
+            else
+              echo "Android CI run $run_id concluded $conclusion; posting without the APK line."
+            fi
+          fi
+          echo "line=$line" >> "$GITHUB_OUTPUT"
+
+      - name: Comment on the pull request
+        uses: thollander/actions-comment-pull-request@24bffb9b452ba05a4f3f77933840a6a841d1b32b # v3.0.1
+        with:
+          message: |
+            ${{ steps.shots.outputs.message }}
+
+            ${{ steps.apk.outputs.line }}
+          comment-tag: pr-paparazzi-${{ steps.meta.outputs.short }}
+          pr-number: ${{ steps.meta.outputs.pr }}
+          github-token: ${{ github.token }}

@@ -107,6 +107,9 @@ internal fun CarScreen(
     onRefresh: () -> Unit,
     onOpenSettings: () -> Unit,
     onToggleTracking: (Boolean) -> Unit,
+    // Injectable for the Paparazzi snapshots; production call sites use the
+    // default, which keeps the same ticking clocks as before.
+    nowMillis: Long? = null,
 ) {
     BackHandler { onBack() }
     val connection = state.connections[address]
@@ -214,6 +217,7 @@ internal fun CarScreen(
                     vehicle = vehicle,
                     history = vehicleHistory,
                     statusHistory = vehicleStatuses,
+                    nowMillis = nowMillis ?: rememberNowMillis(connection?.chargeAtMillis),
                 )
                 // Once the app key is enrolled the hero carries its status; the
                 // card only exists for pairing, so it disappears when there is
@@ -221,7 +225,7 @@ internal fun CarScreen(
                 if (!paired) {
                     KeyCard(connection, vehicle, onPair)
                 }
-                BatteryHistoryCard(vehicleHistory, vehicleDrives)
+                BatteryHistoryCard(vehicleHistory, vehicleDrives, nowMillis = nowMillis ?: System.currentTimeMillis())
                 BatteryHealthCard(health)
             }
         }
@@ -229,12 +233,17 @@ internal fun CarScreen(
 }
 
 @Composable
-private fun HeroCard(
+internal fun HeroCard(
     connection: TeslaConnection?,
     advert: TeslaAdvert?,
     vehicle: Vehicle?,
     history: List<BatterySample>,
     statusHistory: List<StatusSample>,
+    // Injectable for the Paparazzi snapshots; production call sites use the
+    // default, which is the same ticking clock as before.
+    nowMillis: Long = rememberNowMillis(connection?.chargeAtMillis),
+    // Injectable for the Paparazzi snapshots; null keeps the timed spinner.
+    spinnerOverride: Boolean? = null,
 ) {
     val context = LocalContext.current
     val display = connectionDisplay(connection, advert, vehicle = vehicle)
@@ -242,7 +251,6 @@ private fun HeroCard(
     // With no live reading, the newest stored sample still answers "how full
     // is the car?" at a glance; the caption makes its age explicit.
     val lastKnown = history.lastOrNull()
-    val nowMillis = rememberNowMillis(connection?.chargeAtMillis)
     val reading = batteryPercent(connection, lastKnown, nowMillis)
     val durations = remember(statusHistory, nowMillis) { statusDurations(statusHistory, vehicle?.bleName.orEmpty(), nowMillis) }
     val keySlot = connection?.keySlot ?: vehicle?.keySlot
@@ -310,7 +318,7 @@ private fun HeroCard(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                ReadingSpinner(connection)
+                ReadingSpinner(connection, forceVisible = spinnerOverride)
                 reading?.ageLabel(nowMillis, connection)?.let { age ->
                     Text(
                         text = age,
@@ -533,9 +541,12 @@ private fun pairingDetailText(pairing: PairingPhase): String? =
 private fun BatteryHistoryCard(
     samples: List<BatterySample>,
     drives: List<DriveSample>,
+    // Injectable for the Paparazzi snapshots; production call sites use the
+    // default, which is the same wall-clock read as before.
+    nowMillis: Long = System.currentTimeMillis(),
 ) {
     var range by rememberSaveable { mutableStateOf(HistoryRange.DAY) }
-    val now = System.currentTimeMillis()
+    val now = nowMillis
     val visible = samples.within(range, now)
     val stats = chargeStats(samples)
 

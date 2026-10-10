@@ -14,4 +14,9 @@ replay_pid*.log
 keystore.properties
 *.jks
 *.keystore
+*.p12
+*.pfx
 key-restore-test/
+# Paparazzi record output: PR snapshots are rendered fresh in CI and diffed
+# before/after the pushed commit, never committed as goldens (see ADR-0010).
+app/src/test/snapshots/

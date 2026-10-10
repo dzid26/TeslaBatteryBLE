@@ -1,22 +1,13 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 name: PR screenshots
 
-# Capture the demo build on pull requests that touch the app UI or the capture
-# flow, so reviews see the visual result. This workflow builds pull request
-# code, so it runs without secrets and with a read-only token: it uploads the
-# screenshots, the PR number and the short SHA as the `pr-screenshots`
-# artifact, and pr-screenshots-comment.yml posts the screenshots from the default
-# branch. One comment per ready revision (tagged by SHA), so flipping a PR back
-# to ready after rework posts the next round's screenshots instead of
-# overwriting the reviewed one; draft pushes are skipped. Manual runs only
-# capture; their screenshots stay in the run's artifacts.
+# Manual full-screen emulator fallback: captures the demo build on an emulator
+# (cars list, car view, settings x light/dark) when a review needs the real
+# rendered app rather than a card snapshot. Pull requests use pr-paparazzi.yml
+# by default; this workflow runs only when dispatched by hand, needs no
+# secrets, and leaves its screenshots in the run's artifacts (manual runs
+# have no PR, so pr-screenshots-comment.yml never fires for them).
 on:
-  pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
-    paths:
-      - 'app/**'
-      - '.github/scripts/capture-screenshots.sh'
-      - '.github/workflows/pr-screenshots.yml'
   workflow_dispatch:
 
 permissions:

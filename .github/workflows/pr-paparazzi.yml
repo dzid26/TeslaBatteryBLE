@@ -1,0 +1,181 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+name: PR paparazzi
+
+# Fast JVM snapshots of the two battery cards (cars-list VehicleCard, car-view
+# HeroCard, 6 states each) and the three full screens (cars list, car view,
+# settings, one representative state each), light AND dark. This workflow builds pull
+# request code, so it runs without secrets and with a read-only token: it
+# records the 30 snapshots for the AFTER commit and the BEFORE commit (the
+# pushed commit's parent) through .github/scripts/paparazzi-diff.sh — the
+# same script reviewers run locally — byte-compares the PNGs, and uploads
+# only the differing ones (before/after pairs, or after-only when a snapshot
+# is new or the parent predates Paparazzi) plus the PR number and the short
+# SHAs as the `pr-paparazzi` artifact.
+# pr-paparazzi-comment.yml posts the diffs from the default branch. One
+# comment per ready revision (tagged by SHA), so flipping a PR back to ready
+# after rework posts the next round's diffs instead of overwriting the
+# reviewed one; draft pushes are skipped. Manual runs only record; their
+# snapshots stay in the run's workspace. There are no committed goldens:
+# layout changes surface as posted diffs, never as CI failures.
+# Pushes to the default branch record the full set as the
+# `paparazzi-main-snapshots` artifact instead: a baseline reference (not a
+# diff — a main push has no before/after), built from trusted code.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - 'app/**'
+      - '.github/workflows/pr-paparazzi.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'app/**'
+      - '.github/workflows/pr-paparazzi.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-paparazzi-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  snapshots:
+    name: Diff card snapshots
+    # Pull requests (skipped while a PR is a draft) and manual runs only: a
+    # main push records the baseline in main-snapshots instead.
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          # HEAD plus its parent: the diff is before/after the pushed commit.
+          fetch-depth: 2
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6
+
+      - name: Make gradlew executable
+        run: chmod +x gradlew
+
+      # The shared diff script: records AFTER (the PR head) and BEFORE (its
+      # parent commit, not the merge base) and prints which snapshots differ.
+      # The script restores this checkout itself, even on failure.
+      - name: Record and diff the snapshots
+        id: diff
+        run: |
+          set -euo pipefail
+          after_sha="${{ github.event.pull_request.head.sha || github.sha }}"
+          bash .github/scripts/paparazzi-diff.sh "$after_sha~1" "$after_sha" \
+            "$RUNNER_TEMP/before" "$RUNNER_TEMP/after" | tee "$RUNNER_TEMP/diff-report.txt"
+
+      # Hand-off to pr-paparazzi-comment.yml: the differing PNGs as
+      # after/<name>.png plus before/<name>.png when the snapshot existed
+      # before, the PR number, and the short SHAs of both commits. When
+      # nothing differs the artifact carries an `unchanged` marker instead.
+      - name: Stage the diff for the comment
+        if: github.event_name == 'pull_request'
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          report="$RUNNER_TEMP/diff-report.txt"
+          after_sha="$(sed -n 's/^after_sha //p' "$report")"
+          before_sha="$(sed -n 's/^before_sha //p' "$report")"
+          [ -n "$after_sha" ] && [ -n "$before_sha" ] ||
+            { echo "::error::the diff report is missing SHAs" >&2; exit 1; }
+          # The before record is best-effort: when the parent commit predates
+          # Paparazzi (or its record failed) every after snapshot is new and
+          # the comment shows after-only images.
+          if [ "$before_sha" = "none" ]; then
+            echo "::warning::before snapshots unavailable; all after snapshots count as new"
+          fi
+          mkdir -p pr-paparazzi/after pr-paparazzi/before
+          changed=0
+          while IFS= read -r name; do
+            cp "$RUNNER_TEMP/after/$name" pr-paparazzi/after/
+            if [ -f "$RUNNER_TEMP/before/$name" ]; then
+              cp "$RUNNER_TEMP/before/$name" pr-paparazzi/before/
+            fi
+            changed=$((changed + 1))
+          done < <(sed -n 's/^changed //p' "$report")
+          printf '%s\n' "$PR_NUMBER" > pr-paparazzi/pr-number
+          printf '%s\n' "$after_sha" > pr-paparazzi/short-sha
+          printf '%s\n' "$before_sha" > pr-paparazzi/before-sha
+          if grep -q '^unchanged$' "$report"; then
+            touch pr-paparazzi/unchanged
+            echo "No card snapshot changed."
+          else
+            echo "$changed card snapshot(s) changed."
+          fi
+
+      - name: Upload the diff for the comment
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: pr-paparazzi
+          path: pr-paparazzi
+          if-no-files-found: error
+
+  # Baseline reference for the default branch: the full snapshot set at the
+  # pushed commit, no diff. Main pushes run trusted code, so the PNGs upload
+  # straight from this job — the untrusted/trusted split only applies to the
+  # pull request diff above, which hands off to pr-paparazzi-comment.yml.
+  main-snapshots:
+    name: Record main snapshots
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6
+
+      - name: Make gradlew executable
+        run: chmod +x gradlew
+
+      # Same trailing <card>_<state>_<theme> / <screen>_<theme> names as
+      # paparazzi-diff.sh keeps, so a downloaded baseline compares
+      # file-for-file with a local record.
+      - name: Record the snapshots
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          rm -rf app/src/test/snapshots
+          ./gradlew :app:recordPaparazziDebug --console=plain
+          mkdir -p main-snapshots
+          count=0
+          for file in app/src/test/snapshots/images/*.png; do
+            base="$(basename "$file")"
+            if [[ "$base" =~ ((vehicle-card|hero-card)_[a-z-]+|screen-[a-z-]+)_(light|dark)\.png$ ]]; then
+              cp "$file" "main-snapshots/${BASH_REMATCH[0]}"
+              count=$((count + 1))
+            else
+              echo "::warning::unexpected snapshot name: $base"
+            fi
+          done
+          [ "$count" -gt 0 ] || { echo "::error::no card snapshots were recorded"; exit 1; }
+          echo "Recorded $count main snapshots."
+          git rev-parse --short HEAD > main-snapshots/short-sha
+          rm -rf app/src/test/snapshots
+
+      - name: Upload the baseline
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: paparazzi-main-snapshots
+          path: main-snapshots
+          if-no-files-found: error
