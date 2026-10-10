@@ -31,6 +31,7 @@ if ! git diff --quiet || ! git diff --cached --quiet; then
     exit 2
 fi
 cd "$(git rev-parse --show-toplevel)"
+ORIG_BRANCH="$(git symbolic-ref --short --quiet HEAD || true)"
 ORIG_REF="$(git rev-parse HEAD)"
 
 BEFORE_DIR=""
@@ -51,7 +52,11 @@ else
 fi
 
 finish() {
-    git checkout --quiet "$ORIG_REF" || echo "::warning::could not restore $ORIG_REF" >&2
+    if [ -n "$ORIG_BRANCH" ]; then
+        git checkout --quiet "$ORIG_BRANCH" || echo "::warning::could not restore $ORIG_BRANCH" >&2
+    else
+        git checkout --quiet "$ORIG_REF" || echo "::warning::could not restore $ORIG_REF" >&2
+    fi
     rm -rf app/src/test/snapshots
     if [ "$CLEAN_BEFORE" = true ]; then
         rm -rf "$BEFORE_DIR"

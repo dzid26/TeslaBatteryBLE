@@ -48,6 +48,12 @@ Date: 2026-10-10
   the old emulator capture stays as a manual fallback: `pr-screenshots.yml`
   runs only on `workflow_dispatch` for reviews that need the real rendered
   app (full screens, real navigation).
+- The same render runs locally: `bash .github/scripts/paparazzi-diff.sh`
+  (before `HEAD~1`, after `HEAD` by default) records both commits, prints only
+  the differing snapshots, and always restores the checkout; `pr-paparazzi.yml`
+  calls that script so local and CI never drift.
+- Pushes to the default branch record the full set as the
+  `paparazzi-main-snapshots` artifact: a baseline reference, not a diff.
 - Testability seams on the cards (`internal` visibility, an injectable
   `nowMillis` defaulting to the existing ticking clock, a deterministic
   spinner override) do not change production behavior: every production call
