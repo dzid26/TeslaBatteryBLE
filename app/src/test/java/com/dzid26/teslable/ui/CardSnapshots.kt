@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -25,15 +26,18 @@ import org.junit.Rule
 import org.junit.Test
 
 /**
- * Fast JVM snapshots of the two battery cards, light theme only: the cars-list
+ * Fast JVM snapshots of the two battery cards, light AND dark: the cars-list
  * card ([VehicleCard]) and the car-view card ([HeroCard]), one image per
- * state (fresh, stale, asleep, disconnected, reading spinner, no reading).
+ * state (fresh, stale, asleep, disconnected, reading spinner, no reading) per
+ * theme. 24 PNGs total, named `<card>_<state>_light.png` /
+ * `<card>_<state>_dark.png` (theme is always the last segment).
  *
- * There are no committed goldens: `recordPaparazziDebug` renders the 12 PNGs
- * and the PR workflow diffs them before/after the pushed commit, posting only
- * what changed. Fixtures mirror the unit-test patterns (a fixed NOW, the same
- * [TeslaConnection]/[ChargeState]/[VehicleStatus] shapes), and the cards get a
- * fixed clock plus a forced spinner so the images are deterministic.
+ * There are no committed goldens: `recordPaparazziDebug` renders the PNGs
+ * and the PR workflow diffs them before/after the pushed commit, posting
+ * light by default and dark only when it differs too. Fixtures mirror the
+ * unit-test patterns (a fixed NOW, the same [TeslaConnection]/[ChargeState]/
+ * [VehicleStatus] shapes), and the cards get a fixed clock plus a forced
+ * spinner so the images are deterministic.
  */
 class CardSnapshots {
     @get:Rule
@@ -41,202 +45,195 @@ class CardSnapshots {
 
     @Test
     fun vehicleCardFresh() {
-        paparazzi.snapshot("vehicle-card_fresh") {
-            CardFrame {
-                VehicleCard(
-                    row = listRow(liveConnection(readAt = NOW - FRESH_MINUTES * MINUTE)),
-                    onOpen = {},
-                    onEditVin = {},
-                    onWake = {},
-                    nowMillis = NOW,
-                )
-            }
+        snapCard("vehicle-card_fresh") {
+            VehicleCard(
+                row = listRow(liveConnection(readAt = NOW - FRESH_MINUTES * MINUTE)),
+                onOpen = {},
+                onEditVin = {},
+                onWake = {},
+                nowMillis = NOW,
+            )
         }
     }
 
     @Test
     fun vehicleCardStale() {
-        paparazzi.snapshot("vehicle-card_stale") {
-            CardFrame {
-                VehicleCard(
-                    row = listRow(liveConnection(readAt = NOW - STALE_MINUTES * MINUTE)),
-                    onOpen = {},
-                    onEditVin = {},
-                    onWake = {},
-                    nowMillis = NOW,
-                )
-            }
+        snapCard("vehicle-card_stale") {
+            VehicleCard(
+                row = listRow(liveConnection(readAt = NOW - STALE_MINUTES * MINUTE)),
+                onOpen = {},
+                onEditVin = {},
+                onWake = {},
+                nowMillis = NOW,
+            )
         }
     }
 
     @Test
     fun vehicleCardAsleep() {
-        paparazzi.snapshot("vehicle-card_asleep") {
-            CardFrame {
-                VehicleCard(
-                    row = listRow(liveConnection(readAt = NOW - ASLEEP_MINUTES * MINUTE, status = asleep)),
-                    onOpen = {},
-                    onEditVin = {},
-                    onWake = {},
-                    nowMillis = NOW,
-                )
-            }
+        snapCard("vehicle-card_asleep") {
+            VehicleCard(
+                row = listRow(liveConnection(readAt = NOW - ASLEEP_MINUTES * MINUTE, status = asleep)),
+                onOpen = {},
+                onEditVin = {},
+                onWake = {},
+                nowMillis = NOW,
+            )
         }
     }
 
     @Test
     fun vehicleCardDisconnected() {
-        paparazzi.snapshot("vehicle-card_disconnected") {
-            CardFrame {
-                VehicleCard(
-                    row =
-                        listRow(
-                            TeslaConnection(
-                                address = ADDRESS,
-                                name = BLE_NAME,
-                                phase = ConnectionPhase.DISCONNECTED,
-                            ),
-                            lastKnown = storedSample(STALE_MINUTES),
-                        ),
-                    onOpen = {},
-                    onEditVin = {},
-                    onWake = {},
-                    nowMillis = NOW,
-                )
-            }
-        }
-    }
-
-    @Test
-    fun vehicleCardSpinner() {
-        paparazzi.snapshot("vehicle-card_spinner") {
-            CardFrame {
-                VehicleCard(
-                    row = listRow(liveConnection(readAt = NOW - FRESH_MINUTES * MINUTE, readInFlight = true)),
-                    onOpen = {},
-                    onEditVin = {},
-                    onWake = {},
-                    nowMillis = NOW,
-                    spinnerOverride = true,
-                )
-            }
-        }
-    }
-
-    @Test
-    fun vehicleCardNoReading() {
-        paparazzi.snapshot("vehicle-card_no-reading") {
-            CardFrame {
-                VehicleCard(
-                    row = listRow(liveConnection(charge = null)),
-                    onOpen = {},
-                    onEditVin = {},
-                    onWake = {},
-                    nowMillis = NOW,
-                )
-            }
-        }
-    }
-
-    @Test
-    fun heroCardFresh() {
-        paparazzi.snapshot("hero-card_fresh") {
-            CardFrame {
-                HeroCard(
-                    connection = liveConnection(readAt = NOW - FRESH_MINUTES * MINUTE),
-                    advert = advert,
-                    vehicle = vehicle,
-                    history = emptyList(),
-                    statusHistory = emptyList(),
-                    nowMillis = NOW,
-                )
-            }
-        }
-    }
-
-    @Test
-    fun heroCardStale() {
-        paparazzi.snapshot("hero-card_stale") {
-            CardFrame {
-                HeroCard(
-                    connection = liveConnection(readAt = NOW - STALE_MINUTES * MINUTE),
-                    advert = advert,
-                    vehicle = vehicle,
-                    history = emptyList(),
-                    statusHistory = emptyList(),
-                    nowMillis = NOW,
-                )
-            }
-        }
-    }
-
-    @Test
-    fun heroCardAsleep() {
-        paparazzi.snapshot("hero-card_asleep") {
-            CardFrame {
-                HeroCard(
-                    connection = liveConnection(readAt = NOW - ASLEEP_MINUTES * MINUTE, status = asleep),
-                    advert = advert,
-                    vehicle = vehicle,
-                    history = emptyList(),
-                    statusHistory = emptyList(),
-                    nowMillis = NOW,
-                )
-            }
-        }
-    }
-
-    @Test
-    fun heroCardDisconnected() {
-        paparazzi.snapshot("hero-card_disconnected") {
-            CardFrame {
-                HeroCard(
-                    connection =
+        snapCard("vehicle-card_disconnected") {
+            VehicleCard(
+                row =
+                    listRow(
                         TeslaConnection(
                             address = ADDRESS,
                             name = BLE_NAME,
                             phase = ConnectionPhase.DISCONNECTED,
                         ),
-                    advert = advert,
-                    vehicle = vehicle,
-                    history = listOf(storedSample(STALE_MINUTES)),
-                    statusHistory = emptyList(),
-                    nowMillis = NOW,
-                )
-            }
+                        lastKnown = storedSample(STALE_MINUTES),
+                    ),
+                onOpen = {},
+                onEditVin = {},
+                onWake = {},
+                nowMillis = NOW,
+            )
+        }
+    }
+
+    @Test
+    fun vehicleCardSpinner() {
+        snapCard("vehicle-card_spinner") {
+            VehicleCard(
+                row = listRow(liveConnection(readAt = NOW - FRESH_MINUTES * MINUTE, readInFlight = true)),
+                onOpen = {},
+                onEditVin = {},
+                onWake = {},
+                nowMillis = NOW,
+                spinnerOverride = true,
+            )
+        }
+    }
+
+    @Test
+    fun vehicleCardNoReading() {
+        snapCard("vehicle-card_no-reading") {
+            VehicleCard(
+                row = listRow(liveConnection(charge = null)),
+                onOpen = {},
+                onEditVin = {},
+                onWake = {},
+                nowMillis = NOW,
+            )
+        }
+    }
+
+    @Test
+    fun heroCardFresh() {
+        snapCard("hero-card_fresh") {
+            HeroCard(
+                connection = liveConnection(readAt = NOW - FRESH_MINUTES * MINUTE),
+                advert = advert,
+                vehicle = vehicle,
+                history = emptyList(),
+                statusHistory = emptyList(),
+                nowMillis = NOW,
+            )
+        }
+    }
+
+    @Test
+    fun heroCardStale() {
+        snapCard("hero-card_stale") {
+            HeroCard(
+                connection = liveConnection(readAt = NOW - STALE_MINUTES * MINUTE),
+                advert = advert,
+                vehicle = vehicle,
+                history = emptyList(),
+                statusHistory = emptyList(),
+                nowMillis = NOW,
+            )
+        }
+    }
+
+    @Test
+    fun heroCardAsleep() {
+        snapCard("hero-card_asleep") {
+            HeroCard(
+                connection = liveConnection(readAt = NOW - ASLEEP_MINUTES * MINUTE, status = asleep),
+                advert = advert,
+                vehicle = vehicle,
+                history = emptyList(),
+                statusHistory = emptyList(),
+                nowMillis = NOW,
+            )
+        }
+    }
+
+    @Test
+    fun heroCardDisconnected() {
+        snapCard("hero-card_disconnected") {
+            HeroCard(
+                connection =
+                    TeslaConnection(
+                        address = ADDRESS,
+                        name = BLE_NAME,
+                        phase = ConnectionPhase.DISCONNECTED,
+                    ),
+                advert = advert,
+                vehicle = vehicle,
+                history = listOf(storedSample(STALE_MINUTES)),
+                statusHistory = emptyList(),
+                nowMillis = NOW,
+            )
         }
     }
 
     @Test
     fun heroCardSpinner() {
-        paparazzi.snapshot("hero-card_spinner") {
-            CardFrame {
-                HeroCard(
-                    connection = liveConnection(readAt = NOW - FRESH_MINUTES * MINUTE, readInFlight = true),
-                    advert = advert,
-                    vehicle = vehicle,
-                    history = emptyList(),
-                    statusHistory = emptyList(),
-                    nowMillis = NOW,
-                    spinnerOverride = true,
-                )
-            }
+        snapCard("hero-card_spinner") {
+            HeroCard(
+                connection = liveConnection(readAt = NOW - FRESH_MINUTES * MINUTE, readInFlight = true),
+                advert = advert,
+                vehicle = vehicle,
+                history = emptyList(),
+                statusHistory = emptyList(),
+                nowMillis = NOW,
+                spinnerOverride = true,
+            )
         }
     }
 
     @Test
     fun heroCardNoReading() {
-        paparazzi.snapshot("hero-card_no-reading") {
-            CardFrame {
-                HeroCard(
-                    connection = liveConnection(charge = null),
-                    advert = advert,
-                    vehicle = vehicle,
-                    history = emptyList(),
-                    statusHistory = emptyList(),
-                    nowMillis = NOW,
-                )
-            }
+        snapCard("hero-card_no-reading") {
+            HeroCard(
+                connection = liveConnection(charge = null),
+                advert = advert,
+                vehicle = vehicle,
+                history = emptyList(),
+                statusHistory = emptyList(),
+                nowMillis = NOW,
+            )
+        }
+    }
+
+    /**
+     * One state, two images: the card in the fixed light scheme and in the
+     * fixed dark scheme. The theme is always the last name segment, so the
+     * workflow can group by state.
+     */
+    private fun snapCard(
+        name: String,
+        content: @Composable () -> Unit,
+    ) {
+        paparazzi.snapshot(name + "_light") {
+            CardFrame(darkTheme = false, content = content)
+        }
+        paparazzi.snapshot(name + "_dark") {
+            CardFrame(darkTheme = true, content = content)
         }
     }
 
@@ -318,13 +315,16 @@ class CardSnapshots {
 }
 
 /**
- * The snapshot frame: a fixed light scheme (never the dynamic color, which
- * Paparazzi has no real context for) plus a surface, so the cards render
- * exactly as they would on a light phone screen.
+ * The snapshot frame: a fixed light or dark scheme (never the dynamic color,
+ * which Paparazzi has no real context for) plus a surface, so the cards
+ * render exactly as they would on a matching phone screen.
  */
 @Composable
-private fun CardFrame(content: @Composable () -> Unit) {
-    MaterialTheme(colorScheme = lightColorScheme()) {
+private fun CardFrame(
+    darkTheme: Boolean,
+    content: @Composable () -> Unit,
+) {
+    MaterialTheme(colorScheme = if (darkTheme) darkColorScheme() else lightColorScheme()) {
         Surface {
             Column(
                 modifier =

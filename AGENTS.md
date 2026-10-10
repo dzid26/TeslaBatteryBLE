@@ -16,7 +16,7 @@ Master plan: `docs/master-plan.md` — read it first and update its checkboxes w
 - `.\gradlew :core:test` — protocol tests. Must pass before any commit touching `core`.
 - `.\gradlew :app:assembleDebug` — debug APK.
 - `.\gradlew :app:lintDebug` — Android lint (once wired into CI).
-- CI (`.github/workflows/android.yml`): core tests, debug build, Go fixture diff, rolling preview release. `demo-smoke.yml` is the daily/manual capture canary. `pr-screenshots.yml` (UI PRs) and `website-preview.yml` (`website/**` PRs) capture without secrets; `pr-screenshots-comment.yml` and `website-preview-comment.yml` post the results as PR comments from the default branch.
+- CI (`.github/workflows/android.yml`): core tests, debug build, Go fixture diff, rolling preview release. `demo-smoke.yml` is the daily/manual capture canary. `pr-paparazzi.yml` (UI PRs) renders the card snapshots (light + dark) and diffs them before/after the pushed commit without secrets; `pr-paparazzi-comment.yml` posts the diffs as PR comments from the default branch. `pr-screenshots.yml` stays as a manual full-screen emulator fallback (`workflow_dispatch` only). `website-preview.yml` (`website/**` PRs) captures without secrets; `website-preview-comment.yml` posts the results as PR comments from the default branch.
 - `actionlint.yml` (Workflow lint): actionlint, with shellcheck on `run:` steps, plus shellcheck on `.github/scripts/*.sh`, whenever `.github/workflows/**` or `.github/scripts/**` changes. It never builds the app.
 
 ## Conventions
