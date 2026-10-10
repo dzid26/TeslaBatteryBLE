@@ -89,10 +89,12 @@ internal object DemoHistory {
                 addAll(segment(1860, 1440, 60, 58, 60, ChargingStateKind.Disconnected))
                 // Third charge: the four-hour AC session to the limit.
                 addAll(segment(1440, 1200, 58, 85, 10, ChargingStateKind.Charging))
-                // Complete at the limit, then the slow parked drain to 78%.
+                // Complete at the limit, then the slow parked drain to 72%.
                 add(Point(1200, 85, ChargingStateKind.Complete))
-                addAll(segment(1140, 360, 84, 80, 60, ChargingStateKind.Disconnected))
-                addAll(segment(360, 10, 80, 78, 30, ChargingStateKind.Disconnected))
+                addAll(segment(1140, 60, 84, 72, 60, ChargingStateKind.Disconnected))
+                // Plugged in for a top-up: the live reads continue this run, so
+                // the chart shows charging samples and the projected limit line.
+                addAll(segment(60, 10, 72, 78, 10, ChargingStateKind.Charging))
             }
         // A segment's end and the next segment's start share a timestamp; keep
         // the newer one so a charge session starts on its own first sample.
