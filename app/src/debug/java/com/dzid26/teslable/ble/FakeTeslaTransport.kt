@@ -119,7 +119,7 @@ class FakeTeslaTransport(
          * instead of the fake's artificially fast samples.
          */
         const val DISCHARGE_MS = 60 * 60_000L
-        const val CHARGE_MS = 60_000L
+        const val CHARGE_MS = 180_000L
         const val LATENCY_MS = 80L
     }
 }
