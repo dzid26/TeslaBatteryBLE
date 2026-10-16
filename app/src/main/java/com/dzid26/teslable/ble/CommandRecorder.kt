@@ -3,9 +3,9 @@
 package com.dzid26.teslable.ble
 
 import com.dzid26.teslable.core.history.Command
+import com.dzid26.teslable.core.history.CommandRecords
 import com.dzid26.teslable.core.history.CommandResult
-import com.dzid26.teslable.core.protocol.CommandRecords
-import com.dzid26.teslable.core.protocol.domain
+import com.dzid26.teslable.core.history.domain
 import com.dzid26.teslable.history.HistoryStore
 import com.tesla.generated.universalmessage.Domain
 import com.tesla.generated.universalmessage.MessageStatus

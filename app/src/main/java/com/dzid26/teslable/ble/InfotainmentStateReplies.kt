@@ -2,13 +2,13 @@
 
 package com.dzid26.teslable.ble
 
-import com.dzid26.teslable.core.protocol.InfotainmentPollPolicy
-import com.dzid26.teslable.core.protocol.ShiftStateKind
-import com.dzid26.teslable.core.protocol.TeslaCommands
-import com.dzid26.teslable.core.protocol.climateOn
-import com.dzid26.teslable.core.protocol.sentryOn
-import com.dzid26.teslable.core.protocol.shiftStateKind
+import com.dzid26.teslable.core.infotainment.InfotainmentPollPolicy
 import com.dzid26.teslable.history.HistoryStore
+import com.dzid26.teslable.protocol.ShiftStateKind
+import com.dzid26.teslable.protocol.TeslaCommands
+import com.dzid26.teslable.protocol.climateOn
+import com.dzid26.teslable.protocol.sentryOn
+import com.dzid26.teslable.protocol.shiftStateKind
 import java.time.Instant
 
 /**

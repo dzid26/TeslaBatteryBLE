@@ -11,8 +11,8 @@
 set -euo pipefail
 
 case "${1:-all}" in
-  tests) ./gradlew :core:test :app:testDebugUnitTest ;;
+  tests) ./gradlew :protocol:test :core:test :app:testDebugUnitTest ;;
   static) ./gradlew :app:lintDebug :app:lintRelease ktlintCheck detektMain detektTest ;;
-  all) ./gradlew :core:test :app:testDebugUnitTest :app:lintDebug :app:lintRelease ktlintCheck detektMain detektTest ;;
+  all) ./gradlew :protocol:test :core:test :app:testDebugUnitTest :app:lintDebug :app:lintRelease ktlintCheck detektMain detektTest ;;
   *) echo "usage: verify.sh [tests|static|all]" >&2; exit 2 ;;
 esac

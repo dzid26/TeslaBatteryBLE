@@ -71,7 +71,7 @@ identity), `docs/requirements/multi-phone.md`
     and stay as assigned; `rssi`, `connection_event`, `closures_state`,
     `climate_state` and the three app kinds took the next free ones.
 
-  Tesla's vendored protos (`core/src/main/proto`, pinned by `TESLA_COMMIT`)
+  Tesla's vendored protos (`protocol/src/main/proto`, pinned by `TESLA_COMMIT`)
   stay untouched; ours sit in a second Wire source root, so a re-vendor never
   touches it. This amends ADR-0006's "no custom proto, no envelope".
 - **Car timestamps are untouched.** Phone time lives only in `device_timestamp`:

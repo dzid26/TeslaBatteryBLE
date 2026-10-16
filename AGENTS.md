@@ -1,19 +1,20 @@
 # Agent guide
 
-TeslaBatteryBLE: Android app + pure-JVM Tesla BLE protocol core.
+TeslaBatteryBLE: Android app + pure-JVM Tesla BLE protocol library.
 License: AGPL-3.0-only (`LICENSE`, `THIRD_PARTY_NOTICES.md`).
 Master plan: `docs/master-plan.md` — read it first and update its checkboxes when work lands.
 
 ## Layout
 
 - `app/` — Android UI (Compose), BLE integration, foreground service. minSdk 27.
-- `core/` — protocol core (Kotlin/JVM, Wire protos). **No Android dependencies allowed.**
+- `protocol/` — Tesla BLE protocol (Kotlin/JVM, Wire protos): framing, keys, pairing, sessions, commands. Knows nothing of the battery app, so it can ship as a library. **No Android dependencies allowed.**
+- `core/` — battery domain (history, health, the app's own records) on top of `protocol`. **No Android dependencies allowed.**
 - `tools/go-fixtures/` — fixture generator run against `teslamotors/vehicle-command`; `expected.txt` is diffed in CI.
 - `docs/` — master plan, ADRs, protocol notes.
 
 ## Commands
 
-- `.\gradlew :core:test` — protocol tests. Must pass before any commit touching `core`.
+- `.\gradlew :protocol:test :core:test` — protocol and battery-domain tests. Must pass before any commit touching `protocol` or `core`.
 - `.\gradlew :app:assembleDebug` — debug APK.
 - `.\gradlew :app:lintDebug` — Android lint (once wired into CI).
 - CI (`.github/workflows/android.yml`): core tests, debug build, release smoke test (`assembleSmoke -PdemoCar=true`: the minified release build plus the simulated car, driven on an emulator), Go fixture diff, rolling preview release (tag releases take their screenshots from the Paparazzi full-screen snapshots and require a green smoke test for the tagged commit). `pr-paparazzi.yml` (UI PRs) renders the card snapshots (light + dark) and diffs them against the PR's merge base with main without secrets; `pr-paparazzi-comment.yml` posts the diffs as PR comments from the default branch. `website-preview.yml` (`website/**` PRs) captures without secrets; `website-preview-comment.yml` posts the results as PR comments from the default branch.
@@ -24,7 +25,7 @@ Master plan: `docs/master-plan.md` — read it first and update its checkboxes w
 - Kotlin official style; match the surrounding code. Commits and PR titles use Conventional Commits prefixes (`feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `ci`, ...) with an imperative subject (`fix: retry the handshake after a stale session`).
 - Protocol changes require test vectors derived from the Go implementation. Never hand-edit `expected.txt`.
 - Never log VINs, private keys, session keys, or decrypted payloads.
-- `core` stays multiplatform-ready: no Android, no new `java.*`/`javax.*` imports in portable logic — platform capabilities go through seams per ADR-0007.
+- `protocol` and `core` stay multiplatform-ready: no Android, no new `java.*`/`javax.*` imports in portable logic — platform capabilities go through seams per ADR-0007.
 - New source files get `SPDX-License-Identifier: AGPL-3.0-only`.
 - User-visible changes update the README; architecture decisions get an ADR in `docs/adr/`. Release notes are generated from commits at tag time; there is no hand-edited changelog, so pull requests never collide on one.
 - Pre-1.0: no back-compat or migration code for states that only exist on old betas or dev machines; change formats freely and document the reset (re-pair / reinstall).

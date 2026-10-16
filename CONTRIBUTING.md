@@ -11,7 +11,7 @@ bug reports.
 3. Clone and build:
 
 ```bash
-./gradlew :core:test                # protocol tests, no device required
+./gradlew :protocol:test :core:test # protocol and battery tests, no device required
 ./gradlew :app:testDebugUnitTest    # app tests against the simulated car
 ./gradlew :app:assembleDebug
 ```
@@ -23,7 +23,8 @@ find it (`sdk.dir=...`).
 
 | Path | What |
 | --- | --- |
-| `core/` | Pure-JVM protocol core (framing, session, pairing, VCSEC/Infotainment). **No Android dependencies** — keep it multiplatform-ready. |
+| `protocol/` | Pure-JVM Tesla BLE protocol (framing, session, pairing, VCSEC/Infotainment). **No Android dependencies** and nothing app-specific — keep it multiplatform-ready and library-shaped. |
+| `core/` | Battery domain (history, health, the app's log records) on top of `protocol`. **No Android dependencies.** |
 | `app/` | Compose UI, BLE integration, foreground service, storage. |
 | `app/src/debug/` | Simulated car for development and screenshots (no hardware needed). |
 | `tools/go-fixtures/` | Fixture generator diffed against `teslamotors/vehicle-command` in CI. |
@@ -35,7 +36,7 @@ find it (`sdk.dir=...`).
   `tools/go-fixtures/expected.txt` — regenerate it from the Go implementation.
 - New app logic should be covered by unit tests against the simulated car where
   possible; hardware-only paths should say so in the PR.
-- CI must be green: `:core:test`, `:app:testDebugUnitTest`, `:app:lintDebug`,
+- CI must be green: `:protocol:test`, `:core:test`, `:app:testDebugUnitTest`, `:app:lintDebug`,
   `:app:assembleDebug`, and the Go-fixture diff.
 
 ## Code style

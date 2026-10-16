@@ -18,33 +18,23 @@ kotlin {
 }
 
 dependencies {
-    implementation(libs.wire.runtime)
-    implementation(libs.cryptography.core)
-    implementation(libs.cryptography.provider.jdk)
+    // The records and history read Tesla's messages, which :protocol generates.
+    api(project(":protocol"))
     testImplementation(libs.junit)
     // New tests use kotlin.test so they can move to commonTest (ADR-0007).
     testImplementation(kotlin("test"))
 }
 
 wire {
-    // Tesla's protos, vendored verbatim and pinned by TESLA_COMMIT.
-    sourcePath {
-        srcDir("src/main/proto")
-    }
-    // The app's own records (ADR-0008) live in a second root, so a re-vendor
-    // of Tesla's protos never touches them.
+    // The app's own records (ADR-0008). They import Tesla's protos, which
+    // :protocol vendors and generates; here they only resolve the imports.
     sourcePath {
         srcDir("src/main/proto-teslable")
     }
-    kotlin {
+    protoPath {
+        srcDir("../protocol/src/main/proto")
     }
-}
-
-// GoVectorTest reads the vectors that the go-vectors CI job regenerates from
-// vehicle-command and diffs, so the Kotlin test can't drift from them.
-tasks.processTestResources {
-    from(rootProject.file("tools/go-fixtures/expected.txt")) {
-        into("go-fixtures")
+    kotlin {
     }
 }
 

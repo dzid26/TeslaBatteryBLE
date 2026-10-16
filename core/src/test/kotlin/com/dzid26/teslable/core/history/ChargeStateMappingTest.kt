@@ -2,7 +2,7 @@
 
 package com.dzid26.teslable.core.history
 
-import com.dzid26.teslable.core.protocol.ChargingStateKind
+import com.dzid26.teslable.protocol.ChargingStateKind
 import com.tesla.generated.carserver.common.Void
 import com.tesla.generated.carserver.vehicle.ChargeState
 import org.junit.Assert.assertEquals

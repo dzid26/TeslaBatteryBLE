@@ -3,7 +3,7 @@
 
 Cloud data comes from Tesla's Fleet Telemetry protos (teslamotors/fleet-telemetry,
 vendored and pinned under tools/signal-matrix/upstream/fleet-telemetry/). BLE data
-comes from the protos pinned in core/src/main/proto (teslamotors/vehicle-command).
+comes from the protos pinned in protocol/src/main/proto (teslamotors/vehicle-command).
 
 The curated cross-map lives in mapping.json. This script validates it against both
 proto catalogs and emits docs/reference/fleet-telemetry-vs-ble.md.
@@ -32,7 +32,7 @@ MAPPING = TOOL_DIR / "mapping.json"
 FT_DIR = TOOL_DIR / "upstream" / "fleet-telemetry"
 FT_PIN = FT_DIR / "FLEET_TELEMETRY_COMMIT"
 DOCS_TSV = TOOL_DIR / "upstream" / "tesla-docs" / "available-data.tsv"
-TESLA_COMMIT = REPO / "core" / "src" / "main" / "proto" / "TESLA_COMMIT"
+TESLA_COMMIT = REPO / "protocol" / "src" / "main" / "proto" / "TESLA_COMMIT"
 
 FT_API = "https://api.github.com/repos/teslamotors/fleet-telemetry"
 VC_API = "https://api.github.com/repos/teslamotors/vehicle-command"
@@ -449,7 +449,7 @@ def render(mapping, cloud_fields, ble_messages, docs):
     w("**Scope.** Cloud side: signals defined in Tesla's Fleet Telemetry protos "
       "(`teslamotors/fleet-telemetry/protos`, the data streamed to a telemetry server and the "
       "same vehicle data the Fleet API exposes as JSON). BLE side: messages in Tesla's "
-      "vehicle-command protobufs as pinned in `core/src/main/proto`, which is what this app can "
+      "vehicle-command protobufs as pinned in `protocol/src/main/proto`, which is what this app can "
       "read locally without any cloud connection.")
     w("")
     for note in mapping.get("summary_notes", []):
@@ -606,7 +606,7 @@ def render(mapping, cloud_fields, ble_messages, docs):
       "changes.")
     w("- New upstream signals appear under *Unreviewed upstream signals* until mapping.json is "
       "updated — that is the review queue.")
-    w("- BLE protos are **not** auto-bumped: `core/src/main/proto` is pinned to `TESLA_COMMIT` "
+    w("- BLE protos are **not** auto-bumped: `protocol/src/main/proto` is pinned to `TESLA_COMMIT` "
       "and upgrades are deliberate, tested changes. The workflow reports when upstream moves "
       "ahead of the pin.")
     w("- Regenerate locally: `python tools/signal-matrix/generate.py`; "
