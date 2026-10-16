@@ -53,12 +53,18 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.dzid26.teslable.EnergyPriceStore
+import com.dzid26.teslable.R
 import com.dzid26.teslable.UnitStore
 import com.dzid26.teslable.ble.BatteryPercent
 import com.dzid26.teslable.ble.BleUiState
@@ -81,11 +87,13 @@ import com.dzid26.teslable.core.history.FullRangeScaleEstimator
 import com.dzid26.teslable.core.history.HistoryRange
 import com.dzid26.teslable.core.history.ProjectionContext
 import com.dzid26.teslable.core.history.StatusSample
+import com.dzid26.teslable.core.history.TENTHS_PER_PERCENT
 import com.dzid26.teslable.core.history.chargeProjection
 import com.dzid26.teslable.core.history.chargeStats
 import com.dzid26.teslable.core.history.compactDuration
 import com.dzid26.teslable.core.history.dischargeProjection
 import com.dzid26.teslable.core.history.soc
+import com.dzid26.teslable.core.history.socTenths
 import com.dzid26.teslable.core.history.statusDurations
 import com.dzid26.teslable.core.history.within
 import com.dzid26.teslable.core.protocol.ChargingStateKind
@@ -442,22 +450,26 @@ private fun SocBlock(
         return
     }
     val color = if (reading.stale) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.primary
-    // The number, the "%", and the reading's age share one text baseline.
     // The fitted tenth is drawn small beside the "%", like the cents of a price.
-    val tenths = scale?.socPercent(rangeMiles)?.let { (it * TENTHS_PER_PERCENT).roundToInt() }
-    Row(verticalAlignment = Alignment.Bottom) {
+    // One text node keeps one baseline and the digit order in right-to-left
+    // locales; the age and range share the row's baseline.
+    val tenths = scale?.socPercent(rangeMiles)?.let(::socTenths)
+    val separator = remember { DecimalFormatSymbols.getInstance().decimalSeparator }
+    val percentStyle = MaterialTheme.typography.headlineSmall.toSpanStyle()
+    val socText =
+        buildAnnotatedString {
+            append("${tenths?.div(TENTHS_PER_PERCENT) ?: reading.value}")
+            withStyle(percentStyle) { append(tenths?.let { "$separator${it % TENTHS_PER_PERCENT}%" } ?: "%") }
+        }
+    val spoken = tenths?.let { "${it / TENTHS_PER_PERCENT}$separator${it % TENTHS_PER_PERCENT}" } ?: "${reading.value}"
+    val description = stringResource(R.string.soc_description, spoken)
+    Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.semantics(mergeDescendants = true) {}) {
         Text(
-            text = "${tenths?.div(TENTHS_PER_PERCENT) ?: reading.value}",
+            text = socText,
             style = MaterialTheme.typography.displayLarge,
             fontWeight = FontWeight.SemiBold,
             color = color,
-            modifier = Modifier.alignByBaseline(),
-        )
-        Text(
-            text = tenths?.let { ".${it % TENTHS_PER_PERCENT}%" } ?: "%",
-            style = MaterialTheme.typography.headlineSmall,
-            color = color,
-            modifier = Modifier.alignByBaseline(),
+            modifier = Modifier.alignByBaseline().semantics { contentDescription = description },
         )
         reading.ageLabel(nowMillis, connection)?.let { age ->
             Text(
@@ -1002,5 +1014,3 @@ private fun formatPercent(value: Float): String {
     val rounded = value.roundToInt()
     return if (rounded.toFloat() == value) "$rounded" else String.format(Locale.getDefault(), "%.1f", value)
 }
-
-private const val TENTHS_PER_PERCENT = 10

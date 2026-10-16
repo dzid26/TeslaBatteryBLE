@@ -93,4 +93,14 @@ class FullRangeScaleTest {
                 ?.pinned == true,
         )
     }
+
+    @Test
+    fun `tenths split a soc cleanly`() {
+        assertEquals(0, socTenths(0f))
+        assertEquals(51, socTenths(5.05f))
+        assertEquals(620, socTenths(62f))
+        assertEquals(624, socTenths(62.4f))
+        assertEquals(1000, socTenths(99.96f))
+        assertEquals(1000, socTenths(100f))
+    }
 }
