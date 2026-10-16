@@ -60,12 +60,32 @@ ADR-0004 (cut-off trigger), issue #123, `docs/master-plan.md` (TeslaMate export)
 - **Format versioning.** Summary files carry a version from day one, since the
   cut-off in ADR-0004 will make format changes costly.
 
+## Privacy: navigation data in the raw drive log
+
+The raw `<car>.drive.pblog` stores each DriveState reply verbatim (ADR-0008),
+and while the car navigates that includes `active_route_destination` (a name)
+and `active_route_coordinates` (the destination's latitude and longitude). Both
+are location data. Nothing in the app reads them today, and the destination
+stats read model (#207) deliberately does not keep them, but the raw log does.
+
+- Age-based retention bounds how long they stay on the phone (N days) but does
+  not remove them sooner.
+- Summaries never carry them: they hold range, energy and odometer figures only.
+- Export is where they would leave the phone, so the raw export should strip
+  the destination name and coordinates by default (an opt-in could keep them),
+  and the TeslaMate sync must not send them.
+- The coordinates could also be dropped at write time, because no feature needs
+  them. That changes the raw-log rule (ADR-0006: log what the car sends) and is
+  the owner's decision, not part of this ADR.
+
 ## Open choices (for the owner)
 
 1. N: 30 days recommended; 7 and 90 are the alternatives considered.
 2. Count backstop value (200,000 recommended).
 3. Whether the raw window of the command and app-state logs follows the same N
    (recommended: yes, they share the cap code today).
+4. Navigation destination and coordinates in the raw drive log: keep as logged
+   but strip on export (recommended), or drop them when the record is written?
 
 ## Consequences
 
