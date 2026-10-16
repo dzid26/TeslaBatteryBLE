@@ -8,17 +8,18 @@ import com.dzid26.teslable.core.TeslaNames
 import com.dzid26.teslable.core.history.AppState
 import com.dzid26.teslable.core.history.BatterySample
 import com.dzid26.teslable.core.history.Command
+import com.dzid26.teslable.core.history.CommandRecords
 import com.dzid26.teslable.core.history.ConnectionEvent
 import com.dzid26.teslable.core.history.DriveSample
 import com.dzid26.teslable.core.history.StatusSample
 import com.dzid26.teslable.core.protocol.AntiReplayWindow
-import com.dzid26.teslable.core.protocol.CommandRecords
 import com.dzid26.teslable.core.protocol.InfotainmentPollPolicy
 import com.dzid26.teslable.core.protocol.InfotainmentSessionGate
 import com.dzid26.teslable.core.protocol.PairingFlow
 import com.dzid26.teslable.core.protocol.PairingHost
 import com.dzid26.teslable.core.protocol.PairingKeys
 import com.dzid26.teslable.core.protocol.PairingPhase
+import com.dzid26.teslable.core.protocol.PairingReason
 import com.dzid26.teslable.core.protocol.PairingTimer
 import com.dzid26.teslable.core.protocol.SessionHandshake
 import com.dzid26.teslable.core.protocol.SessionHost
@@ -811,9 +812,9 @@ class TeslaBleController(
 
                 override fun transmitVcsec(
                     request: ByteArray,
-                    reason: Command.Reason,
+                    reason: PairingReason,
                 ) {
-                    this@VehicleLink.transmitVcsec(request, reason)
+                    this@VehicleLink.transmitVcsec(request, CommandRecords.reasonOf(reason))
                 }
 
                 override fun transmitAddKey(request: ByteArray): Boolean =
