@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 package com.dzid26.teslable.core.protocol
 
-import com.dzid26.teslable.core.history.Command
 import com.tesla.generated.universalmessage.RoutableMessage
 import com.tesla.generated.vcsec.CommandStatus
 import com.tesla.generated.vcsec.FromVCSECMessage
@@ -82,7 +81,7 @@ class PairingFlowTest {
 
         assertEquals(PairingPhase.OK, flow.phase)
         assertEquals(1, host.confirmed)
-        assertEquals(Command.Reason.KEY_LOOKUP, host.vcsecRequests.last().second)
+        assertEquals(PairingReason.KEY_LOOKUP, host.vcsecRequests.last().second)
         assertFalse(PairingTimer.RESPONSE_TIMEOUT in host.timers)
     }
 
@@ -110,7 +109,7 @@ class PairingFlowTest {
         assertEquals(1, host.freshlyEnrolled)
         assertEquals(1, host.confirmed)
         // The slot lookup starts with the slot the key's list position points at.
-        assertEquals(Command.Reason.KEY_LOOKUP, host.vcsecRequests.last().second)
+        assertEquals(PairingReason.KEY_LOOKUP, host.vcsecRequests.last().second)
     }
 
     @Test
@@ -295,7 +294,7 @@ class PairingFlowTest {
         var confirmed = 0
         var freshlyEnrolled = 0
         val logs = mutableListOf<String>()
-        val vcsecRequests = mutableListOf<Pair<ByteArray, Command.Reason>>()
+        val vcsecRequests = mutableListOf<Pair<ByteArray, PairingReason>>()
         val addKeyRequests = mutableListOf<ByteArray>()
         val keySlots = mutableListOf<Int?>()
         val timers = mutableMapOf<PairingTimer, Long>()
@@ -306,7 +305,7 @@ class PairingFlowTest {
 
         override fun transmitVcsec(
             request: ByteArray,
-            reason: Command.Reason,
+            reason: PairingReason,
         ) {
             vcsecRequests += request to reason
         }

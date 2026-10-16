@@ -1,8 +1,16 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
-package com.dzid26.teslable.core.protocol
+package com.dzid26.teslable.core.history
 
-import com.dzid26.teslable.core.history.Command
+import com.dzid26.teslable.core.protocol.InfotainmentPollPolicy
+import com.dzid26.teslable.core.protocol.PairingReason
+import com.dzid26.teslable.core.protocol.TeslaCommands
+import com.dzid26.teslable.core.protocol.TeslaPairing
+import com.dzid26.teslable.core.protocol.TeslaSessionRequests
+import com.dzid26.teslable.core.protocol.TeslaVcsec
+import com.dzid26.teslable.core.protocol.isRefusal
+import com.dzid26.teslable.core.protocol.isStaleSession
+import com.dzid26.teslable.core.protocol.isUnknownKey
 import com.tesla.generated.carserver.server.ActionStatus
 import com.tesla.generated.carserver.server.Response
 import com.tesla.generated.universalmessage.Domain
@@ -32,6 +40,12 @@ class CommandRecordsTest {
         assertEquals(Command.Reason.REASON_UNSPECIFIED, CommandRecords.reasonOf(null))
         val mapped = InfotainmentPollPolicy.Reason.entries.map { CommandRecords.reasonOf(it) }
         assertEquals(mapped.size, mapped.toSet().size, "no two poll reasons share a command reason")
+    }
+
+    @Test
+    fun `every pairing reason maps onto its own command reason`() {
+        assertEquals(Command.Reason.PAIRING, CommandRecords.reasonOf(PairingReason.PAIRING))
+        assertEquals(Command.Reason.KEY_LOOKUP, CommandRecords.reasonOf(PairingReason.KEY_LOOKUP))
     }
 
     @Test

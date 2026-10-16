@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-package com.dzid26.teslable.core.protocol
+package com.dzid26.teslable.core.history
 
-import com.dzid26.teslable.core.history.Command
-import com.dzid26.teslable.core.history.CommandResult
+import com.dzid26.teslable.core.protocol.InfotainmentPollPolicy
+import com.dzid26.teslable.core.protocol.PairingReason
+import com.dzid26.teslable.core.protocol.isRefusal
 import com.squareup.wire.Message
 import com.squareup.wire.ProtoAdapter
 import com.tesla.generated.carserver.server.Action
 import com.tesla.generated.carserver.server.ActionStatus
 import com.tesla.generated.carserver.server.Response
 import com.tesla.generated.universalmessage.Domain
-import com.tesla.generated.universalmessage.MessageFault_E
 import com.tesla.generated.universalmessage.MessageStatus
 import com.tesla.generated.universalmessage.RoutableMessage
 import com.tesla.generated.universalmessage.SessionInfoRequest
@@ -18,9 +18,6 @@ import com.tesla.generated.vcsec.FromVCSECMessage
 import com.tesla.generated.vcsec.PublicKey
 import com.tesla.generated.vcsec.ToVCSECMessage
 import com.tesla.generated.vcsec.UnsignedMessage
-import com.tesla.generated.carserver.server.OperationStatus_E as CarServerStatus
-import com.tesla.generated.universalmessage.OperationStatus_E as MessageOperationStatus
-import com.tesla.generated.vcsec.OperationStatus_E as VcsecStatus
 
 /**
  * What the command log (ADR-0008) keeps of a request and of the car's refusal. The request builders
@@ -39,6 +36,13 @@ object CommandRecords {
             InfotainmentPollPolicy.Reason.HOLD -> Command.Reason.POLICY_HOLD
             InfotainmentPollPolicy.Reason.SAFETY -> Command.Reason.POLICY_SAFETY
             null -> Command.Reason.REASON_UNSPECIFIED
+        }
+
+    /** The command log's reason for a key-list or key-slot request the pairing flow sent. */
+    fun reasonOf(reason: PairingReason): Command.Reason =
+        when (reason) {
+            PairingReason.PAIRING -> Command.Reason.PAIRING
+            PairingReason.KEY_LOOKUP -> Command.Reason.KEY_LOOKUP
         }
 
     /** A VCSEC request given as the plain `UnsignedMessage` (the wake request). */
@@ -170,41 +174,3 @@ val Command.domain: Domain?
             infotainment != null -> Domain.DOMAIN_INFOTAINMENT
             else -> session_info?.to_destination?.domain
         }
-
-/** Whether the car refused an Infotainment action. */
-val ActionStatus.isRefusal: Boolean
-    get() = result != CarServerStatus.OPERATIONSTATUS_OK
-
-/** Whether VCSEC refused a command. Waiting for the NFC card is not a refusal. */
-val CommandStatus.isRefusal: Boolean
-    get() = operationStatus == VcsecStatus.OPERATIONSTATUS_ERROR
-
-/** Whether the message itself was rejected: an error status or any fault. */
-val MessageStatus.isRefusal: Boolean
-    get() =
-        operation_status == MessageOperationStatus.OPERATIONSTATUS_ERROR ||
-            signed_message_fault != MessageFault_E.MESSAGEFAULT_ERROR_NONE
-
-/**
- * Whether the car rejected the message because our session with that domain is stale: the car
- * rotated its epoch, lost our counter or its clock moved on (after sleep or an infotainment
- * reboot). The car asks the client to take new session info and try again; every later request
- * on the old session fails the same way.
- */
-val MessageStatus.isStaleSession: Boolean
-    get() = signed_message_fault in STALE_SESSION_FAULTS
-
-/**
- * Whether the car does not know the key that signed the message: the owner removed this phone's
- * key (ADR-0005's theft recovery), so no session can recover and the car must be paired again.
- */
-val MessageStatus.isUnknownKey: Boolean
-    get() = signed_message_fault == MessageFault_E.MESSAGEFAULT_ERROR_UNKNOWN_KEY_ID
-
-private val STALE_SESSION_FAULTS =
-    setOf(
-        MessageFault_E.MESSAGEFAULT_ERROR_INVALID_SIGNATURE,
-        MessageFault_E.MESSAGEFAULT_ERROR_INVALID_TOKEN_OR_COUNTER,
-        MessageFault_E.MESSAGEFAULT_ERROR_INCORRECT_EPOCH,
-        MessageFault_E.MESSAGEFAULT_ERROR_TIME_EXPIRED,
-    )

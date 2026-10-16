@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 package com.dzid26.teslable.core.protocol
 
-import com.dzid26.teslable.core.history.Command
 import com.tesla.generated.vcsec.WhitelistEntryInfo
 import com.tesla.generated.vcsec.WhitelistInfo
 
@@ -21,6 +20,15 @@ enum class PairingTimer {
 
     /** Asks the car for its key list again while the add-key request waits for the card. */
     WHITELIST_POLL,
+}
+
+/** Why a [PairingFlow] asks the car for its key list or a key slot. */
+enum class PairingReason {
+    /** Checking whether the car already has this phone's key, or whether the add-key request went through. */
+    PAIRING,
+
+    /** Finding which key slot holds this phone's key. */
+    KEY_LOOKUP,
 }
 
 /** The pairing key of one car, as the platform key store holds it. */
@@ -49,7 +57,7 @@ interface PairingHost {
 
     fun transmitVcsec(
         request: ByteArray,
-        reason: Command.Reason,
+        reason: PairingReason,
     )
 
     /** Sends the add-key request; false when it could not be sent. */
@@ -118,7 +126,7 @@ class PairingFlow(
         keyId = storedKeyId.toHex()
         setPairing(PairingPhase.CHECKING)
         host.log("checking whether the key is already enrolled")
-        host.transmitVcsec(TeslaVcsec.buildWhitelistInfoRequest(), Command.Reason.PAIRING)
+        host.transmitVcsec(TeslaVcsec.buildWhitelistInfoRequest(), PairingReason.PAIRING)
         host.schedule(PairingTimer.RESPONSE_TIMEOUT, RESPONSE_TIMEOUT_MS)
     }
 
@@ -126,7 +134,7 @@ class PairingFlow(
     fun requestKeySlot() {
         if (host.hasConnectionKeySlot()) return
         if (!keys.hasKey()) return
-        host.transmitVcsec(TeslaVcsec.buildWhitelistInfoRequest(), Command.Reason.KEY_LOOKUP)
+        host.transmitVcsec(TeslaVcsec.buildWhitelistInfoRequest(), PairingReason.KEY_LOOKUP)
     }
 
     /** Handles a pairing or whitelist reply; false when [message] is none of them. */
@@ -249,7 +257,7 @@ class PairingFlow(
             host.log("the car did not confirm the key; pair again when ready")
             return
         }
-        host.transmitVcsec(TeslaVcsec.buildWhitelistInfoRequest(), Command.Reason.PAIRING)
+        host.transmitVcsec(TeslaVcsec.buildWhitelistInfoRequest(), PairingReason.PAIRING)
         host.schedule(PairingTimer.WHITELIST_POLL, WHITELIST_POLL_MS)
     }
 
@@ -260,7 +268,7 @@ class PairingFlow(
             return
         }
         keySlotQueue = keySlotQueue.drop(1)
-        host.transmitVcsec(TeslaVcsec.buildWhitelistEntryRequest(slot), Command.Reason.KEY_LOOKUP)
+        host.transmitVcsec(TeslaVcsec.buildWhitelistEntryRequest(slot), PairingReason.KEY_LOOKUP)
     }
 
     private fun handlePairingResponse(message: ByteArray): Boolean {
