@@ -2,7 +2,7 @@
 
 package com.dzid26.teslable.core.history
 
-import com.dzid26.teslable.core.protocol.chargingStateKind
+import com.dzid26.teslable.protocol.chargingStateKind
 import com.tesla.generated.carserver.vehicle.ChargeState
 
 // One-way conversion: raw car ChargeState records kept in the history log

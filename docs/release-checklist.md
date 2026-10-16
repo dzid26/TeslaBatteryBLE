@@ -8,7 +8,7 @@
 
 ## Pre-release
 
-- [ ] Run `./gradlew :core:test` — must pass.
+- [ ] Run `./gradlew :protocol:test :core:test` — must pass.
 - [ ] Run `./gradlew :app:testDebugUnitTest` — must pass.
 - [ ] Run `./gradlew :app:lintDebug` — must be clean.
 - [ ] Release notes are generated from the commits since the previous tag at tag time; there is no hand-edited changelog.

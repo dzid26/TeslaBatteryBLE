@@ -21,7 +21,7 @@ account, nothing leaves the phone."*
 | --- | --- | --- |
 | License | **AGPL-3.0-only** | Whole repo. Switching to `-or-later` is a one-line change until external contributions land; afterwards it is effectively frozen. |
 | Distribution | GitHub Releases + Obtainium now; F-Droid + IzzyOnDroid next; Play later | Signed releases are a prerequisite for F-Droid/IzzyOnDroid. |
-| Core library | Internal until v1, then publish (Maven Central vs JitPack TBD) | Library-grade docs and API hygiene from now on. |
+| Core library | `:protocol` module (ADR-0013); internal until v1, then publish to Maven Central as `io.github.dzid26:teslable-protocol` | Library-grade docs and API hygiene from now on. |
 | Platforms | Android-first; KMP (jvm + apple) at library release | Keep JVM-only dependencies out of `core`. |
 | Interop | Decisions weigh TeslaMate export/sync and the KMP path (2026-10-08) | Today's limits (20k-record cap, no INTERNET permission) are current choices, not commitments. The local log stays raw and complete; any filtering happens at export. |
 | UX | Phased product pass: P0 polish → P1 product features → P2 extras | |
@@ -30,7 +30,7 @@ account, nothing leaves the phone."*
 
 ## 3. Definition of done (every change)
 
-- [ ] Builds: `:core:test` + `:app:assembleDebug` (lint when wired).
+- [ ] Builds: `:protocol:test` + `:core:test` + `:app:assembleDebug` (lint when wired).
 - [ ] Tests cover new behavior; protocol changes always ship vectors.
 - [ ] No secrets, VINs, or keys in logs.
 - [ ] User-visible changes are documented (README / docs).
@@ -126,9 +126,10 @@ A trustworthy shell around the existing protocol work. No user-facing features.
 ## 8. Phase 3 — v1.0 "Library & launch" (target: Q1 2027)
 
 - [ ] `core` → KMP (jvm + apple), expect/actual crypto, Dokka.
-- [ ] Publish the library (Maven Central vs JitPack — decide then); semver + binary compatibility validator; sample CLI; library documentation.
+- [ ] Publish the library (Maven Central, `io.github.dzid26:teslable-protocol`, ADR-0013); semver + binary compatibility validator; sample CLI; library documentation.
 - [ ] **Battery health v2 (tight, optional OBD)**: BLE OBD dongle support (ELM327/STN), model harness guidance, read-only pack PIDs (nominal/full pack capacity, brick voltage min/max + CAC, pack temperatures), real imbalance card. Purely optional and fully on-device.
-- [ ] Decide monorepo vs separate library repo (default: split at publish).
+- [x] Decide monorepo vs separate library repo: same repo, `protocol-v*` tags (ADR-0013).
+- [x] Split the protocol into its own `:protocol` module, free of app records (ADR-0013).
 - [ ] Governance lite: MAINTAINERS, public roadmap, Discussions, good-first-issues.
 - [ ] Launch: F-Droid stable, announcements (r/TeslaLounge, TMC forums, HN), funding live.
 - [ ] v1.0 signed release; reproducible-build notes; OpenSSF Scorecard; SBOM.
@@ -145,7 +146,7 @@ A trustworthy shell around the existing protocol work. No user-facing features.
 ## 10. Open decisions (defaults so nothing blocks)
 
 - Display name before store submission (default: keep `TeslaBatteryBLE`); `applicationId com.dzid26.teslable` is frozen.
-- Library name + publication target (Phase 3).
+- Library display name (Phase 3); the artifact is `teslable-protocol` on Maven Central (ADR-0013).
 - Play go/no-go (Phase 2).
 - Library docs site repo/hosting (Phase 3).
 - Multi-phone clones (2-3 phones collecting and merging history, optional key cloning): decide later; captured in `docs/requirements/multi-phone.md`.

@@ -2,7 +2,7 @@
 
 package com.dzid26.teslable.core.history
 
-import com.dzid26.teslable.core.protocol.ChargingStateKind
+import com.dzid26.teslable.protocol.ChargingStateKind
 
 /**
  * One battery reading, recorded whenever a car reports charge state.

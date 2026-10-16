@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 package com.dzid26.teslable.core.history
 
-import com.dzid26.teslable.core.protocol.InfotainmentPollPolicy
-import com.dzid26.teslable.core.protocol.PairingReason
-import com.dzid26.teslable.core.protocol.isRefusal
+import com.dzid26.teslable.core.infotainment.InfotainmentPollPolicy
+import com.dzid26.teslable.protocol.PairingReason
+import com.dzid26.teslable.protocol.isRefusal
 import com.squareup.wire.Message
 import com.squareup.wire.ProtoAdapter
 import com.tesla.generated.carserver.server.Action

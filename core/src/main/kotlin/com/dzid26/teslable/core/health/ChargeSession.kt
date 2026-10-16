@@ -2,7 +2,7 @@
 package com.dzid26.teslable.core.health
 
 import com.dzid26.teslable.core.history.BatterySample
-import com.dzid26.teslable.core.protocol.ChargingStateKind
+import com.dzid26.teslable.protocol.ChargingStateKind
 
 /**
  * One charge session as the history saw it: from its first to its last charging

@@ -2,7 +2,7 @@
 
 package com.dzid26.teslable.core.history
 
-import com.dzid26.teslable.core.protocol.ShiftStateKind
+import com.dzid26.teslable.protocol.ShiftStateKind
 
 /**
  * One DriveState reading, derived from a logged [BleRecord] (ADR-0008). Like

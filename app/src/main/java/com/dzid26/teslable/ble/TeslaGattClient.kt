@@ -14,8 +14,8 @@ import android.content.Context
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
-import com.dzid26.teslable.core.TeslaGatt
-import com.dzid26.teslable.core.framing.BleFramer
+import com.dzid26.teslable.protocol.TeslaGatt
+import com.dzid26.teslable.protocol.framing.BleFramer
 
 /**
  * [TeslaTransport] over Android GATT.

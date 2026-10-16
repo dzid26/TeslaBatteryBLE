@@ -18,3 +18,4 @@ dependencyResolutionManagement {
 rootProject.name = "TeslaBatteryBLE"
 include(":app")
 include(":core")
+include(":protocol")

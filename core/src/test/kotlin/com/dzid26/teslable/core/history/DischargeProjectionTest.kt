@@ -2,8 +2,8 @@
 
 package com.dzid26.teslable.core.history
 
-import com.dzid26.teslable.core.protocol.ChargingStateKind
-import com.dzid26.teslable.core.protocol.ShiftStateKind
+import com.dzid26.teslable.protocol.ChargingStateKind
+import com.dzid26.teslable.protocol.ShiftStateKind
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull

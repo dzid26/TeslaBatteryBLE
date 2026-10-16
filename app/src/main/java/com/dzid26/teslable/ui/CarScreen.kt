@@ -85,11 +85,11 @@ import com.dzid26.teslable.core.history.dischargeProjection
 import com.dzid26.teslable.core.history.soc
 import com.dzid26.teslable.core.history.statusDurations
 import com.dzid26.teslable.core.history.within
-import com.dzid26.teslable.core.protocol.ChargingStateKind
-import com.dzid26.teslable.core.protocol.PairingPhase
-import com.dzid26.teslable.core.protocol.asleep
-import com.dzid26.teslable.core.protocol.chargingStateKind
 import com.dzid26.teslable.health.healthSummary
+import com.dzid26.teslable.protocol.ChargingStateKind
+import com.dzid26.teslable.protocol.PairingPhase
+import com.dzid26.teslable.protocol.asleep
+import com.dzid26.teslable.protocol.chargingStateKind
 import com.tesla.generated.carserver.vehicle.ChargeState
 import kotlinx.coroutines.delay
 import java.time.Instant

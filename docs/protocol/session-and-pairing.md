@@ -49,10 +49,10 @@ handshake runs again, and its session info returns the vehicle's current epoch a
 counter. While the app keeps running it reuses a session across BLE reconnects, and
 handshakes again before a wake and after repeated decryption failures (the car may
 have rotated its session). Implementation:
-[`TeslaSession.kt`](../../core/src/main/kotlin/com/dzid26/teslable/core/protocol/TeslaSession.kt),
-[`TeslaCrypto.kt`](../../core/src/main/kotlin/com/dzid26/teslable/core/protocol/TeslaCrypto.kt),
-[`Metadata.kt`](../../core/src/main/kotlin/com/dzid26/teslable/core/protocol/Metadata.kt),
-[`AntiReplayWindow.kt`](../../core/src/main/kotlin/com/dzid26/teslable/core/protocol/AntiReplayWindow.kt).
+[`TeslaSession.kt`](../../protocol/src/main/kotlin/com/dzid26/teslable/protocol/TeslaSession.kt),
+[`TeslaCrypto.kt`](../../protocol/src/main/kotlin/com/dzid26/teslable/protocol/TeslaCrypto.kt),
+[`Metadata.kt`](../../protocol/src/main/kotlin/com/dzid26/teslable/protocol/Metadata.kt),
+[`AntiReplayWindow.kt`](../../protocol/src/main/kotlin/com/dzid26/teslable/protocol/AntiReplayWindow.kt).
 
 ## Pairing (enrolling a key)
 
@@ -67,7 +67,7 @@ have rotated its session). Implementation:
 Requests can stay in `OPERATIONSTATUS_WAIT` while the car waits for the physical tap,
 so the client uses bounded timeouts and clears the state on failure.
 Implementation:
-[`TeslaPairing.kt`](../../core/src/main/kotlin/com/dzid26/teslable/core/protocol/TeslaPairing.kt).
+[`TeslaPairing.kt`](../../protocol/src/main/kotlin/com/dzid26/teslable/protocol/TeslaPairing.kt).
 
 ## Ground rules
 

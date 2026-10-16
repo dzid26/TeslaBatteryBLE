@@ -74,8 +74,8 @@ import com.dzid26.teslable.ble.connectionLabel
 import com.dzid26.teslable.ble.spinnerHoldMs
 import com.dzid26.teslable.ble.stalenessTickDelayMs
 import com.dzid26.teslable.core.history.BatterySample
-import com.dzid26.teslable.core.protocol.asleep
 import com.dzid26.teslable.history.HistorySamples
+import com.dzid26.teslable.protocol.asleep
 import kotlinx.coroutines.delay
 
 /**

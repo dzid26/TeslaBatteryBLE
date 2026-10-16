@@ -2,7 +2,7 @@
 package com.dzid26.teslable.health
 
 import com.dzid26.teslable.core.history.BatterySample
-import com.dzid26.teslable.core.protocol.ChargingStateKind
+import com.dzid26.teslable.protocol.ChargingStateKind
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull

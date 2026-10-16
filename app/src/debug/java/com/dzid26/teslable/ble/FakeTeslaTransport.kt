@@ -5,7 +5,7 @@ package com.dzid26.teslable.ble
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
-import com.dzid26.teslable.core.TeslaNames
+import com.dzid26.teslable.protocol.TeslaNames
 import kotlin.random.Random
 
 /**

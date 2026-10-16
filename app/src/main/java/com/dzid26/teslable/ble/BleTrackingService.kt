@@ -29,7 +29,7 @@ import com.dzid26.teslable.core.history.AppState
 import com.dzid26.teslable.core.history.BatterySample
 import com.dzid26.teslable.core.history.StatusSample
 import com.dzid26.teslable.core.history.statusDurations
-import com.dzid26.teslable.core.protocol.asleep
+import com.dzid26.teslable.protocol.asleep
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob

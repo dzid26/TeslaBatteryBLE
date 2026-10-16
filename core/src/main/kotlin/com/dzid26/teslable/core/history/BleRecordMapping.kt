@@ -2,10 +2,10 @@
 
 package com.dzid26.teslable.core.history
 
-import com.dzid26.teslable.core.protocol.asleep
-import com.dzid26.teslable.core.protocol.locked
-import com.dzid26.teslable.core.protocol.shiftStateKind
-import com.dzid26.teslable.core.protocol.userPresent
+import com.dzid26.teslable.protocol.asleep
+import com.dzid26.teslable.protocol.locked
+import com.dzid26.teslable.protocol.shiftStateKind
+import com.dzid26.teslable.protocol.userPresent
 
 // One-way conversion: BleRecords kept in the history logs become the app's
 // read models (BatterySample, StatusSample, DriveSample). The read models are

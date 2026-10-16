@@ -27,8 +27,8 @@ import com.dzid26.teslable.ble.Vehicle
 import com.dzid26.teslable.core.history.BatterySample
 import com.dzid26.teslable.core.history.DriveSample
 import com.dzid26.teslable.core.history.HistoryRange
-import com.dzid26.teslable.core.protocol.ChargingStateKind
-import com.dzid26.teslable.core.protocol.ShiftStateKind
+import com.dzid26.teslable.protocol.ChargingStateKind
+import com.dzid26.teslable.protocol.ShiftStateKind
 import com.tesla.generated.carserver.common.Void
 import com.tesla.generated.carserver.vehicle.ChargeState
 import com.tesla.generated.vcsec.UserPresence_E

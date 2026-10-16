@@ -1,7 +1,7 @@
 {
   "ble_files": [
-    "core/src/main/proto/vehicle.proto",
-    "core/src/main/proto/vcsec.proto"
+    "protocol/src/main/proto/vehicle.proto",
+    "protocol/src/main/proto/vcsec.proto"
   ],
   "ble_catalog_messages": [
     "ChargeState",

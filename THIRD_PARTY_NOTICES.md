@@ -5,10 +5,10 @@ only (AGPL-3.0-only). See [LICENSE](LICENSE).
 
 ## Tesla protocol definitions — Apache License 2.0
 
-- `core/src/main/proto/*.proto` are copied from
+- `protocol/src/main/proto/*.proto` are copied from
   [teslamotors/vehicle-command](https://github.com/teslamotors/vehicle-command)
   (Apache-2.0). The pinned revision is recorded in
-  `core/src/main/proto/TESLA_COMMIT`.
+  `protocol/src/main/proto/TESLA_COMMIT`.
 - The Kotlin protocol implementation in `core/` is a port of the Go
   implementation (Apache-2.0) and of the MIT-licensed Swift ports
   ([misakatao/TeslaBLEKeyKit](https://github.com/misakatao/TeslaBLEKeyKit),
