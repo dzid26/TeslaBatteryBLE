@@ -30,10 +30,9 @@ an identity that survives BLE address rotation.
 - **No migration code.** The app is pre-1.0 and has no users yet, so
   formats change freely and a reset (re-pair / reinstall) is documented instead
   of migrated. Revisit once real installs exist.
-- **When "no migration" ends.** Proposed trigger (owner to confirm, issue #123):
-  the earliest of the first store listing (F-Droid, IzzyOnDroid or Play), the
-  first non-preview release tag, or the first known user other than the owner.
-  Until then formats change freely. From that point every on-device format
+- **When "no migration" ends.** The first normal release, meaning a release
+  tag that is not a prerelease (owner decision, 2026-10-16, issue #123).
+  Prerelease builds do not count. Until then formats change freely. From that point every on-device format
   (history logs, summaries, vehicle store, key files) carries a version, and
   each change ships an importer or at least an in-app "history was reset"
   notice. At the same time each shipped format gets a golden fixture file and a

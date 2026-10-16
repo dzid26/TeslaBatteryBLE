@@ -1,6 +1,6 @@
 # ADR-0012: History retention — raw for N days, then summaries
 
-Status: Proposed (open choices listed under Decision; owner to confirm)
+Status: Proposed (owner chose N, backstop, shared N and the cut-off on 2026-10-16; navigation data and the storage engine are still open)
 Date: 2026-10-16
 Related: ADR-0002, ADR-0006, ADR-0008, ADR-0009 (slower parked cadence),
 ADR-0004 (cut-off trigger), issue #123, `docs/master-plan.md` (TeslaMate export)
@@ -25,16 +25,16 @@ ADR-0004 (cut-off trigger), issue #123, `docs/master-plan.md` (TeslaMate export)
 - **Two tiers.** Raw `BleRecord` logs are kept by age, not count: records older
   than **N days** are removed from the raw logs once they have been folded into
   summaries. Summaries are kept indefinitely.
-- **Recommended N = 30 days** (open choice, see below). Reasoning: it covers a
-  month of weekly health checks and gives a full billing cycle for debugging
-  wake and drain behaviour from real-car logs; at 10 s awake polling and about
-  4 awake hours per day it is on the order of 40-45k charge records per vehicle,
-  a few MB, which is fine on a phone. Shorter (7 days) loses the debugging
-  window; longer (90 days) triples storage for little extra trend value because
-  the summaries carry the trend.
-- **Hard backstop.** Keep a record-count ceiling per file well above the age
-  window (recommended 200,000) so a car that is awake all day cannot grow a log
-  without bound. When the ceiling bites, fold the oldest records into summaries
+- **N = 90 days** (owner's choice, 2026-10-16). Reasoning: three months covers
+  a full season of charging habits and gives plenty of room to debug wake and
+  drain behaviour from real-car logs. At 10 s awake polling and about 4 awake
+  hours per day it is on the order of 130k charge records per vehicle, a few
+  tens of MB, which is fine on a phone. The alternatives considered were 30 days
+  (a third of the storage) and 7 days (loses the debugging window).
+- **Hard backstop.** Keep a record-count ceiling per file (200,000, confirmed by
+  the owner) so a car that is awake all day cannot grow a log without bound. At
+  90 days it binds for a car awake more than about 6 hours a day on average
+  (at the 10 s cadence); then the window shrinks to what the ceiling holds. When the ceiling bites, fold the oldest records into summaries
   first and only then drop them. Never drop records that have not been
   summarised.
 - **Unsynced records survive.** Once TeslaMate sync exists, raw records that are
@@ -80,10 +80,10 @@ stats read model (#207) deliberately does not keep them, but the raw log does.
 
 ## Open choices (for the owner)
 
-1. N: 30 days recommended; 7 and 90 are the alternatives considered.
-2. Count backstop value (200,000 recommended).
-3. Whether the raw window of the command and app-state logs follows the same N
-   (recommended: yes, they share the cap code today).
+1. ~~N~~ Decided: 90 days.
+2. ~~Count backstop value~~ Decided: 200,000.
+3. ~~Whether the raw window of the command and app-state logs follows the same
+   N~~ Decided: yes, they share the cap code today.
 4. Navigation destination and coordinates in the raw drive log: keep as logged
    but strip on export (recommended), or drop them when the record is written?
 

@@ -34,7 +34,7 @@ account, nothing leaves the phone."*
 - [ ] Tests cover new behavior; protocol changes always ship vectors.
 - [ ] No secrets, VINs, or keys in logs.
 - [ ] User-visible changes are documented (README / docs).
-- [ ] No new back-compat or migration code for pre-release states; change formats freely and document any reset (re-pair / reinstall). This ends at the cut-off in ADR-0004 (first store listing, first non-preview tag or first outside user).
+- [ ] No new back-compat or migration code for pre-release states; change formats freely and document any reset (re-pair / reinstall). This ends at the cut-off in ADR-0004 (the first normal, non-prerelease release).
 - [ ] Checkboxes here updated; ADR added when an architecture decision was made.
 
 ## 4. Validation gates
@@ -102,7 +102,7 @@ A trustworthy shell around the existing protocol work. No user-facing features.
 - [x] **Float-precision readings** (2026-10-05): parse the float range fields (`battery_range` / `est_battery_range` / `ideal_battery_range`) and both SOC levels into the charge model and history samples; the car hero and history show the displayed SOC and rated range, and the raw fields are logged for the health estimators. Old CSV rows are dropped, not migrated (pre-1.0 hygiene).
 - [ ] Units choice in Settings: System default / Metric / Imperial (one global setting), defaulting to the device's measurement system (`android.icu.util.LocaleData.getMeasurementSystem`: US → imperial, SI → metric, UK → miles + °C); display-only conversion from canonical miles, with core conversion helpers + tests.
 - [ ] **Range backbone** (owner direction 2026-10-05): canonical unit is rated miles; parse `charge_rate_mph` / `charge_rate_mph_float` as the charging slope; stats, charge projection, and drain run in miles; SOC is derived from the learned full-range scale for display only, falling back to the raw int until the scale is pinned. Respects the units setting (display-only conversion from canonical miles). Core landed 2026-10-05: rate parsing, miles-first charge projection, learned full-range scale; stats/drain and display wiring next; not yet wired into the app (#122).
-- [x] **Data policy decision** (issue #123, docs only, proposed 2026-10-16): cut-off trigger for the no-migration policy recorded in AGENTS.md and ADR-0004; history retention plan in ADR-0012 (raw by age, recommended 30 days, then per-session and per-day summaries kept indefinitely). Open: N and the count backstop, owner to confirm.
+- [x] **Data policy decision** (issue #123, docs only, proposed 2026-10-16): cut-off trigger for the no-migration policy (the first normal release) recorded in AGENTS.md and ADR-0004; history retention plan in ADR-0012 (raw by age, 90 days, 200,000-record backstop, then per-session and per-day summaries kept indefinitely). Owner chose the values 2026-10-16; the navigation-data question and whether a Room store changes the plan are still open.
 - [ ] **Retention implementation** (after #229 merges): age-based trimming plus count backstop replacing the 20k cap, summary store with a versioned format, estimators reading summaries (ADR-0012).
 - [ ] At the cut-off (ADR-0004): version every on-device format, add a golden fixture per shipped format and a reader-accepts-fixture test.
 - [ ] Dual range/SOC display: switchable axes and two value hints (miles + SOC) on the car view and history chart.
