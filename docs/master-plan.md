@@ -23,7 +23,7 @@ account, nothing leaves the phone."*
 | Distribution | GitHub Releases + Obtainium now; F-Droid + IzzyOnDroid next; Play later | Signed releases are a prerequisite for F-Droid/IzzyOnDroid. |
 | Core library | Internal until v1, then publish (Maven Central vs JitPack TBD) | Library-grade docs and API hygiene from now on. |
 | Platforms | Android-first; KMP (jvm + apple) at library release | Keep JVM-only dependencies out of `core`. |
-| Interop | Decisions weigh TeslaMate export/sync and the KMP path (2026-10-08) | Today's limits (20k-record cap, no INTERNET permission) are current choices, not commitments. The local log stays raw and complete; any filtering happens at export. |
+| Interop | Decisions weigh TeslaMate export/sync and the KMP path (2026-10-08) | Today's limits (20k-record cap, no INTERNET permission) are current choices, not commitments. The local log stays raw within its retention window (ADR-0012); filtering happens at export. |
 | UX | Phased product pass: P0 polish → P1 product features → P2 extras | |
 | Website | GitHub Pages landing for the app; library docs TBD at library release | |
 | Money | Donations only (GitHub Sponsors / Ko-fi) | One free FOSS build everywhere; no ads, no telemetry. |
@@ -34,7 +34,7 @@ account, nothing leaves the phone."*
 - [ ] Tests cover new behavior; protocol changes always ship vectors.
 - [ ] No secrets, VINs, or keys in logs.
 - [ ] User-visible changes are documented (README / docs).
-- [ ] No new back-compat or migration code for pre-release states; change formats freely and document any reset (re-pair / reinstall).
+- [ ] No new back-compat or migration code for pre-release states; change formats freely and document any reset (re-pair / reinstall). This ends at the cut-off in ADR-0004 (first store listing, first non-preview tag or first outside user).
 - [ ] Checkboxes here updated; ADR added when an architecture decision was made.
 
 ## 4. Validation gates
@@ -102,6 +102,9 @@ A trustworthy shell around the existing protocol work. No user-facing features.
 - [x] **Float-precision readings** (2026-10-05): parse the float range fields (`battery_range` / `est_battery_range` / `ideal_battery_range`) and both SOC levels into the charge model and history samples; the car hero and history show the displayed SOC and rated range, and the raw fields are logged for the health estimators. Old CSV rows are dropped, not migrated (pre-1.0 hygiene).
 - [ ] Units choice in Settings: System default / Metric / Imperial (one global setting), defaulting to the device's measurement system (`android.icu.util.LocaleData.getMeasurementSystem`: US → imperial, SI → metric, UK → miles + °C); display-only conversion from canonical miles, with core conversion helpers + tests.
 - [ ] **Range backbone** (owner direction 2026-10-05): canonical unit is rated miles; parse `charge_rate_mph` / `charge_rate_mph_float` as the charging slope; stats, charge projection, and drain run in miles; SOC is derived from the learned full-range scale for display only, falling back to the raw int until the scale is pinned. Respects the units setting (display-only conversion from canonical miles). Core landed 2026-10-05: rate parsing, miles-first charge projection, learned full-range scale; stats/drain and display wiring next; not yet wired into the app (#122).
+- [x] **Data policy decision** (issue #123, docs only, proposed 2026-10-16): cut-off trigger for the no-migration policy recorded in AGENTS.md and ADR-0004; history retention plan in ADR-0012 (raw by age, recommended 30 days, then per-session and per-day summaries kept indefinitely). Open: N and the count backstop, owner to confirm.
+- [ ] **Retention implementation** (after #229 merges): age-based trimming plus count backstop replacing the 20k cap, summary store with a versioned format, estimators reading summaries (ADR-0012).
+- [ ] At the cut-off (ADR-0004): version every on-device format, add a golden fixture per shipped format and a reader-accepts-fixture test.
 - [ ] Dual range/SOC display: switchable axes and two value hints (miles + SOC) on the car view and history chart.
 - [x] **History storage decision** (2026-10-06): append-only logs of the car's raw BLE replies (ADR-0006) behind `HistoryStore`, one file per vehicle per kind; additive by construction so new fields never drop old rows; charge-rate plus charger power/voltage/amps fields are logged. BLE log envelope (2026-10-08, ADR-0008): every logged reply is wrapped in a `BleRecord` with the phone's `device_timestamp` and the car's timestamps untouched; charge records go to `<vehicleId>.charge.pblog` on the car's own timestamp, VCSEC status readings to `<vehicleId>.vcsec.pblog` timed by `device_timestamp`, logged on change, on (re)connect and every 15 min. The old raw `<vehicleId>.pblog` files are no longer read (reset; not deleted).
 - [x] **DriveState log** (owner direction 2026-10-08, ADR-0008): the car's raw `DriveState` is logged in full (shift state, speed, power, odometer, navigation destination and route), car-timestamped, in `<vehicleId>.drive.pblog`; one `GetDriveState` follows each charge reply while the car is awake. Real-car check pending: the Charging Manager key gets an answer and the file grows.
