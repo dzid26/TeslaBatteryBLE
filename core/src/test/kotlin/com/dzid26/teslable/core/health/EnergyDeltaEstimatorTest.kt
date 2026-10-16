@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 package com.dzid26.teslable.core.health
 
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
-import org.junit.Test
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertNull
 
 class EnergyDeltaEstimatorTest {
     @Test

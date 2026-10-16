@@ -3,11 +3,11 @@ package com.dzid26.teslable.protocol
 
 import com.tesla.generated.universalmessage.Domain
 import com.tesla.generated.universalmessage.RoutableMessage
-import org.junit.Assert.assertArrayEquals
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertNull
-import org.junit.Test
+import kotlin.test.Test
+import kotlin.test.assertContentEquals
+import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 
 /**
  * Vectors from `tools/go-fixtures/expected.txt`, which `main.go` there prints
@@ -43,7 +43,7 @@ class GoVectorTest {
         // in field order alone. Compare the decoded fields instead: all of
         // them, including the ciphertext and the signature data with its tag.
         assertEquals(RoutableMessage.ADAPTER.decode(hex("REQUEST_MESSAGE")), encrypted)
-        assertArrayEquals(hex("REQUEST_ID"), session.requestId(encrypted))
+        assertContentEquals(hex("REQUEST_ID"), session.requestId(encrypted))
     }
 
     @Test
@@ -51,7 +51,7 @@ class GoVectorTest {
         val session = createSession()!!
         val message = RoutableMessage.ADAPTER.decode(hex("RESPONSE_MESSAGE"))
         val plaintext = session.decrypt(message, hex("RESPONSE_REQUEST_ID"), AntiReplayWindow())
-        assertArrayEquals(hex("RESPONSE_PLAINTEXT"), plaintext)
+        assertContentEquals(hex("RESPONSE_PLAINTEXT"), plaintext)
     }
 
     private fun createSession(vin: String = VIN): TeslaSession? =

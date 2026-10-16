@@ -20,8 +20,7 @@ kotlin {
 dependencies {
     // The records and history read Tesla's messages, which :protocol generates.
     api(project(":protocol"))
-    testImplementation(libs.junit)
-    // New tests use kotlin.test so they can move to commonTest (ADR-0007).
+    // Tests use kotlin.test so they can move to commonTest (ADR-0007).
     testImplementation(kotlin("test"))
 }
 
@@ -50,6 +49,6 @@ tasks.withType<org.jlleitschuh.gradle.ktlint.tasks.BaseKtLintCheckTask>().config
 
 detekt {
     buildUponDefaultConfig = true
-    config.setFrom(rootProject.file("config/detekt/detekt.yml"))
+    config.setFrom(rootProject.file("config/detekt/detekt.yml"), rootProject.file("config/detekt/portable.yml"))
     baseline = file("detekt-baseline.xml")
 }

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 package com.dzid26.teslable.protocol
 
-import org.junit.Assert.assertArrayEquals
-import org.junit.Assert.assertThrows
-import org.junit.Test
+import kotlin.test.Test
+import kotlin.test.assertContentEquals
+import kotlin.test.assertFailsWith
 
 class MetadataTest {
     @Test
@@ -44,13 +44,13 @@ class MetadataTest {
                 0x8e.toByte(),
             )
 
-        assertArrayEquals(expected, referenceMetadata("testVIN").checksum(byteArrayOf()))
+        assertContentEquals(expected, referenceMetadata("testVIN").checksum(byteArrayOf()))
     }
 
     @Test
     fun `computes a stable hmac checksum for a fixed key`() {
         val metadata = Metadata.hmacSha256(ByteArray(16) { it.toByte() }).add(2, "testVIN".toByteArray())
-        assertArrayEquals(HMAC_CHECKSUM.hex(), metadata.checksum(byteArrayOf()))
+        assertContentEquals(HMAC_CHECKSUM.hex(), metadata.checksum(byteArrayOf()))
     }
 
     @Test
@@ -60,7 +60,7 @@ class MetadataTest {
                 .sha256()
                 .add(1, byteArrayOf(1))
                 .add(2, byteArrayOf(2))
-        assertThrows(IllegalArgumentException::class.java) {
+        assertFailsWith<IllegalArgumentException> {
             metadata.add(1, byteArrayOf(3))
         }
     }
@@ -68,7 +68,7 @@ class MetadataTest {
     @Test
     fun `rejects fields longer than 255 bytes`() {
         val metadata = Metadata.sha256()
-        assertThrows(IllegalArgumentException::class.java) {
+        assertFailsWith<IllegalArgumentException> {
             metadata.add(1, ByteArray(256))
         }
     }
@@ -77,7 +77,7 @@ class MetadataTest {
     fun `encodes uint32 as big endian`() {
         val metadata = Metadata.sha256().addUint32(5, 0x0E74)
         val expected = Metadata.sha256().add(5, byteArrayOf(0x00, 0x00, 0x0e, 0x74))
-        assertArrayEquals(expected.checksum(byteArrayOf()), metadata.checksum(byteArrayOf()))
+        assertContentEquals(expected.checksum(byteArrayOf()), metadata.checksum(byteArrayOf()))
     }
 
     private fun referenceMetadata(vin: String): Metadata =

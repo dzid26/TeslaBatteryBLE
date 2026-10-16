@@ -16,6 +16,7 @@ import android.os.Handler
 import android.os.Looper
 import com.dzid26.teslable.protocol.TeslaGatt
 import com.dzid26.teslable.protocol.framing.BleFramer
+import java.util.UUID
 
 /**
  * [TeslaTransport] over Android GATT.
@@ -190,15 +191,15 @@ class TeslaGattClient(
                     },
                 )
 
-                val service = gatt.getService(TeslaGatt.SERVICE_UUID)
+                val service = gatt.getService(SERVICE_UUID)
                 if (service == null) {
                     listener.onLog("Tesla GATT service not found")
                     // Not a Tesla BLE endpoint: retrying the link will not fix it.
                     listener.onPhase(ConnectionPhase.FAILED)
                     return
                 } else {
-                    txCharacteristic = service.getCharacteristic(TeslaGatt.TO_VEHICLE_UUID)
-                    rxCharacteristic = service.getCharacteristic(TeslaGatt.FROM_VEHICLE_UUID)
+                    txCharacteristic = service.getCharacteristic(TO_VEHICLE_UUID)
+                    rxCharacteristic = service.getCharacteristic(FROM_VEHICLE_UUID)
                     listener.onLog(
                         "TX characteristic: ${txCharacteristic != null}, " +
                             "RX characteristic: ${rxCharacteristic != null}",
@@ -226,7 +227,7 @@ class TeslaGattClient(
                 descriptor: BluetoothGattDescriptor,
                 status: Int,
             ) {
-                if (descriptor.uuid == TeslaGatt.CLIENT_CHARACTERISTIC_CONFIG_UUID && setupStep == SetupStep.NOTIFICATIONS) {
+                if (descriptor.uuid == CLIENT_CHARACTERISTIC_CONFIG_UUID && setupStep == SetupStep.NOTIFICATIONS) {
                     listener.onLog(
                         if (status == BluetoothGatt.GATT_SUCCESS) {
                             "Notifications enabled"
@@ -277,7 +278,7 @@ class TeslaGattClient(
                 characteristic: BluetoothGattCharacteristic,
                 status: Int,
             ) {
-                if (characteristic.uuid != TeslaGatt.TO_VEHICLE_UUID) return
+                if (characteristic.uuid != TO_VEHICLE_UUID) return
                 if (status != BluetoothGatt.GATT_SUCCESS) {
                     listener.onLog("write failed with status $status")
                 }
@@ -323,7 +324,7 @@ class TeslaGattClient(
         }
         val descriptor =
             characteristic
-                .getDescriptor(TeslaGatt.CLIENT_CHARACTERISTIC_CONFIG_UUID)
+                .getDescriptor(CLIENT_CHARACTERISTIC_CONFIG_UUID)
         if (descriptor == null) {
             listener.onLog("CCCD descriptor missing")
             readGattDeviceName(gatt)
@@ -405,9 +406,13 @@ class TeslaGattClient(
         private const val MIN_CHUNK_SIZE = 20
         private const val WRITE_TIMEOUT_MS = 1000L
         private const val WRITE_RETRY_MS = 100L
+        private val SERVICE_UUID = UUID.fromString(TeslaGatt.SERVICE_UUID)
+        private val TO_VEHICLE_UUID = UUID.fromString(TeslaGatt.TO_VEHICLE_UUID)
+        private val FROM_VEHICLE_UUID = UUID.fromString(TeslaGatt.FROM_VEHICLE_UUID)
+        private val CLIENT_CHARACTERISTIC_CONFIG_UUID = UUID.fromString(TeslaGatt.CLIENT_CHARACTERISTIC_CONFIG_UUID)
         private val GENERIC_ACCESS_SERVICE =
-            java.util.UUID.fromString("00001800-0000-1000-8000-00805f9b34fb")
+            UUID.fromString("00001800-0000-1000-8000-00805f9b34fb")
         private val DEVICE_NAME_CHARACTERISTIC =
-            java.util.UUID.fromString("00002a00-0000-1000-8000-00805f9b34fb")
+            UUID.fromString("00002a00-0000-1000-8000-00805f9b34fb")
     }
 }
