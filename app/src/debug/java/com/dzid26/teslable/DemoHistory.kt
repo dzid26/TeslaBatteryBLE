@@ -4,10 +4,10 @@ package com.dzid26.teslable
 
 import android.content.Context
 import com.dzid26.teslable.ble.DemoMode
-import com.dzid26.teslable.core.TeslaNames
 import com.dzid26.teslable.core.history.BleRecord
 import com.dzid26.teslable.core.history.ProtoLog
-import com.dzid26.teslable.core.protocol.ChargingStateKind
+import com.dzid26.teslable.protocol.ChargingStateKind
+import com.dzid26.teslable.protocol.TeslaNames
 import com.tesla.generated.carserver.common.Void
 import com.tesla.generated.carserver.vehicle.ChargeState
 import com.tesla.generated.carserver.vehicle.DriveState

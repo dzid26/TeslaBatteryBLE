@@ -14,7 +14,7 @@
 
 <!-- How was this verified? Unit tests, simulated car, real car? -->
 
-- [ ] `./gradlew :core:test`
+- [ ] `./gradlew :protocol:test :core:test`
 - [ ] `./gradlew :app:testDebugUnitTest`
 - [ ] `./gradlew :app:lintDebug`
 - [ ] Real car (describe what was tested) — optional

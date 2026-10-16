@@ -6,7 +6,7 @@ on:
     paths:
       - 'tools/signal-matrix/**'
       - 'docs/reference/fleet-telemetry-vs-ble.md'
-      - 'core/src/main/proto/**'
+      - 'protocol/src/main/proto/**'
   schedule:
     # Mondays 06:17 UTC
     - cron: '17 6 * * 1'

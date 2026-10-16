@@ -3,7 +3,7 @@
 package com.dzid26.teslable.ble
 
 import android.content.Context
-import com.dzid26.teslable.core.TeslaNames
+import com.dzid26.teslable.protocol.TeslaNames
 import kotlin.random.Random
 
 /** Debug wiring that makes the app talk to [FakeTeslaTransport] cars. */

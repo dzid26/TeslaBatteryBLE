@@ -4,11 +4,11 @@ package com.dzid26.teslable.ble
 import com.dzid26.teslable.core.history.BatterySample
 import com.dzid26.teslable.core.history.StatusDurations
 import com.dzid26.teslable.core.history.compactDuration
-import com.dzid26.teslable.core.protocol.ChargingStateKind
-import com.dzid26.teslable.core.protocol.PairingPhase
-import com.dzid26.teslable.core.protocol.asleep
-import com.dzid26.teslable.core.protocol.locked
-import com.dzid26.teslable.core.protocol.userPresent
+import com.dzid26.teslable.protocol.ChargingStateKind
+import com.dzid26.teslable.protocol.PairingPhase
+import com.dzid26.teslable.protocol.asleep
+import com.dzid26.teslable.protocol.locked
+import com.dzid26.teslable.protocol.userPresent
 import com.tesla.generated.carserver.vehicle.ChargeState
 import com.tesla.generated.vcsec.VehicleStatus
 import java.util.UUID

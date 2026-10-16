@@ -3,7 +3,7 @@
 How TeslaBatteryBLE talks to a Tesla over Bluetooth LE. Implemented in
 [`core/`](../../core) and wired to Android BLE in [`app/`](../../app). Verified
 against Tesla's [`vehicle-command`](https://github.com/teslamotors/vehicle-command)
-(the proto revision is pinned in [`core/src/main/proto/TESLA_COMMIT`](../../core/src/main/proto/TESLA_COMMIT)).
+(the proto revision is pinned in [`protocol/src/main/proto/TESLA_COMMIT`](../../protocol/src/main/proto/TESLA_COMMIT)).
 
 ## Transport
 
@@ -18,7 +18,7 @@ against Tesla's [`vehicle-command`](https://github.com/teslamotors/vehicle-comma
 GATT writes are serialized (one request in flight at a time), and responses arrive
 on the notify characteristic. The protocol is strictly **request/response — there is
 no subscription or server-initiated push over BLE**. See
-[`BleFramer.kt`](../../core/src/main/kotlin/com/dzid26/teslable/core/framing/BleFramer.kt)
+[`BleFramer.kt`](../../protocol/src/main/kotlin/com/dzid26/teslable/protocol/framing/BleFramer.kt)
 and [`TeslaGattClient.kt`](../../app/src/main/java/com/dzid26/teslable/ble/TeslaGattClient.kt).
 
 Scanning: Teslas advertise a name of the form `S<8 hex chars of sha1(vin)>C`.

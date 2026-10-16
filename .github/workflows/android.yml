@@ -524,7 +524,7 @@ jobs:
         run: |
           git init -q /tmp/vehicle-command
           git -C /tmp/vehicle-command fetch -q --depth 1 \
-            https://github.com/teslamotors/vehicle-command.git "$(cat core/src/main/proto/TESLA_COMMIT)"
+            https://github.com/teslamotors/vehicle-command.git "$(cat protocol/src/main/proto/TESLA_COMMIT)"
           git -C /tmp/vehicle-command checkout -q FETCH_HEAD
 
       - name: Set up Go
@@ -543,7 +543,7 @@ jobs:
           path: |
             ~/go/pkg/mod
             ~/.cache/go-build
-          key: go-${{ runner.os }}-${{ hashFiles('core/src/main/proto/TESLA_COMMIT') }}
+          key: go-${{ runner.os }}-${{ hashFiles('protocol/src/main/proto/TESLA_COMMIT') }}
 
       - name: Generate fixtures from the Go runtime
         run: |

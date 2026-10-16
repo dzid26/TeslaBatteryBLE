@@ -2,8 +2,8 @@
 
 package com.dzid26.teslable.core.history
 
-import com.dzid26.teslable.core.protocol.ChargingStateKind
-import com.dzid26.teslable.core.protocol.ShiftStateKind
+import com.dzid26.teslable.protocol.ChargingStateKind
+import com.dzid26.teslable.protocol.ShiftStateKind
 import com.squareup.wire.ofEpochSecond
 import com.tesla.generated.carserver.common.LatLong
 import com.tesla.generated.carserver.common.Void

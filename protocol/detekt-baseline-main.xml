@@ -1,0 +1,29 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>LongParameterList:TeslaSession.kt:TeslaSession</ID>
+    <ID>LongParameterList:TeslaSession.kt:TeslaSession.Companion$fun import: TeslaSession?</ID>
+    <ID>LoopWithTooManyJumpStatements:BleFramer.kt:BleFramer$while</ID>
+    <ID>MagicNumber:BleFramer.kt:BleFramer.Companion$0xFF</ID>
+    <ID>MagicNumber:BleFramer.kt:BleFramer.Companion$8</ID>
+    <ID>MagicNumber:Metadata.kt:Metadata$16</ID>
+    <ID>MagicNumber:Metadata.kt:Metadata$24</ID>
+    <ID>MagicNumber:Metadata.kt:Metadata$8</ID>
+    <ID>MagicNumber:PairingFlow.kt:0xFF</ID>
+    <ID>MagicNumber:PairingFlow.kt:16</ID>
+    <ID>MagicNumber:SessionHandshake.kt:0xFF</ID>
+    <ID>MagicNumber:SessionHandshake.kt:16</ID>
+    <ID>MagicNumber:TeslaCrypto.kt:TeslaCrypto$65</ID>
+    <ID>ReturnCount:AntiReplayWindow.kt:AntiReplayWindow.Companion$fun updateSlidingWindow: Triple&lt;Int, Long, Boolean&gt;</ID>
+    <ID>ReturnCount:PairingFlow.kt:PairingFlow$fun onMessage: Boolean</ID>
+    <ID>ReturnCount:SessionHandshake.kt:SessionHandshake$fun onMessage: Boolean</ID>
+    <ID>ReturnCount:SessionHandshake.kt:SessionHandshake$fun onRetryTimer</ID>
+    <ID>ReturnCount:SessionHandshake.kt:SessionHandshake$fun start: Boolean</ID>
+    <ID>ReturnCount:TeslaSession.kt:TeslaSession$fun decrypt: ByteArray?</ID>
+    <ID>ReturnCount:TeslaSession.kt:TeslaSession$fun encrypt: RoutableMessage?</ID>
+    <ID>ReturnCount:TeslaSession.kt:TeslaSession.Companion$fun import: TeslaSession?</ID>
+    <ID>TooManyFunctions:PairingFlow.kt:PairingFlow</ID>
+    <ID>TooManyFunctions:SessionHandshake.kt:SessionHandshake</ID>
+  </CurrentIssues>
+</SmellBaseline>

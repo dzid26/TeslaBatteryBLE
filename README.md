@@ -96,7 +96,7 @@ Requirements: JDK 21 (Temurin recommended), Android SDK 37, Git.
 
 ```bash
 ./gradlew :app:assembleDebug        # debug APK
-./gradlew :core:test                # protocol unit tests (no device needed)
+./gradlew :protocol:test :core:test # protocol and battery unit tests (no device needed)
 ./gradlew :app:testDebugUnitTest    # app unit tests (simulated car)
 ./gradlew :app:lintDebug            # Android lint
 ```
@@ -113,7 +113,8 @@ a draft of the next release; tag releases add the APK and emulator screenshots.
 
 | Module | Purpose |
 | --- | --- |
-| `core/` | Pure-JVM Kotlin protocol implementation: BLE framing, session handshake, pairing, VCSEC/Infotainment messages (Tesla protos via Wire). No Android dependencies. |
+| `protocol/` | Pure-JVM Kotlin Tesla BLE protocol: BLE framing, session handshake, pairing, VCSEC/Infotainment messages (Tesla protos via Wire). No Android dependencies and nothing app-specific, so it can become a standalone library. |
+| `core/` | Battery domain on top of `protocol`: history, charge and discharge projections, health estimates, the app's own log records. No Android dependencies. |
 | `app/` | Android UI (Compose), BLE integration (`BluetoothGatt`), foreground tracking service, history storage. |
 | `tools/go-fixtures` | Deterministic fixtures generated against the Go reference implementation and diffed in CI. |
 
@@ -121,8 +122,10 @@ a draft of the next release; tag releases add the APK and emulator screenshots.
 flowchart LR
     UI[Compose UI] --> Ctrl[TeslaBleController]
     Svc[Foreground tracking service] --> Ctrl
-    Ctrl --> Core[core: framing, session, protocol]
-    Core -- GATT write/notify --> Car[Tesla vehicle]
+    Ctrl --> Core[core: history, health]
+    Ctrl --> Proto[protocol: framing, session, pairing]
+    Core --> Proto
+    Proto -- GATT write/notify --> Car[Tesla vehicle]
     Ctrl --> Store[(Local history)]
 ```
 

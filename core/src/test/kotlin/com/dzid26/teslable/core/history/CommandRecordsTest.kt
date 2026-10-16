@@ -2,15 +2,15 @@
 
 package com.dzid26.teslable.core.history
 
-import com.dzid26.teslable.core.protocol.InfotainmentPollPolicy
-import com.dzid26.teslable.core.protocol.PairingReason
-import com.dzid26.teslable.core.protocol.TeslaCommands
-import com.dzid26.teslable.core.protocol.TeslaPairing
-import com.dzid26.teslable.core.protocol.TeslaSessionRequests
-import com.dzid26.teslable.core.protocol.TeslaVcsec
-import com.dzid26.teslable.core.protocol.isRefusal
-import com.dzid26.teslable.core.protocol.isStaleSession
-import com.dzid26.teslable.core.protocol.isUnknownKey
+import com.dzid26.teslable.core.infotainment.InfotainmentPollPolicy
+import com.dzid26.teslable.protocol.PairingReason
+import com.dzid26.teslable.protocol.TeslaCommands
+import com.dzid26.teslable.protocol.TeslaPairing
+import com.dzid26.teslable.protocol.TeslaSessionRequests
+import com.dzid26.teslable.protocol.TeslaVcsec
+import com.dzid26.teslable.protocol.isRefusal
+import com.dzid26.teslable.protocol.isStaleSession
+import com.dzid26.teslable.protocol.isUnknownKey
 import com.tesla.generated.carserver.server.ActionStatus
 import com.tesla.generated.carserver.server.Response
 import com.tesla.generated.universalmessage.Domain

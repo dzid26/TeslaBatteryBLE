@@ -2,7 +2,6 @@
 <SmellBaseline>
   <ManuallySuppressedIssues/>
   <CurrentIssues>
-    <ID>UnnecessaryNotNullOperator:TeslaPairingTest.kt:TeslaPairingTest$signedMessage.protobufMessageAsBytes!!</ID>
     <ID>UnnecessarySafeCall:CommandRecordsTest.kt:CommandRecordsTest$logged.session_info_request?.public_key</ID>
   </CurrentIssues>
 </SmellBaseline>

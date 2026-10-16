@@ -15,7 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import com.dzid26.teslable.R
 import com.dzid26.teslable.ble.Vehicle
-import com.dzid26.teslable.core.TeslaNames
+import com.dzid26.teslable.protocol.TeslaNames
 
 /**
  * The one-time VIN entry for a car, opened from the cars list. The Save button

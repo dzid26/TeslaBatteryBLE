@@ -10,8 +10,8 @@ import android.security.keystore.KeyPermanentlyInvalidatedException
 import android.security.keystore.KeyProperties
 import android.util.Base64
 import android.util.Log
-import com.dzid26.teslable.core.protocol.TeslaKeyPair
-import com.dzid26.teslable.core.protocol.TeslaKeys
+import com.dzid26.teslable.protocol.TeslaKeyPair
+import com.dzid26.teslable.protocol.TeslaKeys
 import java.security.KeyStore
 import java.security.MessageDigest
 import java.security.UnrecoverableKeyException

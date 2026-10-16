@@ -2,10 +2,10 @@
 
 package com.dzid26.teslable.ble
 
-import com.dzid26.teslable.core.protocol.Metadata
-import com.dzid26.teslable.core.protocol.TeslaCrypto
-import com.dzid26.teslable.core.protocol.TeslaKeys
-import com.dzid26.teslable.core.protocol.TeslaSession
+import com.dzid26.teslable.protocol.Metadata
+import com.dzid26.teslable.protocol.TeslaCrypto
+import com.dzid26.teslable.protocol.TeslaKeys
+import com.dzid26.teslable.protocol.TeslaSession
 import com.tesla.generated.carserver.common.Void
 import com.tesla.generated.carserver.server.Action
 import com.tesla.generated.carserver.vehicle.ChargeState
