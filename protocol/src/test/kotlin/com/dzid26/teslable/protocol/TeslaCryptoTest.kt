@@ -1,25 +1,25 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 package com.dzid26.teslable.protocol
 
-import org.junit.Assert.assertArrayEquals
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertNull
-import org.junit.Assert.assertThrows
-import org.junit.Test
 import java.security.spec.InvalidKeySpecException
+import kotlin.test.Test
+import kotlin.test.assertContentEquals
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 
 class TeslaCryptoTest {
     @Test
     fun `derives the protocol reference session key`() {
         val key = TeslaCrypto.sessionKey(REFERENCE_CLIENT_PKCS8.hex(), REFERENCE_VEHICLE_PUBLIC.hex())
-        assertArrayEquals(REFERENCE_SESSION_KEY.hex(), key)
+        assertContentEquals(REFERENCE_SESSION_KEY.hex(), key)
     }
 
     @Test
     fun `subkey matches the protocol reference hmac`() {
         val subkey = TeslaCrypto.subkey(REFERENCE_SESSION_KEY.hex(), TeslaSession.LABEL_SESSION_INFO)
-        assertArrayEquals(REFERENCE_SESSION_INFO_KEY.hex(), subkey)
+        assertContentEquals(REFERENCE_SESSION_INFO_KEY.hex(), subkey)
     }
 
     @Test
@@ -32,7 +32,7 @@ class TeslaCryptoTest {
         val (ciphertext, tag) = TeslaCrypto.encryptGcm(key, nonce, plaintext, associatedData)
         assertEquals(plaintext.size, ciphertext.size)
         assertEquals(TeslaCrypto.GCM_TAG_SIZE, tag.size)
-        assertArrayEquals(plaintext, TeslaCrypto.decryptGcm(key, nonce, ciphertext, tag, associatedData))
+        assertContentEquals(plaintext, TeslaCrypto.decryptGcm(key, nonce, ciphertext, tag, associatedData))
         val otherNonce = nonce.copyOf().also { it[it.lastIndex] = (it.last() + 1).toByte() }
         assertNull(TeslaCrypto.decryptGcm(key, otherNonce, ciphertext, tag, associatedData))
     }
@@ -62,7 +62,7 @@ class TeslaCryptoTest {
             val b = TeslaKeys.generate()
             assertEquals(65, a.publicKeyRaw.size)
             assertEquals(0x04.toByte(), a.publicKeyRaw[0])
-            assertArrayEquals(
+            assertContentEquals(
                 TeslaCrypto.sessionKey(a.privateKeyPkcs8, b.publicKeyRaw),
                 TeslaCrypto.sessionKey(b.privateKeyPkcs8, a.publicKeyRaw),
             )
@@ -76,7 +76,7 @@ class TeslaCryptoTest {
 
         val wrongPrefix = keyPair.publicKeyRaw.copyOf().also { it[0] = 0x05 }
         for (malformed in listOf(ByteArray(0), ByteArray(64), ByteArray(65), wrongPrefix)) {
-            assertThrows(IllegalArgumentException::class.java) {
+            assertFailsWith<IllegalArgumentException> {
                 TeslaCrypto.rawToPublicKey(malformed)
             }
         }
@@ -85,10 +85,10 @@ class TeslaCryptoTest {
     @Test
     fun `session key rejects malformed keys`() {
         val keyPair = TeslaKeys.generate()
-        assertThrows(InvalidKeySpecException::class.java) {
+        assertFailsWith<InvalidKeySpecException> {
             TeslaCrypto.sessionKey(byteArrayOf(1, 2, 3), keyPair.publicKeyRaw)
         }
-        assertThrows(IllegalArgumentException::class.java) {
+        assertFailsWith<IllegalArgumentException> {
             TeslaCrypto.sessionKey(keyPair.privateKeyPkcs8, ByteArray(10))
         }
     }

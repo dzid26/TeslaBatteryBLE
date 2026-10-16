@@ -10,11 +10,11 @@ import com.tesla.generated.universalmessage.Destination
 import com.tesla.generated.universalmessage.Domain
 import com.tesla.generated.universalmessage.RoutableMessage
 import okio.ByteString.Companion.toByteString
-import org.junit.Assert.assertArrayEquals
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
-import org.junit.Test
+import kotlin.test.Test
+import kotlin.test.assertContentEquals
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 
 class TeslaSessionTest {
     private val vin = "5YJ3E1EA7KF000001"
@@ -97,9 +97,9 @@ class TeslaSessionTest {
 
         val encrypted = session.encrypt(message, 5)
         assertNotNull(encrypted)
-        val gcm = encrypted!!.signature_data?.AES_GCM_Personalized_data
+        val gcm = encrypted.signature_data?.AES_GCM_Personalized_data
         assertNotNull(gcm)
-        assertEquals(8, gcm!!.counter)
+        assertEquals(8, gcm.counter)
         assertFalse(
             encrypted.protobuf_message_as_bytes!!
                 .toByteArray()
@@ -111,7 +111,7 @@ class TeslaSessionTest {
         val window = AntiReplayWindow()
         val plaintext = session.decrypt(response, requestId, window)
         assertNotNull(plaintext)
-        assertArrayEquals("world".toByteArray(), plaintext)
+        assertContentEquals("world".toByteArray(), plaintext)
 
         assertEquals(null, session.decrypt(response, requestId, window))
     }
@@ -135,8 +135,8 @@ class TeslaSessionTest {
                 AntiReplayWindow(),
             )
 
-        assertArrayEquals("first".toByteArray(), first)
-        assertArrayEquals("second".toByteArray(), second)
+        assertContentEquals("first".toByteArray(), first)
+        assertContentEquals("second".toByteArray(), second)
     }
 
     @Test
@@ -162,7 +162,7 @@ class TeslaSessionTest {
                 protobuf_message_as_bytes = "hello".toByteArray().toByteString(),
             )
         val encrypted = session.encrypt(message, 5)!!
-        assertArrayEquals(
+        assertContentEquals(
             fixedNonce,
             encrypted.signature_data
                 ?.AES_GCM_Personalized_data

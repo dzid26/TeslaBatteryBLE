@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Rules for the portable modules (`core`, `protocol`), layered over
+# detekt.yml. They enforce ADR-0007's guardrails so main code stays portable
+# to Kotlin Multiplatform; tests are exempt because JVM-only vectors will move
+# to `jvmTest`.
+style:
+  ForbiddenImport:
+    active: true
+    excludes: ['**/test/**']
+    forbiddenImports:
+      - value: 'java.*'
+        reason: 'this module must stay multiplatform-ready (ADR-0007): put the platform API behind a seam.'
+      - value: 'javax.*'
+        reason: 'this module must stay multiplatform-ready (ADR-0007): put the platform API behind a seam.'

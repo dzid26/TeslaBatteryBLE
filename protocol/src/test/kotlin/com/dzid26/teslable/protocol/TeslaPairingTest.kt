@@ -12,11 +12,11 @@ import com.tesla.generated.vcsec.ToVCSECMessage
 import com.tesla.generated.vcsec.UnsignedMessage
 import dev.whyoleg.cryptography.algorithms.EC
 import okio.ByteString.Companion.toByteString
-import org.junit.Assert.assertArrayEquals
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertTrue
-import org.junit.Test
+import kotlin.test.Test
+import kotlin.test.assertContentEquals
+import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 
 class TeslaPairingTest {
     @Test
@@ -38,7 +38,7 @@ class TeslaPairingTest {
         val publicKey = TeslaCrypto.rawToPublicKey(SHORT_X_PUBLIC.hex())
         val encoded = publicKey.encodeToByteArrayBlocking(EC.PublicKey.Format.RAW)
 
-        assertArrayEquals(SHORT_X_PUBLIC.hex(), encoded)
+        assertContentEquals(SHORT_X_PUBLIC.hex(), encoded)
     }
 
     @Test
@@ -50,14 +50,14 @@ class TeslaPairingTest {
             )
         val signedMessage = envelope.signedMessage
         assertNotNull(signedMessage)
-        assertEquals(SignatureType.SIGNATURE_TYPE_PRESENT_KEY, signedMessage!!.signatureType)
+        assertEquals(SignatureType.SIGNATURE_TYPE_PRESENT_KEY, signedMessage.signatureType)
 
         val payload = UnsignedMessage.ADAPTER.decode(signedMessage.protobufMessageAsBytes!!)
         val operation = payload.VCSEC_WhitelistOperation
         assertNotNull(operation)
-        val change = operation!!.addKeyToWhitelistAndAddPermissions
+        val change = operation.addKeyToWhitelistAndAddPermissions
         assertNotNull(change)
-        assertArrayEquals(keyPair.publicKeyRaw, change!!.key?.PublicKeyRaw?.toByteArray())
+        assertContentEquals(keyPair.publicKeyRaw, change.key?.PublicKeyRaw?.toByteArray())
         assertEquals(Role.ROLE_CHARGING_MANAGER, change.keyRole)
         assertEquals(
             KeyFormFactor.KEY_FORM_FACTOR_ANDROID_DEVICE,

@@ -17,7 +17,7 @@ object TeslaNames {
             CryptographyProvider.Default
                 .get(SHA1)
                 .hasher()
-                .hashBlocking(vin.toByteArray(Charsets.US_ASCII))
+                .hashBlocking(vin.encodeToByteArray())
         val hex = digest.take(8).toByteArray().toHexString()
         return "S${hex}C"
     }

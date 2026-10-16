@@ -3,14 +3,14 @@
 package com.dzid26.teslable.core.history
 
 import com.squareup.wire.ProtoWriter
+import com.squareup.wire.ofEpochSecond
 import com.tesla.generated.carserver.common.Void
 import com.tesla.generated.carserver.vehicle.ChargeState
 import com.tesla.generated.carserver.vehicle.DriveState
 import okio.Buffer
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
-import org.junit.Test
-import java.time.Instant
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class ProtoLogTest {
     private fun record(seconds: Long) =
@@ -30,7 +30,7 @@ class ProtoLogTest {
             charge_rate_mph = 32,
             charging_amps = 30,
             charge_rate_mph_float = 32.5f,
-            timestamp = Instant.ofEpochSecond(seconds),
+            timestamp = ofEpochSecond(seconds, 0),
         )
 
     @Test
@@ -44,7 +44,7 @@ class ProtoLogTest {
         val sparse =
             ChargeState(
                 battery_level = 50,
-                timestamp = Instant.ofEpochSecond(1),
+                timestamp = ofEpochSecond(1, 0),
             )
         assertEquals(listOf(sparse), ProtoLog.decode(ProtoLog.encode(listOf(sparse)), ChargeState.ADAPTER))
     }
@@ -74,7 +74,7 @@ class ProtoLogTest {
         val sparse =
             ChargeState(
                 battery_level = 50,
-                timestamp = Instant.ofEpochSecond(1),
+                timestamp = ofEpochSecond(1, 0),
             )
         val bytes = ProtoLog.encode(listOf(sparse))
         assertTrue(bytes[0].toInt() in 1..0x7F)
@@ -92,7 +92,7 @@ class ProtoLogTest {
             DriveState(
                 speed = 60,
                 power = 120,
-                timestamp = Instant.ofEpochSecond(2),
+                timestamp = ofEpochSecond(2, 0),
             )
         assertEquals(listOf(drive), ProtoLog.decode(ProtoLog.encode(listOf(drive)), DriveState.ADAPTER))
     }
@@ -103,7 +103,7 @@ class ProtoLogTest {
             DriveState(
                 speed = 60,
                 active_route_destination = "x".repeat(200),
-                timestamp = Instant.ofEpochSecond(2),
+                timestamp = ofEpochSecond(2, 0),
             )
         val bytes = ProtoLog.encode(listOf(drive))
         val payloadSize = drive.encode().size

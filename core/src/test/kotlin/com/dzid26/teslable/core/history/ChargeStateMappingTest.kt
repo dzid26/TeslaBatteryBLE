@@ -3,12 +3,12 @@
 package com.dzid26.teslable.core.history
 
 import com.dzid26.teslable.protocol.ChargingStateKind
+import com.squareup.wire.ofEpochSecond
 import com.tesla.generated.carserver.common.Void
 import com.tesla.generated.carserver.vehicle.ChargeState
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
-import org.junit.Test
-import java.time.Instant
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertNull
 
 class ChargeStateMappingTest {
     private fun record() =
@@ -28,7 +28,7 @@ class ChargeStateMappingTest {
             charge_rate_mph = 32,
             charging_amps = 30,
             charge_rate_mph_float = 32.5f,
-            timestamp = Instant.ofEpochMilli(1_000L),
+            timestamp = ofEpochSecond(1, 0),
         )
 
     @Test
@@ -57,6 +57,6 @@ class ChargeStateMappingTest {
     @Test
     fun sampleNeedsALevelAndATimestamp() {
         assertNull(ChargeState(battery_level = 50).toBatterySample("car"))
-        assertNull(ChargeState(timestamp = Instant.ofEpochSecond(1)).toBatterySample("car"))
+        assertNull(ChargeState(timestamp = ofEpochSecond(1, 0)).toBatterySample("car"))
     }
 }

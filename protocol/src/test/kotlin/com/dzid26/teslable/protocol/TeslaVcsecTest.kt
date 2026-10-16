@@ -14,12 +14,12 @@ import com.tesla.generated.vcsec.VehicleStatus
 import com.tesla.generated.vcsec.WhitelistEntryInfo
 import com.tesla.generated.vcsec.WhitelistInfo
 import okio.ByteString.Companion.toByteString
-import org.junit.Assert.assertArrayEquals
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertTrue
-import org.junit.Test
+import kotlin.test.Test
+import kotlin.test.assertContentEquals
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 
 class TeslaVcsecTest {
     @Test
@@ -53,7 +53,7 @@ class TeslaVcsecTest {
 
         val status = TeslaVcsec.parseStatusResponse(response)
         assertNotNull(status)
-        assertTrue(status!!.locked)
+        assertTrue(status.locked)
         assertTrue(status.asleep)
         assertFalse(status.userPresent)
         // The status comes back whole, for the history log.
@@ -94,8 +94,8 @@ class TeslaVcsecTest {
 
         val info = TeslaVcsec.parseWhitelistInfoResponse(response)
         assertNotNull(info)
-        assertEquals(1, info!!.numberOfEntries)
-        assertArrayEquals(
+        assertEquals(1, info.numberOfEntries)
+        assertContentEquals(
             keyId,
             info.whitelistEntries
                 .first()
@@ -131,7 +131,7 @@ class TeslaVcsecTest {
 
         val info = TeslaVcsec.parseWhitelistEntryResponse(response)
         assertNotNull(info)
-        assertEquals(8, info!!.slot)
-        assertArrayEquals(keyId, info.keyId?.publicKeySHA1?.toByteArray())
+        assertEquals(8, info.slot)
+        assertContentEquals(keyId, info.keyId?.publicKeySHA1?.toByteArray())
     }
 }
