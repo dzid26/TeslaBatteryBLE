@@ -250,6 +250,7 @@ internal fun CarScreen(
                     statuses = vehicleStatuses,
                 )
                 CompositionLocalProvider(LocalDistanceUnit provides distanceUnit) {
+                    DriveHistoryCard(vehicleHistory, vehicleDrives)
                     BatteryHealthCard(health)
                 }
             }
@@ -964,7 +965,7 @@ private fun HistoryRange.label(): String =
 private const val REFRESH_FEEDBACK_MS = 2500L
 
 /** Green shared by charging segments, dots, and the projected line. */
-private val chargingChartColor = Color(0xFF43A047)
+internal val chargingChartColor = Color(0xFF43A047)
 
 private val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 private val dateTimeFormatter = DateTimeFormatter.ofPattern("dd MMM HH:mm")

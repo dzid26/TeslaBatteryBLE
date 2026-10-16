@@ -18,6 +18,8 @@ only (AGPL-3.0-only). See [LICENSE](LICENSE).
 
 - [cryptography-kotlin](https://github.com/whyoleg/cryptography-kotlin)
   (`dev.whyoleg.cryptography`, Apache-2.0): `core` crypto primitives.
+- [Vico](https://github.com/patrykandpatrick/vico)
+  (`com.patrykandpatrick.vico`, Apache-2.0): the drive chart; no source is copied.
 
 ## Behavioral references only — no code copied
 

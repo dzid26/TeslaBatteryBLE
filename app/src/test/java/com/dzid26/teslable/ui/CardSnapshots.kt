@@ -26,6 +26,7 @@ import com.dzid26.teslable.ble.TeslaConnection
 import com.dzid26.teslable.ble.Vehicle
 import com.dzid26.teslable.core.history.BatterySample
 import com.dzid26.teslable.core.history.DriveSample
+import com.dzid26.teslable.core.history.DriveWindow
 import com.dzid26.teslable.core.history.HistoryRange
 import com.dzid26.teslable.core.history.StatusSample
 import com.dzid26.teslable.core.protocol.ChargingStateKind
@@ -465,6 +466,17 @@ class CardSnapshots {
                 samples = stalledSamples,
                 drives = parkedSamples.map { parkedDrive(it) },
                 nowMillis = NOW,
+            )
+        }
+    }
+
+    @Test
+    fun driveCard() {
+        snapCard("drive-card_percent") {
+            DriveHistoryCard(
+                samples = driveSamples(),
+                drives = driveReadings(),
+                initialWindow = DriveWindow.SINCE_CHARGE,
             )
         }
     }
@@ -958,6 +970,53 @@ class CardSnapshots {
             ratedRangeMiles = 2.7f * soc,
             readAtMillis = NOW - minutesAgo * MINUTE,
         )
+
+        // A 40-mile drive five hours ago, parked before and after: rated
+        // range falls 230 -> 190 mi while the estimate runs a little lower,
+        // with two adjacent regenerating reads on the way down a hill.
+        private val driveMinutes = listOf(300L, 290L, 280L, 270L, 260L, 250L, 240L)
+        private val driveOdometers = listOf(1_200_000, 1_200_000, 1_201_200, 1_202_500, 1_203_400, 1_204_000, 1_204_000)
+        private val drivePower = listOf(0, 0, -6, -18, 30, 0, 0)
+        private val driveShifts =
+            listOf(
+                ShiftStateKind.P,
+                ShiftStateKind.D,
+                ShiftStateKind.D,
+                ShiftStateKind.D,
+                ShiftStateKind.D,
+                ShiftStateKind.P,
+                ShiftStateKind.P,
+            )
+        private val driveRated = listOf(230f, 229f, 214f, 213f, 199f, 190f, 190f)
+
+        private fun driveSamples(
+            minutesEarlier: Long = 0L,
+            rangeOffset: Float = 0f,
+        ) = driveMinutes.mapIndexed { index, minutesAgo ->
+            val at = NOW - (minutesAgo + minutesEarlier) * MINUTE
+            val rated = driveRated[index] + rangeOffset
+            BatterySample(
+                timestampMillis = at,
+                batteryLevel = (rated / 3.1f).toInt(),
+                chargingState = ChargingStateKind.Disconnected,
+                chargeLimit = null,
+                vehicleId = BLE_NAME,
+                ratedRangeMiles = rated,
+                readAtMillis = at,
+            )
+        }
+
+        private fun driveReadings(minutesEarlier: Long = 0L) =
+            driveMinutes.mapIndexed { index, minutesAgo ->
+                DriveSample(
+                    timestampMillis = NOW - (minutesAgo + minutesEarlier) * MINUTE + 1_000,
+                    vehicleId = BLE_NAME,
+                    shiftState = driveShifts[index],
+                    speed = null,
+                    power = drivePower[index],
+                    odometerInHundredthsOfAMile = driveOdometers[index],
+                )
+            }
 
         // A charge five days before the newest reading, with nothing recorded
         // in between: the stats must name the charge (47%, five days ago) and
