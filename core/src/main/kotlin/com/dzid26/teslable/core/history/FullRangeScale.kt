@@ -3,6 +3,7 @@
 package com.dzid26.teslable.core.history
 
 import kotlin.math.abs
+import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
 /**
@@ -176,3 +177,8 @@ object FullRangeScaleEstimator {
 
 /** The sample's SOC for plotting: sub-percent from the fitted [scale] when it is pinned, else the integer level. */
 fun BatterySample.soc(scale: FullRangeScale?): Float = scale?.socPercent(ratedRangeMiles) ?: batteryLevel.toFloat()
+
+const val TENTHS_PER_PERCENT = 10
+
+/** A SOC in whole tenths of a percent: 62.4 is 624. Rounds half up, so 99.96 carries to 100.0. */
+fun socTenths(percent: Float): Int = (percent * TENTHS_PER_PERCENT).roundToInt()

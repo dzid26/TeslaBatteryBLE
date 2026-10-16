@@ -92,4 +92,5 @@
     <string name="main_no_cars">No cars yet</string>
     <string name="main_keep_open">Keep the app open and stay near the car.</string>
     <string name="main_pull_down">Pull down to scan.</string>
+    <string name="soc_description">%1$s percent</string>
 </resources>
