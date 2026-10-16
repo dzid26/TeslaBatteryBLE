@@ -443,16 +443,18 @@ private fun SocBlock(
     }
     val color = if (reading.stale) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.primary
     // The number, the "%", and the reading's age share one text baseline.
+    // The fitted tenth is drawn small beside the "%", like the cents of a price.
+    val tenths = scale?.socPercent(rangeMiles)?.let { (it * 10).roundToInt() }
     Row(verticalAlignment = Alignment.Bottom) {
         Text(
-            text = scale?.socPercent(rangeMiles)?.let { "%.1f".format(it) } ?: "${reading.value}",
+            text = "${tenths?.div(10) ?: reading.value}",
             style = MaterialTheme.typography.displayLarge,
             fontWeight = FontWeight.SemiBold,
             color = color,
             modifier = Modifier.alignByBaseline(),
         )
         Text(
-            text = "%",
+            text = tenths?.let { ".${it % 10}%" } ?: "%",
             style = MaterialTheme.typography.headlineSmall,
             color = color,
             modifier = Modifier.alignByBaseline(),
