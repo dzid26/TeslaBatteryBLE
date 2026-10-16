@@ -70,12 +70,13 @@ private fun axisSpec(points: List<Plotted>): AxisSpec {
 }
 
 /**
- * The orange line with its gradient, and, when any reading was regenerating,
- * a line-less series of those points in green drawn over it, so the colour
- * never depends on the odometer value a point happens to share.
+ * One orange line per trip with its gradient, and, when any reading was
+ * regenerating, a line-less series of those points in green drawn over them,
+ * so the colour never depends on the odometer value a point happens to share.
  */
 @Composable
 private fun rememberDriveLines(
+    tripCount: Int,
     hasRegen: Boolean,
     yMin: Double,
 ): LineCartesianLayer.LineProvider {
@@ -99,8 +100,8 @@ private fun rememberDriveLines(
             fill = remember { LineCartesianLayer.LineFill.single(Fill(Color.Transparent)) },
             pointProvider = remember(regenPoint) { LineCartesianLayer.PointProvider.single(regenPoint) },
         )
-    return remember(hasRegen, driveLine, regenLine) {
-        LineCartesianLayer.LineProvider.series(if (hasRegen) listOf(driveLine, regenLine) else listOf(driveLine))
+    return remember(tripCount, hasRegen, driveLine, regenLine) {
+        LineCartesianLayer.LineProvider.series(List(tripCount) { driveLine } + if (hasRegen) listOf(regenLine) else emptyList())
     }
 }
 
@@ -110,13 +111,16 @@ internal fun RangeChart(
     modifier: Modifier = Modifier,
 ) {
     val axes = remember(points) { axisSpec(points) }
+    // A trip of one reading has no line to draw; its point still shows as a
+    // regen point, so it is dropped from the trip series only.
+    val trips = remember(points) { points.groupBy { it.trip }.values.filter { it.size >= 2 } }
     val regenPoints = remember(points) { points.filter { it.regenerating } }
-    // Adjacent regenerating readings bound a stretch of regeneration.
+    // Adjacent regenerating readings of one trip bound a stretch of regeneration.
     val regenBands =
         remember(points) {
             points
                 .zipWithNext()
-                .filter { (a, b) -> a.regenerating && b.regenerating }
+                .filter { (a, b) -> a.trip == b.trip && a.regenerating && b.regenerating }
                 .map { (a, b) -> RegenBand(a.distance, a.value, b.distance, b.value) }
         }
     val unit = LocalDistanceUnit.current
@@ -127,7 +131,7 @@ internal fun RangeChart(
         val chart =
             rememberCartesianChart(
                 rememberLineCartesianLayer(
-                    lineProvider = rememberDriveLines(regenPoints.isNotEmpty(), axes.yMin),
+                    lineProvider = rememberDriveLines(trips.size, regenPoints.isNotEmpty(), axes.yMin),
                     rangeProvider =
                         remember(axes) {
                             CartesianLayerRangeProvider.fixed(minX = 0.0, maxX = axes.xMax, minY = axes.yMin, maxY = axes.yMax)
@@ -145,7 +149,7 @@ internal fun RangeChart(
             )
         CartesianChartHost(
             chart = chart,
-            model = remember(points, regenPoints) { rangeModel(points, regenPoints) },
+            model = remember(trips, regenPoints) { rangeModel(trips, regenPoints) },
             modifier = modifier,
             scrollState = rememberVicoScrollState(scrollEnabled = false),
             zoomState = rememberVicoZoomState(zoomEnabled = false, initialZoom = Zoom.Content),
@@ -153,14 +157,14 @@ internal fun RangeChart(
     }
 }
 
-/** The battery percent over distance driven, then, when any, one series of the regenerating points. */
+/** One series per trip of the battery percent over distance driven, then, when any, one series of the regenerating points. */
 private fun rangeModel(
-    points: List<Plotted>,
+    trips: List<List<Plotted>>,
     regenPoints: List<Plotted>,
 ): CartesianChartModel =
     CartesianChartModel(
         LineCartesianLayerModel.build {
-            series(x = points.map { it.distance }, y = points.map { it.value })
+            trips.forEach { trip -> series(x = trip.map { it.distance }, y = trip.map { it.value }) }
             if (regenPoints.isNotEmpty()) series(x = regenPoints.map { it.distance }, y = regenPoints.map { it.value })
         },
     )

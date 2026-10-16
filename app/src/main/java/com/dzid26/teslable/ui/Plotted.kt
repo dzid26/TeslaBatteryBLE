@@ -7,4 +7,5 @@ internal class Plotted(
     val distance: Double,
     val value: Float,
     val regenerating: Boolean,
+    val trip: Int,
 )

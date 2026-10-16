@@ -6,8 +6,8 @@ import com.dzid26.teslable.core.units.DistanceUnit
 
 /**
  * How far back the drive chart looks, in distance driven rather than time.
- * The stretch never reaches past the last charge (see [drivePoints]);
- * [SINCE_CHARGE] is exactly that stretch.
+ * The three distances may span charges (the chart breaks its line there);
+ * [SINCE_CHARGE] stops at the last one (see [drivePoints]).
  */
 enum class DriveWindow(
     private val kilometers: Double?,
@@ -18,6 +18,9 @@ enum class DriveWindow(
     LONG(LONG_KM, LONG_MILES),
     SINCE_CHARGE(null, null),
     ;
+
+    /** True when the window stops at the last charge. */
+    val sinceLastCharge: Boolean get() = this == SINCE_CHARGE
 
     /** The window in odometer miles for a car shown in [unit]: round numbers in the unit the owner reads; null for no limit. */
     fun miles(unit: DistanceUnit): Double? =

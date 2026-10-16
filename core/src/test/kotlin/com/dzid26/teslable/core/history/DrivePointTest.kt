@@ -133,11 +133,12 @@ class DrivePointTest {
     }
 
     @Test
-    fun `stops at the last charge before the newest drive reading`() {
+    fun `stops at the last charge before the newest drive reading when asked`() {
         val points =
             drivePoints(
                 listOf(sample(0, 40), sample(10, 39), sample(20, 55, state = ChargingStateKind.Charging), sample(30, 80), sample(40, 79)),
                 listOf(drive(0, 100_000), drive(10, 100_500), drive(20, 100_500), drive(30, 100_500), drive(40, 101_000)),
+                sinceLastCharge = true,
             )
         assertEquals(listOf(30L, 40L), points.map { it.timestampMillis / MINUTE })
         assertEquals(listOf(0.0, 5.0), points.map { it.milesDriven })
@@ -149,8 +150,40 @@ class DrivePointTest {
             drivePoints(
                 listOf(sample(0, 80), sample(10, 78), sample(20, 79, state = ChargingStateKind.Charging)),
                 listOf(drive(0, 100_000), drive(10, 100_500), drive(20, 100_500)),
+                sinceLastCharge = true,
             )
         assertEquals(listOf(0L, 10L), points.map { it.timestampMillis / MINUTE })
+    }
+
+    @Test
+    fun `starts a new trip across a charge so the line does not jump over it`() {
+        val points =
+            drivePoints(
+                listOf(sample(0, 40), sample(10, 39), sample(20, 55, state = ChargingStateKind.Charging), sample(30, 80), sample(40, 79)),
+                listOf(drive(0, 100_000), drive(10, 100_500), drive(20, 100_500), drive(30, 100_500), drive(40, 101_000)),
+            )
+        assertEquals(listOf(0, 0, 1, 1), points.map { it.trip })
+    }
+
+    @Test
+    fun `starts a new trip after a long gap`() {
+        val points =
+            drivePoints(
+                listOf(sample(0, 80), sample(10, 78), sample(600, 70), sample(610, 69)),
+                listOf(drive(0, 100_000), drive(10, 100_500), drive(600, 100_500), drive(610, 101_000)),
+            )
+        assertEquals(listOf(0, 0, 1, 1), points.map { it.trip })
+    }
+
+    @Test
+    fun `sums the drop per trip so a charge between trips does not count`() {
+        val points =
+            drivePoints(
+                listOf(sample(0, 80), sample(10, 78), sample(20, 90, state = ChargingStateKind.Charging), sample(30, 88), sample(40, 85)),
+                listOf(drive(0, 100_000), drive(10, 100_500), drive(20, 100_500), drive(30, 100_500), drive(40, 101_000)),
+            )
+        // 80 -> 78 is 2, then 88 -> 85 is 3; first minus last overall (80 - 85) would read -5.
+        assertEquals(5f, points.totalDrop { it.socPercent })
     }
 
     @Test

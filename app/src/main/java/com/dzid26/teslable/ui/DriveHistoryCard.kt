@@ -29,6 +29,7 @@ import com.dzid26.teslable.core.history.DriveSample
 import com.dzid26.teslable.core.history.DriveWindow
 import com.dzid26.teslable.core.history.FullRangeScaleEstimator
 import com.dzid26.teslable.core.history.drivePoints
+import com.dzid26.teslable.core.history.totalDrop
 import com.dzid26.teslable.core.units.DistanceUnit
 import java.util.Locale
 
@@ -37,7 +38,8 @@ import java.util.Locale
  * history card, which plots percent over time. Percent is the sub-percent SOC
  * (the rated range over the fitted full range); points where the car was
  * regenerating are green. The window is the last 15, 50 or 150 km (10, 30 or
- * 100 mi) or everything since the last charge, and never reaches past a charge.
+ * 100 mi) or everything since the last charge. Each trip is its own line, so a
+ * charge or a long parked gap never gets a connecting stroke.
  */
 @Composable
 internal fun DriveHistoryCard(
@@ -50,10 +52,12 @@ internal fun DriveHistoryCard(
     val unit = LocalDistanceUnit.current
     // Up to 20k samples: fit and match only when the data or the window changes.
     val scale = remember(samples) { FullRangeScaleEstimator.estimate(samples) }
-    val points = remember(samples, drives, window, unit, scale) { drivePoints(samples, drives, scale, window.miles(unit)) }
+    val points =
+        remember(samples, drives, window, unit, scale) { drivePoints(samples, drives, scale, window.miles(unit), window.sinceLastCharge) }
+    val used = remember(points) { points.totalDrop { it.socPercent } }
     val plotted =
         remember(points, unit) {
-            points.map { Plotted(unit.fromMiles(it.milesDriven.toFloat()).toDouble(), it.socPercent, it.regenerating) }
+            points.map { Plotted(unit.fromMiles(it.milesDriven.toFloat()).toDouble(), it.socPercent, it.regenerating, it.trip) }
         }
 
     Card(modifier = Modifier.fillMaxWidth()) {
@@ -76,7 +80,7 @@ internal fun DriveHistoryCard(
                 DriveFooter(
                     plotted.last().distance,
                     unit,
-                    plotted.first().value - plotted.last().value,
+                    used,
                     wholeStepsOnly =
                         scale?.pinned != true,
                 )
