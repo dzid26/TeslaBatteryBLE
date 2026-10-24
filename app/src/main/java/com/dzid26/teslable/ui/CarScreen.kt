@@ -152,30 +152,14 @@ internal fun CarScreen(
 ) {
     BackHandler { onBack() }
     val connection = state.connections[address]
-    val vehicleHistory =
-        if (vehicle == null) {
-            emptyList()
-        } else {
-            history.filter { it.vehicleId == vehicle.bleName }
-        }
-    val vehicleDrives =
-        if (vehicle == null) {
-            emptyList()
-        } else {
-            driveHistory.filter { it.vehicleId == vehicle.bleName }
-        }
-    val vehicleStatuses =
-        if (vehicle == null) {
-            emptyList()
-        } else {
-            statusHistory.filter { it.vehicleId == vehicle.bleName }
-        }
-    val vehicleActivity =
-        if (vehicle == null) {
-            emptyList()
-        } else {
-            activityHistory.filter { it.vehicleId == vehicle.bleName }
-        }
+    // Filtered once per change of the source log, not per recomposition: the state re-emits on every
+    // RSSI poll and log line, and a fresh list each time would redo every derived figure below and
+    // redraw every card that takes the list.
+    val bleName = vehicle?.bleName
+    val vehicleHistory = remember(history, bleName) { history.filter { it.vehicleId == bleName } }
+    val vehicleDrives = remember(driveHistory, bleName) { driveHistory.filter { it.vehicleId == bleName } }
+    val vehicleStatuses = remember(statusHistory, bleName) { statusHistory.filter { it.vehicleId == bleName } }
+    val vehicleActivity = remember(activityHistory, bleName) { activityHistory.filter { it.vehicleId == bleName } }
     val paired = isPaired(connection, vehicle)
     // Fitted once for every card below: the hero, the trip, both history charts.
     val scale = remember(vehicleHistory) { FullRangeScales.of(vehicleHistory) }
