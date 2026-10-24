@@ -561,6 +561,20 @@ class CardSnapshots {
     }
 
     @Test
+    fun driveCardUnpriced() {
+        // A pinned scale but no home price: the percent per distance stands in for the cost per distance.
+        snapCard("drive-card_unpriced") {
+            DriveHistoryCard(
+                samples = driveSamples(),
+                drives = driveReadings(),
+                initialWindow = DriveWindow.SINCE_CHARGE,
+                scale = demoTripScale,
+                ratedKwhPerMile = 0.25f,
+            )
+        }
+    }
+
+    @Test
     fun driveCardUnlearned() {
         // No scale yet: whole-percent steps, so the used figure carries the hint and only the percent rate shows.
         snapCard("drive-card_unlearned") {

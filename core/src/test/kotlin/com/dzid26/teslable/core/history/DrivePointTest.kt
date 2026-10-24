@@ -201,9 +201,9 @@ class DrivePointTest {
 
     @Test
     fun `a window in kilometres is the round number in kilometres`() {
-        assertEquals(6.21, DriveWindow.SHORT.miles(DistanceUnit.KILOMETERS)!!, 0.01)
+        assertEquals(9.32, DriveWindow.SHORT.miles(DistanceUnit.KILOMETERS)!!, 0.01)
         assertEquals(10.0, DriveWindow.SHORT.miles(DistanceUnit.MILES)!!, 0.0)
-        assertEquals(100, DriveWindow.LONG.label(DistanceUnit.KILOMETERS))
+        assertEquals(150, DriveWindow.LONG.label(DistanceUnit.KILOMETERS))
         assertEquals(null, DriveWindow.SINCE_CHARGE.miles(DistanceUnit.KILOMETERS))
     }
 

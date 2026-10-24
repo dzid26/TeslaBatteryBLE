@@ -32,6 +32,7 @@ import com.patrykandpatrick.vico.compose.cartesian.rememberVicoScrollState
 import com.patrykandpatrick.vico.compose.cartesian.rememberVicoZoomState
 import com.patrykandpatrick.vico.compose.common.ProvideVicoTheme
 import com.patrykandpatrick.vico.compose.m3.common.rememberM3VicoTheme
+import java.text.DecimalFormatSymbols
 import kotlin.math.abs
 import kotlin.math.roundToLong
 
@@ -172,8 +173,9 @@ private fun rememberCursorMarker(
     scale: FullRangeScale?,
 ): DefaultCartesianMarker {
     val unit = LocalDistanceUnit.current
+    val separator = remember { DecimalFormatSymbols.getInstance().decimalSeparator }
     val describer =
-        remember(window, axis, samples, scale, unit) {
+        remember(window, axis, samples, scale, unit, separator) {
             val lastMeasuredMillis = samples.last().timestampMillis
             PointDescriber { x, y ->
                 val millis = window.start + (x * MILLIS_PER_HOUR).roundToLong()
@@ -186,7 +188,8 @@ private fun rememberCursorMarker(
                     } else {
                         samples.minBy { abs(it.timestampMillis - millis) }.ratedRangeMiles
                     }
-                cursorText(y.toFloat(), projected, formatTime(millis, axis.showDate, axis.is24Hour), range?.let(unit::format))
+                val rangeText = range?.let { unit.format(it, DISTANCE_DECIMALS, separator) }
+                cursorText(y.toFloat(), projected, formatTime(millis, axis.showDate, axis.is24Hour), rangeText)
             }
         }
     return rememberChartCursor(describer)

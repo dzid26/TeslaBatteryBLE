@@ -43,7 +43,7 @@ import java.util.Locale
  * Battery percent over distance driven: the driving counterpart of the battery
  * history card, which plots percent over time. Percent is the sub-percent SOC
  * (the rated range over the fitted full range); points where the car was
- * regenerating are green. The window is the last 10, 50 or 100 km (10, 50 or
+ * regenerating are green. The window is the last 15, 50 or 150 km (10, 30 or
  * 100 mi) or everything since the last charge. Each trip is its own line, so a
  * charge or a long parked gap never gets a connecting stroke.
  */
@@ -100,7 +100,7 @@ internal fun DriveHistoryCard(
     }
 }
 
-/** The distance-window chips: 10 / 50 / 100 km (10 / 50 / 100 mi) and since the last charge. */
+/** The distance-window chips: 15 / 50 / 150 km (10 / 30 / 100 mi) and since the last charge. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun DriveChips(
@@ -118,7 +118,7 @@ private fun DriveChips(
 }
 
 /**
- * "Driven: N km \u00B7 N% used \u00B7 0.8% per km": the percent rate joins the first line once known. While the full range is
+ * "Driven: 12.4km · N% used · 0.82% per km": the percent rate joins the first line once known. While the full range is
  * not learned the figures are rough, and a note under the lines says so.
  */
 @OptIn(ExperimentalLayoutApi::class)
@@ -133,19 +133,19 @@ private fun DriveFooter(
     val usedText = stringResource(R.string.drive_used, formatPercentTenths(used.coerceAtLeast(0f)))
     FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(
-            text = stringResource(R.string.drive_driven, formatDistance(driven, unit)),
+            text = stringResource(R.string.drive_driven, formatDistance(driven, unit, DISTANCE_DECIMALS)),
             style = MaterialTheme.typography.bodySmall,
         )
         Text(usedText, style = MaterialTheme.typography.bodySmall)
-        stats?.percentPerMile?.let { rate ->
+        stats?.let { percentRate(it, unit) }?.let { rate ->
             Text(
-                text = stringResource(R.string.drive_rate_joined, percentPerDistance(rate, unit)),
+                text = stringResource(R.string.drive_rate_joined, stringResource(R.string.drive_percent_per_distance, rate, unit.symbol)),
                 style = MaterialTheme.typography.bodySmall,
             )
         }
     }
     if (stats != null) {
-        driveEnergyLine(stats, unit)?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+        DriveEnergyLine(stats, unit)
     }
     if (wholeStepsOnly) {
         Text(
@@ -156,31 +156,33 @@ private fun DriveFooter(
     }
 }
 
-@Composable
-private fun percentPerDistance(
-    percentPerMile: Float,
-    unit: DistanceUnit,
-): String = stringResource(R.string.drive_percent_per_distance, formatPercentHundredths(unit.ratePerUnit(percentPerMile)), unit.symbol)
-
 /**
- * The line under the footer: "312 Wh/mi \u00B7 6.4 kWh \u00B7 $1.02 at home price" (these need the learned full range
- * and rated constant). A part the data cannot supply is left out; null when none is known.
+ * The line under the footer: "312 Wh/mi \u00B7 6.4 kWh \u00B7 $7.50/100mi" (these need the learned full range
+ * and rated constant). A part the data cannot supply is left out; nothing shows when none is known. A tap on the
+ * cost says it is at the home price.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun driveEnergyLine(
+private fun DriveEnergyLine(
     stats: DriveStats,
     unit: DistanceUnit,
-): String? {
+) {
     val efficiency = LocalEfficiencyUnit.current
     val separator = remember { DecimalFormatSymbols.getInstance().decimalSeparator }
-    val currencyCode = LocalCurrencyCode.current
-    val energy =
+    val cost = costRate(stats, unit, LocalCurrencyCode.current)?.let { stringResource(R.string.drive_cost_per_distance, it, unit.symbol) }
+    val plain =
         listOfNotNull(
             stats.kwhPerMile?.let { efficiency.format(it, unit, separator) },
             stats.energyKwh?.let { stringResource(R.string.drive_energy, formatKwh(it)) },
-            stats.costAtHomePrice?.let { stringResource(R.string.drive_cost, formatMoney(it, currencyCode)) },
         )
-    return energy.takeIf { it.isNotEmpty() }?.joinToString(" \u00B7 ")
+    val style = MaterialTheme.typography.bodySmall
+    val dot = " \u00B7"
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        plain.forEachIndexed { index, part ->
+            Text(if (index < plain.lastIndex || cost != null) part + dot else part, style = style)
+        }
+        cost?.let { TipText(it, stringResource(R.string.drive_cost_tip), style) }
+    }
 }
 
 @Composable
@@ -207,10 +209,12 @@ private fun LegendItem(
 internal fun formatDistance(
     distance: Double,
     unit: DistanceUnit,
-): String = unit.format((distance / unit.fromMiles(1f)).toFloat())
+    decimals: Int = 0,
+): String = unit.format((distance / unit.fromMiles(1f)).toFloat(), decimals, DecimalFormatSymbols.getInstance().decimalSeparator)
+
+/** Cursor labels and the drive footer show distances and ranges to a tenth. */
+internal const val DISTANCE_DECIMALS = 1
 
 internal fun formatWholePercent(percent: Float): String = String.format(Locale.getDefault(), "%.0f%%", percent)
 
 private fun formatPercentTenths(percent: Float): String = String.format(Locale.getDefault(), "%.1f", percent)
-
-private fun formatPercentHundredths(percent: Float): String = String.format(Locale.getDefault(), "%.2f", percent)

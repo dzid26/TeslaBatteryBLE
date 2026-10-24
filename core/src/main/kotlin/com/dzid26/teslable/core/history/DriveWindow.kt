@@ -37,9 +37,9 @@ enum class DriveWindow(
         }
 }
 
-private const val SHORT_KM = 10.0
+private const val SHORT_KM = 15.0
 private const val MEDIUM_KM = 50.0
-private const val LONG_KM = 100.0
+private const val LONG_KM = 150.0
 private const val SHORT_MILES = 10.0
-private const val MEDIUM_MILES = 50.0
+private const val MEDIUM_MILES = 30.0
 private const val LONG_MILES = 100.0

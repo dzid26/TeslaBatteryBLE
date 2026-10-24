@@ -13,14 +13,15 @@ import com.dzid26.teslable.core.history.Trip
 import com.dzid26.teslable.core.history.segmentTrips
 
 /**
- * The narrow-width render: Jelly Star dimensions (3-inch, 480x854
- * @320dpi -> 240dp), hand-built because no preset goes that narrow.
+ * The narrow-width render: Jelly Star width (3-inch, 480px
+ * @320dpi -> 240dp), hand-built because no preset goes that narrow, and tall
+ * enough that a card is never cut off before its last line.
  * Light only; the PR comment keeps it collapsed next to dark.
  */
 private val jellyStar =
     DeviceConfig.NEXUS_5.copy(
         screenWidth = 480,
-        screenHeight = 854,
+        screenHeight = 2400,
         xdpi = 327,
         ydpi = 327,
         density = Density.XHIGH,

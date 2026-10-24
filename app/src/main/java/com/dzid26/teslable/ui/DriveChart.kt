@@ -124,7 +124,10 @@ internal fun RangeChart(
     val unit = LocalDistanceUnit.current
     val distanceFormatter = remember(unit) { CartesianValueFormatter { _, value, _ -> formatDistance(value, unit) } }
     val yFormatter = remember { CartesianValueFormatter { _, value, _ -> formatWholePercent(value.toFloat()) } }
-    val cursorDescriber = remember(unit) { PointDescriber { x, y -> "${formatPercent(y.toFloat())}% · ${formatDistance(x, unit)}" } }
+    val cursorDescriber =
+        remember(unit) {
+            PointDescriber { x, y -> "${formatPercent(y.toFloat())}% · ${formatDistance(x, unit, DISTANCE_DECIMALS)}" }
+        }
 
     val pin = rememberCursorPin()
 
